@@ -807,7 +807,7 @@ public static unsafe class CGame
                 break;
 
             case EntityEvent.EV_JUMP_PAD:
-                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_VOICE, _sfxJumpSound);
+                Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_VOICE, _sfxJumpSound);
                 break;
 
             case EntityEvent.EV_ITEM_PICKUP:
@@ -832,15 +832,15 @@ public static unsafe class CGame
                 break;
 
             case EntityEvent.EV_ITEM_RESPAWN:
-                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRespawnSound);
+                Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxRespawnSound);
                 break;
 
             case EntityEvent.EV_PLAYER_TELEPORT_IN:
-                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxTeleportIn);
+                Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxTeleportIn);
                 break;
 
             case EntityEvent.EV_PLAYER_TELEPORT_OUT:
-                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxTeleportOut);
+                Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxTeleportOut);
                 break;
 
             case EntityEvent.EV_GRENADE_BOUNCE:
@@ -858,12 +858,12 @@ public static unsafe class CGame
 
             case EntityEvent.EV_GLOBAL_SOUND:
                 if (eventParm > 0 && eventParm < MAX_SOUNDS && _gameSounds[eventParm] != 0)
-                    Syscalls.S_StartSound(null, -1, SoundChannel.CHAN_AUTO, _gameSounds[eventParm]);
+                    Syscalls.S_StartSound(null, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _gameSounds[eventParm]);
                 break;
 
             case EntityEvent.EV_MISSILE_HIT:
             {
-                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
+                Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
                 float ox = es.OriginX, oy = es.OriginY, oz = es.OriginZ;
                 LocalEntities.MakeExplosion(ox, oy, oz, _explosionShader, 600,
                     300, 1.0f, 0.75f, 0.0f, _time);
@@ -879,7 +879,7 @@ public static unsafe class CGame
             case EntityEvent.EV_MISSILE_MISS:
             case EntityEvent.EV_MISSILE_MISS_METAL:
             {
-                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
+                Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
                 float mx = es.OriginX, my = es.OriginY, mz = es.OriginZ;
                 LocalEntities.MakeExplosion(mx, my, mz, _explosionShader, 600,
                     300, 1.0f, 0.75f, 0.0f, _time);
