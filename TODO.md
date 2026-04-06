@@ -109,12 +109,13 @@ The cgame DLL interface is:
 - [x] **Center print** — Port CG_CenterPrint: handle "cp" server command, display centered text messages (objectives, notifications) with 3-second fade-out. `CPX 2`
 - [x] **Chat display** — Handle "chat"/"tchat" server commands, display recent chat messages with ring buffer and 6-second fade-out. `CPX 2`
 - [x] **Item pickup notifications** — Show item name on pickup (e.g. "Rocket Launcher", "Mega Health") with 3-second centered display and fade-out. `CPX 2`
-- [ ] **Crosshair target names** — Port CG_DrawCrosshairNames: display player name when crosshair is over another player, with team color support. `CPX 2`
-- [ ] **Powerup timers** — Port CG_DrawPowerups: display active powerup icons and remaining time for quad damage, haste, invisibility, regeneration, etc. `CPX 3`
+- [x] **Crosshair target names** — Port CG_DrawCrosshairNames: trace from view to find player under crosshair, display name with 1-second fade-out. `CPX 2`
+- [x] **Powerup timers** — Port CG_DrawPowerups: display active powerup icons with remaining time countdown, blinking effect when expiring. `CPX 3`
+- [x] **Warmup countdown** — Port CG_DrawWarmup: pre-match countdown display showing game type and "Starts in: N" timer. `CPX 2`
+- [x] **Attacker display** — Port CG_DrawAttacker: show last attacker's name in upper-right when damaged by a player, with 10-second fade. `CPX 2`
+- [x] **Muzzle flash model** — Render flash model at tag_flash on first-person weapon during fire events, with dynamic light. `CPX 2`
 - [ ] **Reward medals** — Port CG_DrawReward: display excellence/impressive/gauntlet medals with sound on multi-kills and skill achievements. `CPX 3`
 - [ ] **Lagometer** — Port CG_DrawLagometer: network latency graph showing snapshot timing and command round-trip, with disconnect indicator. `CPX 3`
-- [ ] **Warmup countdown** — Port CG_DrawWarmup: pre-match countdown display with announcer sounds. `CPX 2`
-- [ ] **Attacker display** — Port CG_DrawAttacker: show last attacker's name/head icon in upper-left when damaged by a player. `CPX 2`
 - [ ] **Third-person camera** — Port CG_OffsetThirdPersonView: third-person camera with collision tracing, controlled by cg_thirdPerson cvar. `CPX 3`
 
 ### Notes
@@ -214,7 +215,13 @@ The cgame DLL interface is:
 
 ### Features
 
-*No completed features yet*
+- [x] .NET cgame (cgame_dotnet) — full C# client game module with 15 core subsystems: project scaffolding, syscalls, core game state, snapshot processing, entity/player rendering, weapon effects, HUD, scoreboard, movement prediction, events, console commands, marks/decals, particles, sound integration, engine default loading
+- [x] HUD scaling — AdjustFrom640 coordinate scaling from virtual 640×480 to actual screen resolution
+- [x] Weapon switching — NextWeapon/PrevWeapon/SelectWeapon with STAT_WEAPONS bitmask and ammo checks
+- [x] Missile rendering — projectile models loaded via WeaponEffects with configstring refresh on dynamic model registration
+- [x] Weapon animation — proper MapTorsoToWeaponFrame mapping torso attack/drop/idle to weapon hand frames
+- [x] Mirror rendering — portal surfaces rendered with environment mapping approximation
+- [x] Muzzle flash model — flash model rendered at tag_flash on first-person weapon during fire events
 
 ### Improvements
 

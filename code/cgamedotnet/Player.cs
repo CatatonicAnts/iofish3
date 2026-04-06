@@ -59,6 +59,10 @@ public static unsafe class Player
     // Powerup indices
     private const int PW_HASTE = 3;
 
+    // Muzzle flash
+    private const int MUZZLE_FLASH_TIME = 20;
+    private const int EF_FIRING = 0x00000100;
+
     // ── Orientation from R_LerpTag (48 bytes) ──
     [StructLayout(LayoutKind.Sequential)]
     private struct Orientation
@@ -156,6 +160,13 @@ public static unsafe class Player
     {
         if (clientNum < 0 || clientNum >= MAX_CLIENTS) return null;
         return _clientInfo[clientNum];
+    }
+
+    public static string GetClientName(int clientNum)
+    {
+        if (clientNum < 0 || clientNum >= MAX_CLIENTS) return "";
+        var ci = _clientInfo[clientNum];
+        return ci.InfoValid ? ci.Name : "";
     }
 
     // ── Info string parsing ──
@@ -687,7 +698,7 @@ public static unsafe class Player
         float viewAxis0X, float viewAxis0Y, float viewAxis0Z,
         float viewAxis1X, float viewAxis1Y, float viewAxis1Z,
         float viewAxis2X, float viewAxis2Y, float viewAxis2Z,
-        int fov)
+        int fov, int muzzleFlashTime, int eFlags)
     {
         // Don't draw weapon for spectators or during intermission
         if (ps->PmType == PmType.PM_SPECTATOR || ps->PmType == PmType.PM_INTERMISSION)
@@ -801,6 +812,54 @@ public static unsafe class Player
 
                 PositionRotatedEntityOnTag(ref barrel, ref gun, weaponModel, "tag_barrel");
                 Syscalls.R_AddRefEntityToScene(&barrel);
+            }
+
+            // Muzzle flash model at tag_flash
+            bool showFlash = false;
+            if (weaponNum == Weapons.WP_LIGHTNING || weaponNum == Weapons.WP_GAUNTLET ||
+                weaponNum == Weapons.WP_GRAPPLING_HOOK)
+            {
+                // Continuous flash while firing
+                showFlash = (eFlags & EF_FIRING) != 0;
+            }
+            else
+            {
+                // Impulse flash — show for MUZZLE_FLASH_TIME after fire event
+                showFlash = (time - muzzleFlashTime) <= MUZZLE_FLASH_TIME && muzzleFlashTime > 0;
+            }
+
+            if (showFlash)
+            {
+                int flashModel = WeaponEffects.GetFlashModel(weaponNum);
+                if (flashModel != 0)
+                {
+                    Q3RefEntity flash = default;
+                    flash.ReType = Q3RefEntity.RT_MODEL;
+                    flash.RenderFx = hand.RenderFx;
+                    flash.HModel = flashModel;
+
+                    // Random roll for visual variety
+                    float rollAngle = (Random.Shared.Next() % 21 - 10) * MathF.PI / 180.0f;
+                    float cr = MathF.Cos(rollAngle);
+                    float sr = MathF.Sin(rollAngle);
+                    flash.Axis0X = 1; flash.Axis0Y = 0; flash.Axis0Z = 0;
+                    flash.Axis1X = 0; flash.Axis1Y = cr; flash.Axis1Z = -sr;
+                    flash.Axis2X = 0; flash.Axis2Y = sr; flash.Axis2Z = cr;
+
+                    flash.LightingOriginX = hand.LightingOriginX;
+                    flash.LightingOriginY = hand.LightingOriginY;
+                    flash.LightingOriginZ = hand.LightingOriginZ;
+                    flash.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
+
+                    flash.ShaderRGBA_R = 255; flash.ShaderRGBA_G = 255;
+                    flash.ShaderRGBA_B = 255; flash.ShaderRGBA_A = 255;
+
+                    PositionRotatedEntityOnTag(ref flash, ref gun, weaponModel, "tag_flash");
+                    Syscalls.R_AddRefEntityToScene(&flash);
+
+                    // Add dynamic light at flash position
+                    WeaponEffects.MuzzleFlash(flash.OriginX, flash.OriginY, flash.OriginZ, weaponNum, time);
+                }
             }
         }
     }

@@ -31,6 +31,9 @@ public static unsafe class CGame
         // Interpolated values (computed each frame)
         public float LerpOriginX, LerpOriginY, LerpOriginZ;
         public float LerpAnglesX, LerpAnglesY, LerpAnglesZ;
+
+        // Muzzle flash timing (set on EV_FIRE_WEAPON)
+        public int MuzzleFlashTime;
     }
 
     // ── Static game data (cgs_t equivalent) ──
@@ -153,6 +156,43 @@ public static unsafe class CGame
     private static string _pickupName = "";
     private static int _pickupTime;
     private const int PICKUP_DISPLAY_TIME = 3000;
+
+    // Crosshair target tracking
+    private static int _crosshairClientNum = -1;
+    private static int _crosshairClientTime;
+
+    // Attacker display tracking
+    private static int _attackerTime;
+    private const int ATTACKER_HEAD_TIME = 10000;
+
+    // Warmup countdown
+    private static int _warmup;
+    private static int _warmupCount;
+
+    // Powerup icon shaders
+    private const int MAX_POWERUPS = 16;
+    private static readonly int[] _powerupIcons = new int[MAX_POWERUPS];
+    private const int POWERUP_BLINKS = 5;
+    private const int POWERUP_BLINK_TIME = 1000;
+
+    // Powerup type constants
+    private const int PW_NONE = 0;
+    private const int PW_QUAD = 1;
+    private const int PW_BATTLESUIT = 2;
+    private const int PW_HASTE = 3;
+    private const int PW_INVIS = 4;
+    private const int PW_REGEN = 5;
+    private const int PW_FLIGHT = 6;
+    private const int PW_REDFLAG = 7;
+    private const int PW_BLUEFLAG = 8;
+
+    // Muzzle flash
+    private const int MUZZLE_FLASH_TIME = 20;
+    private const int EF_FIRING = 0x00000100;
+
+    // Last computed view (for crosshair scan)
+    private static float _viewOrgX, _viewOrgY, _viewOrgZ;
+    private static float _viewFwdX, _viewFwdY, _viewFwdZ;
 
     // Snapshot state
     private static int _latestSnapshotNum;
@@ -413,6 +453,10 @@ public static unsafe class CGame
         CrashLog.Breadcrumb("CalcViewValues");
         CalcViewValues(ref refdef);
 
+        // Store view for crosshair scanning
+        _viewOrgX = refdef.ViewOrgX; _viewOrgY = refdef.ViewOrgY; _viewOrgZ = refdef.ViewOrgZ;
+        _viewFwdX = refdef.Axis0X; _viewFwdY = refdef.Axis0Y; _viewFwdZ = refdef.Axis0Z;
+
         CrashLog.Breadcrumb("AddPacketEntities");
         try { AddPacketEntities(); }
         catch (Exception ex) { CrashLog.LogException("AddPacketEntities", ex); Syscalls.Print($"[.NET cgame] ERROR in AddPacketEntities: {ex.Message}\n"); }
@@ -429,6 +473,10 @@ public static unsafe class CGame
         CrashLog.Breadcrumb("AddViewWeapon");
         try
         {
+            int clientNum2 = _snap->Ps.ClientNum;
+            int muzzleFlashTime = (clientNum2 >= 0 && clientNum2 < MAX_GENTITIES)
+                ? _entities[clientNum2].MuzzleFlashTime : 0;
+            int eFlags = Prediction.PredictedPlayerState.EFlags;
             fixed (Q3PlayerState* pps = &Prediction.PredictedPlayerState)
             {
                 Player.AddViewWeapon(pps, _time,
@@ -436,7 +484,7 @@ public static unsafe class CGame
                     refdef.Axis0X, refdef.Axis0Y, refdef.Axis0Z,
                     refdef.Axis1X, refdef.Axis1Y, refdef.Axis1Z,
                     refdef.Axis2X, refdef.Axis2Y, refdef.Axis2Z,
-                    (int)refdef.FovX);
+                    (int)refdef.FovX, muzzleFlashTime, eFlags);
             }
         }
         catch (Exception ex) { CrashLog.LogException("AddViewWeapon", ex); Syscalls.Print($"[.NET cgame] ERROR in AddViewWeapon: {ex.Message}\n"); }
@@ -452,8 +500,14 @@ public static unsafe class CGame
         catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in DrawHud: {ex.Message}\n"); }
     }
 
-    public static int CrosshairPlayer() => -1;
-    public static int LastAttacker() => -1;
+    public static int CrosshairPlayer() => _crosshairClientNum;
+    public static int LastAttacker()
+    {
+        if (_snap == null) return -1;
+        int attacker = _snap->Ps.Persistant[Persistant.PERS_ATTACKER];
+        if (attacker < 0 || attacker >= EntityNum.MAX_CLIENTS) return -1;
+        return attacker;
+    }
     public static void KeyEvent(int key, bool down) { }
     public static void MouseEvent(int dx, int dy) { }
     public static void EventHandling(int type) { }
@@ -484,6 +538,16 @@ public static unsafe class CGame
         // Crosshair shaders (a-j)
         for (int i = 0; i < NUM_CROSSHAIRS; i++)
             _crosshairShaders[i] = Syscalls.R_RegisterShader($"gfx/2d/crosshair{(char)('a' + i)}");
+
+        // Powerup icons
+        _powerupIcons[PW_QUAD] = Syscalls.R_RegisterShaderNoMip("icons/quad");
+        _powerupIcons[PW_BATTLESUIT] = Syscalls.R_RegisterShaderNoMip("icons/envirosuit");
+        _powerupIcons[PW_HASTE] = Syscalls.R_RegisterShaderNoMip("icons/haste");
+        _powerupIcons[PW_INVIS] = Syscalls.R_RegisterShaderNoMip("icons/invis");
+        _powerupIcons[PW_REGEN] = Syscalls.R_RegisterShaderNoMip("icons/regen");
+        _powerupIcons[PW_FLIGHT] = Syscalls.R_RegisterShaderNoMip("icons/flight");
+        _powerupIcons[PW_REDFLAG] = Syscalls.R_RegisterShaderNoMip("icons/iconf_red1");
+        _powerupIcons[PW_BLUEFLAG] = Syscalls.R_RegisterShaderNoMip("icons/iconf_blu1");
 
         // Weapon icons
         string[] weaponIconPaths = {
@@ -826,6 +890,11 @@ public static unsafe class CGame
         {
             Player.NewClientInfo(index - Q3GameState.CS_PLAYERS, _gameStateRaw);
         }
+        else if (index == Q3GameState.CS_WARMUP)
+        {
+            string warmupStr = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_WARMUP);
+            _warmup = string.IsNullOrEmpty(warmupStr) ? 0 : int.TryParse(warmupStr, out int w) ? w : 0;
+        }
     }
 
     // ── Event System (cg_event.c equivalent) ──
@@ -1100,6 +1169,9 @@ public static unsafe class CGame
         ref var es = ref cent.CurrentState;
         int weapon = es.Weapon;
         if (weapon <= 0 || weapon >= Weapons.WP_NUM_WEAPONS) return;
+
+        // Record muzzle flash time for flash model rendering
+        cent.MuzzleFlashTime = _time;
 
         // Count available fire sound variants
         int count = 0;
@@ -1854,6 +1926,9 @@ public static unsafe class CGame
         // Crosshair (center)
         DrawCrosshair();
 
+        // Crosshair target name
+        DrawCrosshairNames();
+
         // Weapon select overlay
         DrawWeaponSelect();
 
@@ -1866,13 +1941,18 @@ public static unsafe class CGame
         // Item pickup notification
         DrawPickupItem();
 
-        // Upper right: FPS + Timer
+        // Upper right: FPS + Timer + Powerups + Attacker
         float y = 0;
         y = DrawFPS(y);
         y = DrawTimer(y);
+        y = DrawAttacker(y);
+        y = DrawPowerups(y);
 
         // .NET cgame indicator (top right)
         DrawString(SCREEN_WIDTH - 82, (int)y + 2, ".NET CG", 1.0f, 0.0f, 1.0f, 0.6f);
+
+        // Warmup countdown
+        DrawWarmup();
 
         // Scoreboard overlay
         if (Scoreboard.IsShowing || _snap->Ps.PmType >= 4) // PM_DEAD=4, PM_INTERMISSION=5
@@ -1880,7 +1960,227 @@ public static unsafe class CGame
 
         Syscalls.R_SetColor(null);
     }
-
+
+    // ── Crosshair Target Names (CG_DrawCrosshairNames equivalent) ──
+
+    private static void ScanForCrosshairEntity()
+    {
+        if (_snap == null) return;
+
+        float* start = stackalloc float[3];
+        float* end = stackalloc float[3];
+        float* mins = stackalloc float[3];
+        start[0] = _viewOrgX; start[1] = _viewOrgY; start[2] = _viewOrgZ;
+        end[0] = _viewOrgX + _viewFwdX * 131072;
+        end[1] = _viewOrgY + _viewFwdY * 131072;
+        end[2] = _viewOrgZ + _viewFwdZ * 131072;
+        mins[0] = 0; mins[1] = 0; mins[2] = 0;
+
+        Q3Trace trace;
+        const int CONTENTS_SOLID = 1;
+        const int CONTENTS_BODY = 0x2000000;
+        Prediction.Trace(&trace, start, mins, mins, end, _snap->Ps.ClientNum, CONTENTS_SOLID | CONTENTS_BODY);
+
+        if (trace.EntityNum >= EntityNum.MAX_CLIENTS) return;
+
+        // Skip invisible players
+        if (trace.EntityNum < MAX_GENTITIES &&
+            (_entities[trace.EntityNum].CurrentState.Powerups & (1 << PW_INVIS)) != 0)
+            return;
+
+        _crosshairClientNum = trace.EntityNum;
+        _crosshairClientTime = _time;
+    }
+
+    private static void DrawCrosshairNames()
+    {
+        ScanForCrosshairEntity();
+
+        if (_crosshairClientNum < 0 || _crosshairClientNum >= EntityNum.MAX_CLIENTS)
+            return;
+
+        // Fade after 1 second
+        int elapsed = _time - _crosshairClientTime;
+        if (elapsed > 1000)
+        {
+            _crosshairClientNum = -1;
+            return;
+        }
+
+        float alpha = 1.0f;
+        if (elapsed > 600)
+            alpha = 1.0f - (elapsed - 600) / 400.0f;
+
+        string name = Player.GetClientName(_crosshairClientNum);
+        if (string.IsNullOrEmpty(name)) return;
+
+        int w = name.Length * BIGCHAR_WIDTH;
+        DrawString(320 - w / 2, 170, name, 1.0f, 1.0f, 1.0f, alpha * 0.5f);
+    }
+
+    // ── Powerup Timers (CG_DrawPowerups equivalent) ──
+
+    private static float DrawPowerups(float y)
+    {
+        if (_snap == null) return y;
+        ref var ps = ref _snap->Ps;
+        if (ps.Stats[0] <= 0) return y; // STAT_HEALTH
+
+        // Sort powerups by time remaining
+        Span<int> sorted = stackalloc int[MAX_POWERUPS];
+        Span<int> sortedTime = stackalloc int[MAX_POWERUPS];
+        int active = 0;
+
+        for (int i = 0; i < MAX_POWERUPS; i++)
+        {
+            if (ps.PowerupTimers[i] == 0) continue;
+            if (ps.PowerupTimers[i] == int.MaxValue) continue; // CTF flags (unlimited)
+
+            int t = ps.PowerupTimers[i] - _time;
+            if (t <= 0) continue;
+
+            // Insertion sort by time remaining (ascending)
+            int j;
+            for (j = 0; j < active; j++)
+            {
+                if (sortedTime[j] >= t)
+                {
+                    for (int k = active - 1; k >= j; k--)
+                    {
+                        sorted[k + 1] = sorted[k];
+                        sortedTime[k + 1] = sortedTime[k];
+                    }
+                    break;
+                }
+            }
+            sorted[j] = i;
+            sortedTime[j] = t;
+            active++;
+        }
+
+        // Draw icons and timers
+        int x = SCREEN_WIDTH - ICON_SIZE - CHAR_WIDTH * 2;
+        float* color = stackalloc float[4];
+        float* mod = stackalloc float[4];
+        for (int i = 0; i < active; i++)
+        {
+            int pwIdx = sorted[i];
+            if (pwIdx >= MAX_POWERUPS || _powerupIcons[pwIdx] == 0) continue;
+
+            y -= ICON_SIZE;
+
+            // Draw remaining time
+            int secs = sortedTime[i] / 1000;
+            color[0] = 1; color[1] = 0.2f; color[2] = 0.2f; color[3] = 1;
+            Syscalls.R_SetColor(color);
+            DrawField(x, (int)y, 2, secs);
+
+            // Blinking effect when about to expire
+            int expireTime = ps.PowerupTimers[pwIdx];
+            if (expireTime - _time >= POWERUP_BLINKS * POWERUP_BLINK_TIME)
+            {
+                Syscalls.R_SetColor(null);
+            }
+            else
+            {
+                float f = (float)(expireTime - _time) / POWERUP_BLINK_TIME;
+                f -= (int)f;
+                mod[0] = f; mod[1] = f; mod[2] = f; mod[3] = f;
+                Syscalls.R_SetColor(mod);
+            }
+
+            // Draw powerup icon
+            DrawPic(SCREEN_WIDTH - ICON_SIZE, y, ICON_SIZE, ICON_SIZE, _powerupIcons[pwIdx]);
+            Syscalls.R_SetColor(null);
+        }
+
+        return y;
+    }
+
+    // ── Attacker Display (CG_DrawAttacker equivalent) ──
+
+    private static float DrawAttacker(float y)
+    {
+        if (_snap == null) return y;
+        ref var ps = ref Prediction.PredictedPlayerState;
+        if (ps.Stats[0] <= 0) return y; // STAT_HEALTH
+
+        int clientNum = ps.Persistant[Persistant.PERS_ATTACKER];
+        if (clientNum < 0 || clientNum >= EntityNum.MAX_CLIENTS || clientNum == _snap->Ps.ClientNum)
+            return y;
+
+        // Track attacker time — update when attacker changes
+        if (_attackerTime == 0)
+            _attackerTime = _time;
+
+        int elapsed = _time - _attackerTime;
+        if (elapsed > ATTACKER_HEAD_TIME)
+        {
+            _attackerTime = 0;
+            return y;
+        }
+
+        string name = Player.GetClientName(clientNum);
+        if (string.IsNullOrEmpty(name))
+        {
+            _attackerTime = 0;
+            return y;
+        }
+
+        float alpha = 1.0f;
+        if (elapsed > ATTACKER_HEAD_TIME - 2000)
+            alpha = (ATTACKER_HEAD_TIME - elapsed) / 2000.0f;
+
+        // Draw attacker name (upper right area)
+        int w = name.Length * BIGCHAR_WIDTH;
+        DrawString(SCREEN_WIDTH - w, (int)y, name, 1.0f, 0.3f, 0.3f, alpha * 0.5f);
+        y += BIGCHAR_HEIGHT + 2;
+
+        return y;
+    }
+
+    // ── Warmup Countdown (CG_DrawWarmup equivalent) ──
+
+    private static void DrawWarmup()
+    {
+        if (_warmup == 0) return;
+
+        if (_warmup < 0)
+        {
+            string waiting = "Waiting for players";
+            int ww = waiting.Length * BIGCHAR_WIDTH;
+            DrawString(320 - ww / 2, 24, waiting, 1.0f, 1.0f, 1.0f, 1.0f);
+            _warmupCount = 0;
+            return;
+        }
+
+        // Game type label
+        string gameLabel = _gametype switch
+        {
+            0 => "Free For All",
+            3 => "Team Deathmatch",
+            4 => "Capture the Flag",
+            1 => "Tournament",
+            _ => ""
+        };
+        if (!string.IsNullOrEmpty(gameLabel))
+        {
+            int gw = gameLabel.Length * BIGCHAR_WIDTH;
+            DrawString(320 - gw / 2, 25, gameLabel, 1.0f, 1.0f, 1.0f, 1.0f);
+        }
+
+        // Countdown display
+        int sec = (_warmup - _time) / 1000;
+        if (sec < 0)
+        {
+            _warmup = 0;
+            sec = 0;
+        }
+        string countdown = $"Starts in: {sec + 1}";
+        int cw = countdown.Length * BIGCHAR_WIDTH;
+        DrawString(320 - cw / 2, 70, countdown, 1.0f, 1.0f, 1.0f, 1.0f);
+    }
+
     private static void DrawCenterString()
     {
         if (_centerPrintTime == 0 || string.IsNullOrEmpty(_centerPrint)) return;
@@ -2362,6 +2662,10 @@ public static unsafe class CGame
         _mapName = $"maps/{mapname}.bsp";
 
         Syscalls.Print($"[.NET cgame] Server: gametype={_gametype}, map={mapname}, maxclients={_maxClients}\n");
+
+        // Parse warmup countdown
+        string warmupStr = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_WARMUP);
+        _warmup = string.IsNullOrEmpty(warmupStr) ? 0 : int.TryParse(warmupStr, out int w) ? w : 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
