@@ -279,7 +279,10 @@ public static unsafe class RendererExports
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void AddPolyToScene(int hShader, int numVerts, nint verts, int num) { }
+    public static void AddPolyToScene(int hShader, int numVerts, nint verts, int num)
+    {
+        _scene?.AddPoly(hShader, numVerts, (byte*)verts, num);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int LightForPoint(float* point, float* ambientLight, float* directedLight, float* lightDir) => 0;

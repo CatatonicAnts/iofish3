@@ -98,6 +98,8 @@ public static unsafe class BspLoader
             $"[.NET] Loaded BSP: {path} ({world.Vertices.Length} verts, {world.Surfaces.Length} surfs, " +
             $"{world.Nodes.Length} nodes, {world.Leafs.Length} leafs, {world.Lightmaps.Length} lightmaps)\n");
 
+        TessellatePatches(world);
+
         return world;
     }
 
@@ -305,5 +307,167 @@ public static unsafe class BspLoader
         int* header = (int*)(buf + ofs);
         world.NumClusters = header[0];
         world.ClusterBytes = header[1];
+    }
+
+    // --- Bezier patch tessellation ---
+
+    private const int TESS_LEVEL = 8;
+
+    /// <summary>
+    /// Tessellate all MST_PATCH surfaces into triangle meshes.
+    /// Appends new vertices/indices and updates surface references.
+    /// </summary>
+    private static void TessellatePatches(BspWorld world)
+    {
+        var newVerts = new System.Collections.Generic.List<BspVertex>(world.Vertices);
+        var newIndices = new System.Collections.Generic.List<int>(world.Indices);
+        int patchCount = 0;
+
+        for (int si = 0; si < world.Surfaces.Length; si++)
+        {
+            ref var surf = ref world.Surfaces[si];
+            if (surf.SurfaceType != SurfaceTypes.MST_PATCH)
+                continue;
+            if (surf.PatchWidth < 3 || surf.PatchHeight < 3)
+                continue;
+
+            int cpW = surf.PatchWidth;
+            int cpH = surf.PatchHeight;
+            int numPatchesX = (cpW - 1) / 2;
+            int numPatchesY = (cpH - 1) / 2;
+
+            int tessVerts = (numPatchesX * TESS_LEVEL + 1) * (numPatchesY * TESS_LEVEL + 1);
+            int tessQuads = numPatchesX * TESS_LEVEL * numPatchesY * TESS_LEVEL;
+            int tessIdxCount = tessQuads * 6;
+
+            int firstVert = newVerts.Count;
+            int firstIdx = newIndices.Count;
+
+            int totalW = numPatchesX * TESS_LEVEL + 1;
+            int totalH = numPatchesY * TESS_LEVEL + 1;
+
+            // Tessellate all sub-patches
+            for (int py = 0; py < numPatchesY; py++)
+            {
+                for (int px = 0; px < numPatchesX; px++)
+                {
+                    // Get 3x3 control points for this sub-patch
+                    var cp = new BspVertex[3, 3];
+                    for (int cy = 0; cy < 3; cy++)
+                    {
+                        for (int cx = 0; cx < 3; cx++)
+                        {
+                            int vi = surf.FirstVertex + (py * 2 + cy) * cpW + (px * 2 + cx);
+                            if (vi < world.Vertices.Length)
+                                cp[cy, cx] = world.Vertices[vi];
+                        }
+                    }
+
+                    // Tessellate this 3x3 patch
+                    for (int ty = 0; ty <= TESS_LEVEL; ty++)
+                    {
+                        // Skip first row/col of sub-patch if not the first sub-patch
+                        // (to avoid duplicate vertices at seams)
+                        if (ty == 0 && py > 0) continue;
+                        for (int tx = 0; tx <= TESS_LEVEL; tx++)
+                        {
+                            if (tx == 0 && px > 0) continue;
+
+                            float s = tx / (float)TESS_LEVEL;
+                            float t = ty / (float)TESS_LEVEL;
+                            newVerts.Add(EvalBezier(cp, s, t));
+                        }
+                    }
+                }
+            }
+
+            // Generate indices for the tessellated grid (relative to firstVert)
+            for (int gy = 0; gy < totalH - 1; gy++)
+            {
+                for (int gx = 0; gx < totalW - 1; gx++)
+                {
+                    int i0 = gy * totalW + gx;
+                    int i1 = i0 + 1;
+                    int i2 = i0 + totalW;
+                    int i3 = i2 + 1;
+
+                    newIndices.Add(i0);
+                    newIndices.Add(i2);
+                    newIndices.Add(i1);
+
+                    newIndices.Add(i1);
+                    newIndices.Add(i2);
+                    newIndices.Add(i3);
+                }
+            }
+
+            surf.FirstVertex = firstVert;
+            surf.NumVertices = totalW * totalH;
+            surf.FirstIndex = firstIdx;
+            surf.NumIndices = (totalH - 1) * (totalW - 1) * 6;
+            patchCount++;
+        }
+
+        if (patchCount > 0)
+        {
+            world.Vertices = newVerts.ToArray();
+            world.Indices = newIndices.ToArray();
+            EngineImports.Printf(EngineImports.PRINT_ALL,
+                $"[.NET] Tessellated {patchCount} patches ({world.Vertices.Length} total verts)\n");
+        }
+    }
+
+    /// <summary>
+    /// Evaluate a biquadratic Bezier patch at (s, t) given 3x3 control points.
+    /// B(s,t) = sum_i sum_j B_i(s) * B_j(t) * CP[j,i]
+    /// </summary>
+    private static BspVertex EvalBezier(BspVertex[,] cp, float s, float t)
+    {
+        // Bernstein basis: B0=(1-x)², B1=2x(1-x), B2=x²
+        float s0 = (1 - s) * (1 - s), s1 = 2 * s * (1 - s), s2 = s * s;
+        float t0 = (1 - t) * (1 - t), t1 = 2 * t * (1 - t), t2 = t * t;
+
+        var result = new BspVertex();
+        for (int j = 0; j < 3; j++)
+        {
+            float bj = j == 0 ? t0 : j == 1 ? t1 : t2;
+            for (int i = 0; i < 3; i++)
+            {
+                float bi = i == 0 ? s0 : i == 1 ? s1 : s2;
+                float w = bi * bj;
+                ref var c = ref cp[j, i];
+                result.X += c.X * w; result.Y += c.Y * w; result.Z += c.Z * w;
+                result.NX += c.NX * w; result.NY += c.NY * w; result.NZ += c.NZ * w;
+                result.U += c.U * w; result.V += c.V * w;
+                result.LmU += c.LmU * w; result.LmV += c.LmV * w;
+            }
+        }
+
+        // Blend vertex colors (use weighted average, clamp to byte)
+        float r = 0, g = 0, b = 0, a = 0;
+        for (int j = 0; j < 3; j++)
+        {
+            float bj = j == 0 ? t0 : j == 1 ? t1 : t2;
+            for (int i = 0; i < 3; i++)
+            {
+                float bi = i == 0 ? s0 : i == 1 ? s1 : s2;
+                float w = bi * bj;
+                ref var c = ref cp[j, i];
+                r += c.R * w; g += c.G * w; b += c.B * w; a += c.A * w;
+            }
+        }
+        result.R = (byte)Math.Clamp(r, 0, 255);
+        result.G = (byte)Math.Clamp(g, 0, 255);
+        result.B = (byte)Math.Clamp(b, 0, 255);
+        result.A = (byte)Math.Clamp(a, 0, 255);
+
+        // Normalize the normal
+        float nl = MathF.Sqrt(result.NX * result.NX + result.NY * result.NY + result.NZ * result.NZ);
+        if (nl > 0.0001f)
+        {
+            result.NX /= nl; result.NY /= nl; result.NZ /= nl;
+        }
+
+        return result;
     }
 }

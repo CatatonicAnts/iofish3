@@ -273,18 +273,22 @@ public sealed unsafe class BspRenderer : IDisposable
 
     private void DrawSurface(ref BspSurface surf, ShaderManager shaders)
     {
-        // Only draw planar faces and triangle soups for now
+        // Only draw planar faces, triangle soups, and tessellated patches
         if (surf.SurfaceType != SurfaceTypes.MST_PLANAR &&
-            surf.SurfaceType != SurfaceTypes.MST_TRIANGLE_SOUP)
+            surf.SurfaceType != SurfaceTypes.MST_TRIANGLE_SOUP &&
+            surf.SurfaceType != SurfaceTypes.MST_PATCH)
             return;
 
         if (surf.NumIndices == 0 || surf.NumVertices == 0)
             return;
 
-        // Skip NODRAW surfaces
+        // Skip NODRAW and SKY surfaces
         if (_world != null && surf.ShaderIndex >= 0 && surf.ShaderIndex < _world.Shaders.Length)
         {
-            if ((_world.Shaders[surf.ShaderIndex].SurfaceFlags & SurfaceFlags.SURF_NODRAW) != 0)
+            int flags = _world.Shaders[surf.ShaderIndex].SurfaceFlags;
+            if ((flags & SurfaceFlags.SURF_NODRAW) != 0)
+                return;
+            if ((flags & SurfaceFlags.SURF_SKY) != 0)
                 return;
         }
 

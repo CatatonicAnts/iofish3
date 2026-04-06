@@ -13,6 +13,7 @@ namespace RendererDotNet;
 public sealed unsafe class SceneManager
 {
     private readonly List<SceneEntity> _entities = new(256);
+    private readonly List<ScenePoly> _polys = new(512);
     private ModelManager? _models;
     private ShaderManager? _shaders;
     private SkinManager? _skins;
@@ -22,6 +23,21 @@ public sealed unsafe class SceneManager
     private GL? _gl;
     private int _screenW;
     private int _screenH;
+
+    // GL resources for sprite/poly rendering
+    private uint _spriteVao;
+    private uint _spriteVbo;
+    private uint _spriteEbo;
+    private uint _spriteProgram;
+    private int _spriteMvpLoc;
+    private int _spriteTexLoc;
+
+    private const int RF_THIRD_PERSON = 0x0002;
+    private const int RDF_NOWORLDMODEL = 0x0001;
+
+    // Entity types
+    private const int RT_MODEL = 0;
+    private const int RT_SPRITE = 2;
 
     public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
                      Renderer3D renderer3D, World.BspRenderer bspRenderer,
@@ -35,6 +51,8 @@ public sealed unsafe class SceneManager
         _gl = gl;
         _screenW = screenW;
         _screenH = screenH;
+
+        InitSpriteRenderer(gl);
     }
 
     public void SetWorld(World.BspWorld? world)
@@ -45,6 +63,7 @@ public sealed unsafe class SceneManager
     public void ClearScene()
     {
         _entities.Clear();
+        _polys.Clear();
     }
 
     /// <summary>
@@ -76,41 +95,104 @@ public sealed unsafe class SceneManager
         if (entityPtr == null) return;
 
         int reType = *(int*)(entityPtr + 0);
-        if (reType != 0) // Only RT_MODEL for now
-            return;
+        int renderfx = *(int*)(entityPtr + 4);
 
-        int hModel = *(int*)(entityPtr + 8);
-        if (hModel <= 0) return;
-
-        var entity = new SceneEntity
+        if (reType == RT_MODEL)
         {
-            ModelHandle = hModel,
-            Frame = *(int*)(entityPtr + 80),
-            OldFrame = *(int*)(entityPtr + 96),
-            BackLerp = *(float*)(entityPtr + 100),
-            CustomSkin = *(int*)(entityPtr + 108),
-            CustomShader = *(int*)(entityPtr + 112),
-        };
+            int hModel = *(int*)(entityPtr + 8);
+            if (hModel <= 0) return;
 
-        // Origin
-        float* origin = (float*)(entityPtr + 68);
-        entity.OriginX = origin[0];
-        entity.OriginY = origin[1];
-        entity.OriginZ = origin[2];
+            var entity = new SceneEntity
+            {
+                ReType = reType,
+                Renderfx = renderfx,
+                ModelHandle = hModel,
+                Frame = *(int*)(entityPtr + 80),
+                OldFrame = *(int*)(entityPtr + 96),
+                BackLerp = *(float*)(entityPtr + 100),
+                CustomSkin = *(int*)(entityPtr + 108),
+                CustomShader = *(int*)(entityPtr + 112),
+            };
 
-        // Axis (3x3 rotation matrix as 3 column vectors)
-        float* axis = (float*)(entityPtr + 28);
-        for (int i = 0; i < 9; i++)
-            entity.Axis[i] = axis[i];
+            float* origin = (float*)(entityPtr + 68);
+            entity.OriginX = origin[0];
+            entity.OriginY = origin[1];
+            entity.OriginZ = origin[2];
 
-        // shaderRGBA
-        byte* rgba = entityPtr + 116;
-        entity.R = rgba[0] / 255.0f;
-        entity.G = rgba[1] / 255.0f;
-        entity.B = rgba[2] / 255.0f;
-        entity.A = rgba[3] / 255.0f;
+            float* axis = (float*)(entityPtr + 28);
+            for (int i = 0; i < 9; i++)
+                entity.Axis[i] = axis[i];
 
-        _entities.Add(entity);
+            byte* rgba = entityPtr + 116;
+            entity.R = rgba[0] / 255.0f;
+            entity.G = rgba[1] / 255.0f;
+            entity.B = rgba[2] / 255.0f;
+            entity.A = rgba[3] / 255.0f;
+
+            _entities.Add(entity);
+        }
+        else if (reType == RT_SPRITE)
+        {
+            int customShader = *(int*)(entityPtr + 112);
+            if (customShader <= 0) return;
+
+            float* origin = (float*)(entityPtr + 68);
+            byte* rgba = entityPtr + 116;
+
+            var entity = new SceneEntity
+            {
+                ReType = reType,
+                Renderfx = renderfx,
+                CustomShader = customShader,
+                OriginX = origin[0],
+                OriginY = origin[1],
+                OriginZ = origin[2],
+                Radius = *(float*)(entityPtr + 132),
+                Rotation = *(float*)(entityPtr + 136),
+                R = rgba[0] / 255.0f,
+                G = rgba[1] / 255.0f,
+                B = rgba[2] / 255.0f,
+                A = rgba[3] / 255.0f,
+            };
+
+            _entities.Add(entity);
+        }
+    }
+
+    /// <summary>
+    /// Add world-space polygons (used for decals, particle trails, blood, etc.)
+    /// polyVert_t: { float xyz[3]; float st[2]; byte modulate[4]; } = 24 bytes
+    /// </summary>
+    public void AddPoly(int hShader, int numVerts, byte* vertsPtr, int numPolys)
+    {
+        if (hShader <= 0 || numVerts < 3 || vertsPtr == null) return;
+
+        for (int p = 0; p < numPolys; p++)
+        {
+            var poly = new ScenePoly
+            {
+                ShaderHandle = hShader,
+                Verts = new PolyVert[numVerts],
+            };
+
+            byte* src = vertsPtr + p * numVerts * 24;
+            for (int v = 0; v < numVerts; v++)
+            {
+                float* f = (float*)(src + v * 24);
+                byte* mod = src + v * 24 + 20;
+                poly.Verts[v] = new PolyVert
+                {
+                    X = f[0], Y = f[1], Z = f[2],
+                    U = f[3], V = f[4],
+                    R = mod[0] / 255.0f,
+                    G = mod[1] / 255.0f,
+                    B = mod[2] / 255.0f,
+                    A = mod[3] / 255.0f,
+                };
+            }
+
+            _polys.Add(poly);
+        }
     }
 
     /// <summary>
@@ -140,15 +222,17 @@ public sealed unsafe class SceneManager
         float fovY = *(float*)(refdefPtr + 20);
         float* viewOrg = (float*)(refdefPtr + 24);
         float* viewAxis = (float*)(refdefPtr + 36);
+        int rdflags = *(int*)(refdefPtr + 76);
 
         if (width <= 0 || height <= 0) return;
 
-        bool hasWorld = _bspWorld != null && _bspRenderer != null;
+        bool noWorldModel = (rdflags & RDF_NOWORLDMODEL) != 0;
+        bool hasWorld = !noWorldModel && _bspWorld != null && _bspRenderer != null;
         bool hasEntities = _entities.Count > 0;
-        if (!hasWorld && !hasEntities) return;
+        bool hasPolys = _polys.Count > 0;
+        if (!hasWorld && !hasEntities && !hasPolys) return;
 
         // Set GL viewport to the refdef rectangle
-        // Q3 y=0 is top of screen, OpenGL y=0 is bottom — flip vertically
         int glY = _screenH - (y + height);
         _gl.Viewport(x, glY, (uint)width, (uint)height);
         _gl.Enable(EnableCap.ScissorTest);
@@ -178,52 +262,65 @@ public sealed unsafe class SceneManager
             }
         }
 
-        // Pre-allocate outside loop to avoid stackalloc warnings
+        // Render entities
         Span<float> modelMat = stackalloc float[16];
         Span<float> mvp = stackalloc float[16];
 
         foreach (var ent in _entities)
         {
-            var model = _models.GetModel(ent.ModelHandle);
-            if (model == null) continue;
+            // Skip RF_THIRD_PERSON entities (player's own model)
+            if ((ent.Renderfx & RF_THIRD_PERSON) != 0)
+                continue;
 
-            // Build model matrix from entity origin + axis
-            BuildModelMatrix(ent, modelMat);
-
-            // MVP = VP * Model
-            MatMul(vp, modelMat, mvp);
-
-            foreach (var surface in model.Surfaces)
+            if (ent.ReType == RT_MODEL)
             {
-                // Determine texture: customShader > customSkin > surface default
-                int shaderHandle;
-                if (ent.CustomShader > 0)
-                {
-                    shaderHandle = ent.CustomShader;
-                }
-                else if (ent.CustomSkin > 0 && _skins != null)
-                {
-                    int skinSh = _skins.GetSurfaceShader(ent.CustomSkin, surface.Name);
-                    shaderHandle = skinSh > 0 ? skinSh : surface.ShaderHandle;
-                }
-                else
-                {
-                    shaderHandle = surface.ShaderHandle;
-                }
-                uint texId = _shaders.GetTextureId(shaderHandle);
+                var model = _models.GetModel(ent.ModelHandle);
+                if (model == null) continue;
 
-                float r = ent.R > 0 ? ent.R : 1.0f;
-                float g = ent.G > 0 ? ent.G : 1.0f;
-                float b = ent.B > 0 ? ent.B : 1.0f;
-                float a = ent.A > 0 ? ent.A : 1.0f;
+                BuildModelMatrix(ent, modelMat);
+                MatMul(vp, modelMat, mvp);
 
-                fixed (float* mvpPtr = mvp)
-                fixed (float* modelPtr = modelMat)
+                foreach (var surface in model.Surfaces)
                 {
-                    _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
-                        mvpPtr, modelPtr, texId, r, g, b, a);
+                    int shaderHandle;
+                    if (ent.CustomShader > 0)
+                    {
+                        shaderHandle = ent.CustomShader;
+                    }
+                    else if (ent.CustomSkin > 0 && _skins != null)
+                    {
+                        int skinSh = _skins.GetSurfaceShader(ent.CustomSkin, surface.Name);
+                        shaderHandle = skinSh > 0 ? skinSh : surface.ShaderHandle;
+                    }
+                    else
+                    {
+                        shaderHandle = surface.ShaderHandle;
+                    }
+                    uint texId = _shaders.GetTextureId(shaderHandle);
+
+                    float r = ent.R > 0 ? ent.R : 1.0f;
+                    float g = ent.G > 0 ? ent.G : 1.0f;
+                    float b = ent.B > 0 ? ent.B : 1.0f;
+                    float a = ent.A > 0 ? ent.A : 1.0f;
+
+                    fixed (float* mvpPtr = mvp)
+                    fixed (float* modelPtr = modelMat)
+                    {
+                        _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
+                            mvpPtr, modelPtr, texId, r, g, b, a);
+                    }
                 }
             }
+            else if (ent.ReType == RT_SPRITE)
+            {
+                DrawSprite(ent, viewAxis, vp);
+            }
+        }
+
+        // Render scene polys (decals, trails, effects)
+        if (hasPolys)
+        {
+            DrawPolys(vp);
         }
 
         // Restore full-screen viewport for 2D rendering
@@ -237,13 +334,11 @@ public sealed unsafe class SceneManager
     private static void BuildViewMatrix(float* org, float* axis, Span<float> m)
     {
         // Q3 viewaxis: [0-2] = forward, [3-5] = left, [6-8] = up
-        // We need to transform to OpenGL view space
         float fx = axis[0], fy = axis[1], fz = axis[2]; // forward
         float lx = axis[3], ly = axis[4], lz = axis[5]; // left
         float ux = axis[6], uy = axis[7], uz = axis[8]; // up
 
         // OpenGL right = -left, OpenGL up = up, OpenGL forward = -forward
-        // View matrix rows: right, up, -forward
         m.Clear();
         m[0] = -lx;  m[4] = -ly;  m[8]  = -lz;  m[12] = lx * org[0] + ly * org[1] + lz * org[2];
         m[1] = ux;   m[5] = uy;   m[9]  = uz;    m[13] = -(ux * org[0] + uy * org[1] + uz * org[2]);
@@ -251,9 +346,6 @@ public sealed unsafe class SceneManager
         m[3] = 0;    m[7] = 0;    m[11] = 0;     m[15] = 1;
     }
 
-    /// <summary>
-    /// Build a perspective projection matrix from field-of-view angles.
-    /// </summary>
     private static void BuildPerspective(float fovX, float fovY, float near, float far, Span<float> m)
     {
         float xmax = near * MathF.Tan(fovX * MathF.PI / 360.0f);
@@ -267,12 +359,8 @@ public sealed unsafe class SceneManager
         m[14] = -(2.0f * far * near) / (far - near);
     }
 
-    /// <summary>
-    /// Build a model matrix from entity origin and Q3 axis.
-    /// </summary>
     private static void BuildModelMatrix(SceneEntity ent, Span<float> m)
     {
-        // Q3 axis: axis[0-2] = forward, axis[3-5] = left/right, axis[6-8] = up
         m.Clear();
         m[0] = ent.Axis[0]; m[4] = ent.Axis[3]; m[8]  = ent.Axis[6]; m[12] = ent.OriginX;
         m[1] = ent.Axis[1]; m[5] = ent.Axis[4]; m[9]  = ent.Axis[7]; m[13] = ent.OriginY;
@@ -280,9 +368,6 @@ public sealed unsafe class SceneManager
         m[3] = 0;           m[7] = 0;           m[11] = 0;           m[15] = 1;
     }
 
-    /// <summary>
-    /// 4x4 matrix multiply: result = a * b (column-major).
-    /// </summary>
     private static void MatMul(ReadOnlySpan<float> a, ReadOnlySpan<float> b, Span<float> result)
     {
         for (int col = 0; col < 4; col++)
@@ -297,6 +382,242 @@ public sealed unsafe class SceneManager
             }
         }
     }
+
+    // --- Sprite and Poly rendering ---
+
+    private const string SpriteVertSrc = """
+        #version 450 core
+        layout(location = 0) in vec3 aPos;
+        layout(location = 1) in vec2 aUV;
+        layout(location = 2) in vec4 aColor;
+
+        uniform mat4 uMVP;
+
+        out vec2 vUV;
+        out vec4 vColor;
+
+        void main() {
+            gl_Position = uMVP * vec4(aPos, 1.0);
+            vUV = aUV;
+            vColor = aColor;
+        }
+        """;
+
+    private const string SpriteFragSrc = """
+        #version 450 core
+        in vec2 vUV;
+        in vec4 vColor;
+
+        uniform sampler2D uTex;
+
+        out vec4 oColor;
+
+        void main() {
+            vec4 texColor = texture(uTex, vUV);
+            oColor = texColor * vColor;
+            if (oColor.a < 0.01) discard;
+        }
+        """;
+
+    private void InitSpriteRenderer(GL gl)
+    {
+        // Compile shader
+        uint vs = CompileShader(gl, ShaderType.VertexShader, SpriteVertSrc);
+        uint fs = CompileShader(gl, ShaderType.FragmentShader, SpriteFragSrc);
+        _spriteProgram = gl.CreateProgram();
+        gl.AttachShader(_spriteProgram, vs);
+        gl.AttachShader(_spriteProgram, fs);
+        gl.LinkProgram(_spriteProgram);
+        gl.DeleteShader(vs);
+        gl.DeleteShader(fs);
+
+        _spriteMvpLoc = gl.GetUniformLocation(_spriteProgram, "uMVP");
+        _spriteTexLoc = gl.GetUniformLocation(_spriteProgram, "uTex");
+
+        _spriteVao = gl.GenVertexArray();
+        _spriteVbo = gl.GenBuffer();
+        _spriteEbo = gl.GenBuffer();
+
+        gl.BindVertexArray(_spriteVao);
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, _spriteVbo);
+        gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _spriteEbo);
+
+        // Per vertex: x,y,z, u,v, r,g,b,a = 9 floats
+        uint stride = 9 * sizeof(float);
+        gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, stride, (void*)0);
+        gl.EnableVertexAttribArray(0);
+        gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, stride, (void*)(3 * sizeof(float)));
+        gl.EnableVertexAttribArray(1);
+        gl.VertexAttribPointer(2, 4, VertexAttribPointerType.Float, false, stride, (void*)(5 * sizeof(float)));
+        gl.EnableVertexAttribArray(2);
+
+        gl.BindVertexArray(0);
+    }
+
+    private static uint CompileShader(GL gl, ShaderType type, string src)
+    {
+        uint s = gl.CreateShader(type);
+        gl.ShaderSource(s, src);
+        gl.CompileShader(s);
+        return s;
+    }
+
+    /// <summary>
+    /// Draw a camera-facing billboard sprite.
+    /// </summary>
+    private void DrawSprite(SceneEntity ent, float* viewAxis, ReadOnlySpan<float> vp)
+    {
+        if (_gl == null || _shaders == null) return;
+
+        float radius = ent.Radius;
+        if (radius <= 0) return;
+
+        uint texId = _shaders.GetTextureId(ent.CustomShader);
+
+        // Q3 viewaxis: [3-5] = left, [6-8] = up
+        float lx = viewAxis[3], ly = viewAxis[4], lz = viewAxis[5];
+        float ux = viewAxis[6], uy = viewAxis[7], uz = viewAxis[8];
+
+        // Apply rotation if any
+        if (ent.Rotation != 0)
+        {
+            float ang = MathF.PI * ent.Rotation / 180.0f;
+            float c = MathF.Cos(ang), s = MathF.Sin(ang);
+            float nlx = c * lx - s * ux, nly = c * ly - s * uy, nlz = c * lz - s * uz;
+            float nux = s * lx + c * ux, nuy = s * ly + c * uy, nuz = s * lz + c * uz;
+            lx = nlx; ly = nly; lz = nlz;
+            ux = nux; uy = nuy; uz = nuz;
+        }
+
+        float ox = ent.OriginX, oy = ent.OriginY, oz = ent.OriginZ;
+
+        // 4 corners: -left-up, +left-up, +left+up, -left+up
+        Span<float> verts = stackalloc float[4 * 9];
+        SetSpriteVert(verts, 0, ox - lx * radius - ux * radius,
+                                oy - ly * radius - uy * radius,
+                                oz - lz * radius - uz * radius,
+                                0, 1, ent.R, ent.G, ent.B, ent.A);
+        SetSpriteVert(verts, 1, ox + lx * radius - ux * radius,
+                                oy + ly * radius - uy * radius,
+                                oz + lz * radius - uz * radius,
+                                1, 1, ent.R, ent.G, ent.B, ent.A);
+        SetSpriteVert(verts, 2, ox + lx * radius + ux * radius,
+                                oy + ly * radius + uy * radius,
+                                oz + lz * radius + uz * radius,
+                                1, 0, ent.R, ent.G, ent.B, ent.A);
+        SetSpriteVert(verts, 3, ox - lx * radius + ux * radius,
+                                oy - ly * radius + uy * radius,
+                                oz - lz * radius + uz * radius,
+                                0, 0, ent.R, ent.G, ent.B, ent.A);
+
+        Span<uint> indices = stackalloc uint[] { 0, 1, 2, 0, 2, 3 };
+
+        _gl.UseProgram(_spriteProgram);
+        fixed (float* vpPtr = vp)
+            _gl.UniformMatrix4(_spriteMvpLoc, 1, false, vpPtr);
+        _gl.Uniform1(_spriteTexLoc, 0);
+
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, texId);
+
+        _gl.BindVertexArray(_spriteVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _spriteVbo);
+        fixed (float* p = verts)
+            _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(verts.Length * sizeof(float)), p, BufferUsageARB.StreamDraw);
+        _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _spriteEbo);
+        fixed (uint* p = indices)
+            _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indices.Length * sizeof(uint)), p, BufferUsageARB.StreamDraw);
+
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        _gl.DepthMask(false);
+        _gl.Disable(EnableCap.CullFace);
+
+        _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, null);
+
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
+        _gl.BindVertexArray(0);
+    }
+
+    private static void SetSpriteVert(Span<float> buf, int idx,
+        float x, float y, float z, float u, float v,
+        float r, float g, float b, float a)
+    {
+        int o = idx * 9;
+        buf[o] = x; buf[o+1] = y; buf[o+2] = z;
+        buf[o+3] = u; buf[o+4] = v;
+        buf[o+5] = r; buf[o+6] = g; buf[o+7] = b; buf[o+8] = a;
+    }
+
+    /// <summary>
+    /// Render all accumulated scene polys as triangle fans.
+    /// </summary>
+    private void DrawPolys(ReadOnlySpan<float> vp)
+    {
+        if (_gl == null || _shaders == null || _polys.Count == 0) return;
+
+        _gl.UseProgram(_spriteProgram);
+        fixed (float* vpPtr = vp)
+            _gl.UniformMatrix4(_spriteMvpLoc, 1, false, vpPtr);
+        _gl.Uniform1(_spriteTexLoc, 0);
+
+        _gl.BindVertexArray(_spriteVao);
+
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        _gl.DepthMask(false);
+        _gl.Disable(EnableCap.CullFace);
+
+        // Max poly verts is typically 4-10, pre-allocate outside loop
+        const int MAX_POLY_VERTS = 64;
+        Span<float> polyVertBuf = stackalloc float[MAX_POLY_VERTS * 9];
+        Span<uint> polyIdxBuf = stackalloc uint[(MAX_POLY_VERTS - 2) * 3];
+
+        foreach (var poly in _polys)
+        {
+            int nv = poly.Verts.Length;
+            if (nv < 3 || nv > MAX_POLY_VERTS) continue;
+
+            uint texId = _shaders.GetTextureId(poly.ShaderHandle);
+            _gl.ActiveTexture(TextureUnit.Texture0);
+            _gl.BindTexture(TextureTarget.Texture2D, texId);
+
+            // Build triangle fan vertices
+            var verts = polyVertBuf[..(nv * 9)];
+            for (int i = 0; i < nv; i++)
+            {
+                ref var pv = ref poly.Verts[i];
+                int o = i * 9;
+                verts[o] = pv.X; verts[o+1] = pv.Y; verts[o+2] = pv.Z;
+                verts[o+3] = pv.U; verts[o+4] = pv.V;
+                verts[o+5] = pv.R; verts[o+6] = pv.G; verts[o+7] = pv.B; verts[o+8] = pv.A;
+            }
+
+            // Triangle fan indices
+            int numTris = nv - 2;
+            var indices = polyIdxBuf[..(numTris * 3)];
+            for (int i = 0; i < numTris; i++)
+            {
+                indices[i * 3] = 0;
+                indices[i * 3 + 1] = (uint)(i + 1);
+                indices[i * 3 + 2] = (uint)(i + 2);
+            }
+
+            _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _spriteVbo);
+            fixed (float* p = verts)
+                _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(nv * 9 * sizeof(float)), p, BufferUsageARB.StreamDraw);
+            _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _spriteEbo);
+            fixed (uint* p = indices)
+                _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(numTris * 3 * sizeof(uint)), p, BufferUsageARB.StreamDraw);
+
+            _gl.DrawElements(PrimitiveType.Triangles, (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
+        }
+
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
+        _gl.BindVertexArray(0);
+    }
 }
 
 /// <summary>
@@ -304,6 +625,8 @@ public sealed unsafe class SceneManager
 /// </summary>
 internal unsafe struct SceneEntity
 {
+    public int ReType;
+    public int Renderfx;
     public int ModelHandle;
     public int Frame;
     public int OldFrame;
@@ -312,9 +635,23 @@ internal unsafe struct SceneEntity
     public int CustomShader;
 
     public float OriginX, OriginY, OriginZ;
-
-    // 3x3 axis as flat array: [fwd.x, fwd.y, fwd.z, left.x, left.y, left.z, up.x, up.y, up.z]
     public fixed float Axis[9];
-
     public float R, G, B, A;
+
+    // Sprite-specific
+    public float Radius;
+    public float Rotation;
+}
+
+internal struct PolyVert
+{
+    public float X, Y, Z;
+    public float U, V;
+    public float R, G, B, A;
+}
+
+internal struct ScenePoly
+{
+    public int ShaderHandle;
+    public PolyVert[] Verts;
 }
