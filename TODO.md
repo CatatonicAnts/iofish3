@@ -187,6 +187,11 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Entity alpha / shaderRGBA — all-zero detection (uninitialized→white), alpha<1 enables blending on models
 - [x] deformVertexes — parse wave/move/bulge/normal/autosprite/autosprite2 from shader scripts, GPU-based wave and move displacement in BSP vertex shader
 - [x] Overbright scale — configurable lightmap overbright multiplier uniform (replaces hardcoded 2.0)
+- [x] Inline BSP models — doors, platforms, and other brush models (*N) registered by ModelManager, rendered via BspRenderer.RenderSubmodel with entity transforms
+- [x] Model shader blend modes — Renderer3D uses shader-defined blend factors (additive, alpha, filter) instead of only entity alpha; fullbright for non-opaque effects
+- [x] BSP transparent surface detection — surfaces with non-opaque blend modes deferred to transparent pass regardless of surfaceparm trans (fixes water, force fields)
+- [x] animMap tokenizer fix — ShaderTokenizer pushback prevents directive loss after frame list parsing
+- [x] rgbGen/alphaGen wave/const — parser now properly consumes all wave/const parameters
 
 ### Fixed Bugs
 

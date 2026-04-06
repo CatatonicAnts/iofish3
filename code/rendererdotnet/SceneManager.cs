@@ -170,11 +170,19 @@ public sealed unsafe class SceneManager
                 OriginZ = origin[2],
                 Radius = *(float*)(entityPtr + 132),
                 Rotation = *(float*)(entityPtr + 136),
-                R = rgba[0] / 255.0f,
-                G = rgba[1] / 255.0f,
-                B = rgba[2] / 255.0f,
-                A = rgba[3] / 255.0f,
             };
+
+            if (rgba[0] == 0 && rgba[1] == 0 && rgba[2] == 0 && rgba[3] == 0)
+            {
+                entity.R = 1.0f; entity.G = 1.0f; entity.B = 1.0f; entity.A = 1.0f;
+            }
+            else
+            {
+                entity.R = rgba[0] / 255.0f;
+                entity.G = rgba[1] / 255.0f;
+                entity.B = rgba[2] / 255.0f;
+                entity.A = rgba[3] == 0 ? 1.0f : rgba[3] / 255.0f;
+            }
 
             _entities.Add(entity);
         }
@@ -199,11 +207,18 @@ public sealed unsafe class SceneManager
                 OldOriginY = oldorigin[1],
                 OldOriginZ = oldorigin[2],
                 Radius = *(float*)(entityPtr + 132),
-                R = rgba[0] / 255.0f,
-                G = rgba[1] / 255.0f,
-                B = rgba[2] / 255.0f,
-                A = rgba[3] / 255.0f,
             };
+            if (rgba[0] == 0 && rgba[1] == 0 && rgba[2] == 0 && rgba[3] == 0)
+            {
+                entity.R = 1.0f; entity.G = 1.0f; entity.B = 1.0f; entity.A = 1.0f;
+            }
+            else
+            {
+                entity.R = rgba[0] / 255.0f;
+                entity.G = rgba[1] / 255.0f;
+                entity.B = rgba[2] / 255.0f;
+                entity.A = rgba[3] == 0 ? 1.0f : rgba[3] / 255.0f;
+            }
             if (entity.Radius <= 0) entity.Radius = 2.0f;
 
             _entities.Add(entity);
