@@ -99,6 +99,40 @@ public static unsafe class CGame
     private static bool _nextFrameTeleport;
     private static bool _thisFrameTeleport;
 
+    // View bob state
+    private static int _bobCycle;
+    private static float _bobFracSin;
+    private static float _xySpeed;
+
+    // Step smoothing (stair climb)
+    private static float _stepChange;
+    private static int _stepTime;
+
+    // Duck smoothing
+    private static float _duckChange;
+    private static int _duckTime;
+
+    // Landing effect
+    private static float _landChange;
+    private static int _landTime;
+
+    // Damage feedback
+    private static int _damageTime;
+    private static float _damageX, _damageY;
+    private static float _damageValue;
+    private static float _vDmgPitch, _vDmgRoll;
+    private static int _lastDamageEvent;
+
+    // Zoom state
+    private static bool _zoomed;
+    private static int _zoomTime;
+
+    // View blood shader
+    private static int _viewBloodShader;
+
+    // Previous view height for duck tracking
+    private static int _lastViewHeight;
+
     // Snapshot state
     private static int _latestSnapshotNum;
     private static int _latestSnapshotTime;
@@ -192,6 +226,14 @@ public static unsafe class CGame
         _weaponSelect = Weapons.WP_MACHINEGUN;
         _nextFrameTeleport = false;
         _thisFrameTeleport = false;
+        _bobCycle = 0; _bobFracSin = 0; _xySpeed = 0;
+        _stepChange = 0; _stepTime = 0;
+        _duckChange = 0; _duckTime = 0;
+        _landChange = 0; _landTime = 0;
+        _damageTime = 0; _damageValue = 0; _damageX = 0; _damageY = 0;
+        _vDmgPitch = 0; _vDmgRoll = 0; _lastDamageEvent = 0;
+        _zoomed = false; _zoomTime = 0;
+        _lastViewHeight = 0;
         Prediction.Reset();
         _initialized = true;
         CrashLog.Breadcrumb("Init: DONE");
@@ -223,6 +265,8 @@ public static unsafe class CGame
 
         if (cmd == "+scores") { Scoreboard.ScoresDown(); return true; }
         if (cmd == "-scores") { Scoreboard.ScoresUp(); return true; }
+        if (cmd == "+zoom") { _zoomed = true; _zoomTime = _time; return true; }
+        if (cmd == "-zoom") { _zoomed = false; _zoomTime = _time; return true; }
 
         // Server-forwarded commands — return false to let engine handle
         return false;
@@ -316,6 +360,9 @@ public static unsafe class CGame
         }
         catch (Exception ex) { CrashLog.LogException("PredictPlayerState", ex); Syscalls.Print($"[.NET cgame] ERROR in PredictPlayerState: {ex.Message}\n"); }
 
+        // Track duck height changes for smooth transition
+        TrackDuckOffset();
+
         // Calculate frame interpolation factor
         if (_nextSnap != null)
         {
@@ -365,6 +412,7 @@ public static unsafe class CGame
         catch (Exception ex) { CrashLog.LogException("AddViewWeapon", ex); Syscalls.Print($"[.NET cgame] ERROR in AddViewWeapon: {ex.Message}\n"); }
 
         CrashLog.Breadcrumb("RenderScene");
+        DamageBlendBlob(ref refdef);
         refdef.Time = _time;
         for (int i = 0; i < Q3RefDef.MAX_MAP_AREA_BYTES; i++)
             refdef.Areamask[i] = _snap->Areamask[i];
@@ -389,6 +437,7 @@ public static unsafe class CGame
         _selectShader = Syscalls.R_RegisterShader("gfx/2d/select");
         _noammoShader = Syscalls.R_RegisterShader("icons/noammo");
         _explosionShader = Syscalls.R_RegisterShader("rocketExplosion");
+        _viewBloodShader = Syscalls.R_RegisterShader("viewBloodBlend");
 
         // Number shaders (0-9 + minus)
         string[] numNames = {
@@ -618,6 +667,9 @@ public static unsafe class CGame
             // Check events on transitioned entities
             CheckEvents(ref cent);
         }
+
+        // Check for damage feedback
+        DamageFeedback();
     }
 
     /// <summary>
@@ -812,6 +864,47 @@ public static unsafe class CGame
 
             case EntityEvent.EV_FALL_SHORT:
                 Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxLandSound);
+                if (es.Number == _snap->Ps.ClientNum)
+                {
+                    _landChange = -8;
+                    _landTime = _time;
+                }
+                break;
+
+            case EntityEvent.EV_FALL_MEDIUM:
+                Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxLandSound);
+                if (es.Number == _snap->Ps.ClientNum)
+                {
+                    _landChange = -16;
+                    _landTime = _time;
+                }
+                break;
+
+            case EntityEvent.EV_FALL_FAR:
+                Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxLandSound);
+                if (es.Number == _snap->Ps.ClientNum)
+                {
+                    _landChange = -24;
+                    _landTime = _time;
+                }
+                break;
+
+            case EntityEvent.EV_STEP_4:
+            case EntityEvent.EV_STEP_8:
+            case EntityEvent.EV_STEP_12:
+            case EntityEvent.EV_STEP_16:
+                if (es.Number == _snap->Ps.ClientNum)
+                {
+                    float stepSize = eventType switch
+                    {
+                        EntityEvent.EV_STEP_4 => 4,
+                        EntityEvent.EV_STEP_8 => 8,
+                        EntityEvent.EV_STEP_12 => 12,
+                        _ => 16
+                    };
+                    _stepChange = stepSize;
+                    _stepTime = _time;
+                }
                 break;
 
             case EntityEvent.EV_JUMP:
@@ -1065,6 +1158,17 @@ public static unsafe class CGame
 
     // ── View Calculation (cg_view.c equivalent) ──
 
+    // View effect constants
+    private const int STEP_TIME = 200;
+    private const int DUCK_TIME = 100;
+    private const int DAMAGE_DEFLECT_TIME = 150;
+    private const int DAMAGE_RETURN_TIME = 400;
+    private const int DAMAGE_TIME = 500;
+    private const int LAND_DEFLECT_TIME = 150;
+    private const int LAND_RETURN_TIME = 300;
+    private const int ZOOM_TIME = 150;
+    private const int PMF_DUCKED = 1;
+
     private static void CalcViewValues(ref Q3RefDef refdef)
     {
         ref var ps = ref Prediction.PredictedPlayerState;
@@ -1074,10 +1178,15 @@ public static unsafe class CGame
         refdef.Width = _screenWidth;
         refdef.Height = _screenHeight;
 
-        // View origin — from predicted player state
+        // Calculate bob state from predicted player state
+        _bobCycle = (ps.BobCycle & 128) >> 7;
+        _bobFracSin = MathF.Abs(MathF.Sin((ps.BobCycle & 127) / 127.0f * MathF.PI));
+        _xySpeed = MathF.Sqrt(ps.VelocityX * ps.VelocityX + ps.VelocityY * ps.VelocityY);
+
+        // Base view origin from predicted state (viewheight added in OffsetFirstPersonView)
         refdef.ViewOrgX = ps.OriginX;
         refdef.ViewOrgY = ps.OriginY;
-        refdef.ViewOrgZ = ps.OriginZ + ps.ViewHeight;
+        refdef.ViewOrgZ = ps.OriginZ;
 
         // Apply prediction error smoothing
         Prediction.GetPredictionError(out float errX, out float errY, out float errZ, _time);
@@ -1085,17 +1194,289 @@ public static unsafe class CGame
         refdef.ViewOrgY += errY;
         refdef.ViewOrgZ += errZ;
 
-        // View angles → axis
-        float pitch = ps.ViewAnglesX * MathF.PI / 180.0f;
-        float yaw = ps.ViewAnglesY * MathF.PI / 180.0f;
-        float roll = ps.ViewAnglesZ * MathF.PI / 180.0f;
+        // Base view angles from predicted state
+        float viewPitch = ps.ViewAnglesX;
+        float viewYaw = ps.ViewAnglesY;
+        float viewRoll = ps.ViewAnglesZ;
+
+        // Apply first-person view offsets (bobbing, damage kick, duck, landing, step)
+        OffsetFirstPersonView(ref refdef, ref viewPitch, ref viewYaw, ref viewRoll);
+
+        // Convert angles to axis AFTER applying offsets
+        float pitch = viewPitch * MathF.PI / 180.0f;
+        float yaw = viewYaw * MathF.PI / 180.0f;
+        float roll = viewRoll * MathF.PI / 180.0f;
         AnglesToAxis(pitch, yaw, roll, ref refdef);
 
-        // FOV
-        float fovX = 90.0f;
+        // Calculate FOV (with zoom support)
+        CalcFov(ref refdef);
+    }
+
+    private static void OffsetFirstPersonView(ref Q3RefDef refdef, ref float pitch, ref float yaw, ref float roll)
+    {
+        ref var ps = ref Prediction.PredictedPlayerState;
+
+        // If dead, fix the angle and don't add any kick
+        if (ps.Stats[Stats.STAT_HEALTH] <= 0)
+        {
+            roll = 40;
+            pitch = -15;
+            yaw = ps.Stats[Stats.STAT_DEAD_YAW];
+            refdef.ViewOrgZ += ps.ViewHeight;
+            return;
+        }
+
+        // Add angles based on damage kick
+        if (_damageTime > 0)
+        {
+            float ratio = _time - _damageTime;
+            if (ratio < DAMAGE_DEFLECT_TIME)
+            {
+                ratio /= DAMAGE_DEFLECT_TIME;
+                pitch += ratio * _vDmgPitch;
+                roll += ratio * _vDmgRoll;
+            }
+            else
+            {
+                ratio = 1.0f - (ratio - DAMAGE_DEFLECT_TIME) / DAMAGE_RETURN_TIME;
+                if (ratio > 0)
+                {
+                    pitch += ratio * _vDmgPitch;
+                    roll += ratio * _vDmgRoll;
+                }
+            }
+        }
+
+        // Add angles based on velocity (run pitch/roll)
+        const float cg_runpitch = 0.002f;
+        const float cg_runroll = 0.005f;
+
+        float sp = MathF.Sin(pitch * MathF.PI / 180f), cp = MathF.Cos(pitch * MathF.PI / 180f);
+        float sy = MathF.Sin(yaw * MathF.PI / 180f), cy = MathF.Cos(yaw * MathF.PI / 180f);
+        float fwdX = cp * cy, fwdY = cp * sy;
+        float rightX = -sy, rightY = cy;
+
+        float vFwd = ps.VelocityX * fwdX + ps.VelocityY * fwdY;
+        pitch += vFwd * cg_runpitch;
+
+        float vRight = ps.VelocityX * rightX + ps.VelocityY * rightY;
+        roll -= vRight * cg_runroll;
+
+        // Add angles based on bob
+        const float cg_bobpitch = 0.002f;
+        const float cg_bobroll = 0.002f;
+        const float cg_bobup = 0.005f;
+
+        float speed = _xySpeed > 200 ? _xySpeed : 200;
+        float delta = _bobFracSin * cg_bobpitch * speed;
+        if ((ps.PmFlags & PMF_DUCKED) != 0)
+            delta *= 3;
+        pitch += delta;
+
+        delta = _bobFracSin * cg_bobroll * speed;
+        if ((ps.PmFlags & PMF_DUCKED) != 0)
+            delta *= 3;
+        if ((_bobCycle & 1) != 0)
+            delta = -delta;
+        roll += delta;
+
+        // Add view height
+        refdef.ViewOrgZ += ps.ViewHeight;
+
+        // Smooth out duck height changes
+        if (_duckTime > 0)
+        {
+            int timeDelta = _time - _duckTime;
+            if (timeDelta < DUCK_TIME)
+            {
+                refdef.ViewOrgZ -= _duckChange * (DUCK_TIME - timeDelta) / (float)DUCK_TIME;
+            }
+        }
+
+        // Add bob height
+        float bob = _bobFracSin * _xySpeed * cg_bobup;
+        if (bob > 6) bob = 6;
+        refdef.ViewOrgZ += bob;
+
+        // Add fall/landing height
+        if (_landTime > 0)
+        {
+            delta = _time - _landTime;
+            if (delta < LAND_DEFLECT_TIME)
+            {
+                float f = delta / LAND_DEFLECT_TIME;
+                refdef.ViewOrgZ += _landChange * f;
+            }
+            else if (delta < LAND_DEFLECT_TIME + LAND_RETURN_TIME)
+            {
+                delta -= LAND_DEFLECT_TIME;
+                float f = 1.0f - delta / LAND_RETURN_TIME;
+                refdef.ViewOrgZ += _landChange * f;
+            }
+        }
+
+        // Add step offset (stair smoothing)
+        if (_stepTime > 0)
+        {
+            int stepDelta = _time - _stepTime;
+            if (stepDelta < STEP_TIME)
+            {
+                refdef.ViewOrgZ -= _stepChange * (STEP_TIME - stepDelta) / (float)STEP_TIME;
+            }
+        }
+    }
+
+    private static void CalcFov(ref Q3RefDef refdef)
+    {
+        float fovX;
+        if (Prediction.PredictedPlayerState.PmType == PmType.PM_INTERMISSION)
+        {
+            fovX = 90;
+        }
+        else
+        {
+            string fovStr = Syscalls.CvarGetString("cg_fov");
+            fovX = float.TryParse(fovStr, System.Globalization.CultureInfo.InvariantCulture, out float fovParsed)
+                ? fovParsed : 90;
+            if (fovX < 1) fovX = 90;
+            else if (fovX > 160) fovX = 160;
+
+            // Zoom FOV
+            string zoomStr = Syscalls.CvarGetString("cg_zoomFov");
+            float zoomFov = float.TryParse(zoomStr, System.Globalization.CultureInfo.InvariantCulture, out float zfParsed)
+                ? zfParsed : 22.5f;
+            if (zoomFov < 1) zoomFov = 22.5f;
+            else if (zoomFov > 160) zoomFov = 160;
+
+            if (_zoomed)
+            {
+                float f = (_time - _zoomTime) / (float)ZOOM_TIME;
+                if (f > 1.0f)
+                    fovX = zoomFov;
+                else
+                    fovX = fovX + f * (zoomFov - fovX);
+            }
+            else if (_zoomTime > 0)
+            {
+                float f = (_time - _zoomTime) / (float)ZOOM_TIME;
+                if (f <= 1.0f)
+                    fovX = zoomFov + f * (fovX - zoomFov);
+            }
+        }
+
         float aspect = (float)_screenWidth / _screenHeight;
         refdef.FovX = fovX;
         refdef.FovY = 2.0f * MathF.Atan(MathF.Tan(fovX * MathF.PI / 360.0f) / aspect) * 180.0f / MathF.PI;
+    }
+
+    private static void DamageFeedback()
+    {
+        if (_snap == null) return;
+        ref var ps = ref _snap->Ps;
+
+        if (ps.DamageEvent == _lastDamageEvent || ps.DamageCount == 0)
+            return;
+        _lastDamageEvent = ps.DamageEvent;
+
+        int health = ps.Stats[Stats.STAT_HEALTH];
+        float scale = health < 40 ? 1.0f : 40.0f / health;
+        float kick = ps.DamageCount * scale;
+        kick = Math.Clamp(kick, 5f, 10f);
+
+        int yawByte = ps.DamageYaw;
+        int pitchByte = ps.DamagePitch;
+
+        if (yawByte == 255 && pitchByte == 255)
+        {
+            // Centered damage (falling, etc.)
+            _damageX = 0;
+            _damageY = 0;
+            _vDmgRoll = 0;
+            _vDmgPitch = -kick;
+        }
+        else
+        {
+            // Directional damage
+            float dmgPitch = pitchByte / 255.0f * 360.0f;
+            float dmgYaw = yawByte / 255.0f * 360.0f;
+
+            float pr = dmgPitch * MathF.PI / 180f;
+            float yr = dmgYaw * MathF.PI / 180f;
+
+            float dirX = -(MathF.Cos(pr) * MathF.Cos(yr));
+            float dirY = -(MathF.Cos(pr) * MathF.Sin(yr));
+            float dirZ = -MathF.Sin(pr);
+
+            // Get view axes from predicted player state angles
+            ref var pps = ref Prediction.PredictedPlayerState;
+            float vPitch = pps.ViewAnglesX * MathF.PI / 180f;
+            float vYaw = pps.ViewAnglesY * MathF.PI / 180f;
+
+            float vsp = MathF.Sin(vPitch), vcp = MathF.Cos(vPitch);
+            float vsy = MathF.Sin(vYaw), vcy = MathF.Cos(vYaw);
+
+            float fwdX = vcp * vcy, fwdY = vcp * vsy, fwdZ = -vsp;
+            float leftX = -vsy, leftY = vcy, leftZ = 0;
+            float upX = vsp * vcy, upY = vsp * vsy, upZ = vcp;
+
+            float front = dirX * fwdX + dirY * fwdY + dirZ * fwdZ;
+            float left = dirX * leftX + dirY * leftY + dirZ * leftZ;
+            float up = dirX * upX + dirY * upY + dirZ * upZ;
+
+            float dist = MathF.Sqrt(front * front + left * left);
+            if (dist < 0.1f) dist = 0.1f;
+
+            _vDmgRoll = kick * left;
+            _vDmgPitch = -kick * front;
+
+            if (front <= 0.1f) front = 0.1f;
+            _damageX = Math.Clamp(-left / front, -1f, 1f);
+            _damageY = Math.Clamp(up / dist, -1f, 1f);
+        }
+
+        _damageValue = kick;
+        _damageTime = _time;
+    }
+
+    private static void DamageBlendBlob(ref Q3RefDef refdef)
+    {
+        if (_damageValue <= 0 || _damageTime <= 0) return;
+
+        int t = _time - _damageTime;
+        if (t <= 0 || t >= DAMAGE_TIME) return;
+
+        var ent = new Q3RefEntity();
+        ent.ReType = Q3RefEntity.RT_SPRITE;
+        ent.RenderFx = Q3RefEntity.RF_FIRST_PERSON;
+
+        ent.OriginX = refdef.ViewOrgX + 8 * refdef.Axis0X + _damageX * -8 * refdef.Axis1X + _damageY * 8 * refdef.Axis2X;
+        ent.OriginY = refdef.ViewOrgY + 8 * refdef.Axis0Y + _damageX * -8 * refdef.Axis1Y + _damageY * 8 * refdef.Axis2Y;
+        ent.OriginZ = refdef.ViewOrgZ + 8 * refdef.Axis0Z + _damageX * -8 * refdef.Axis1Z + _damageY * 8 * refdef.Axis2Z;
+
+        ent.Radius = _damageValue * 3;
+        ent.CustomShader = _viewBloodShader;
+        ent.ShaderRGBA_R = 255;
+        ent.ShaderRGBA_G = 255;
+        ent.ShaderRGBA_B = 255;
+        ent.ShaderRGBA_A = (byte)(200 * (1.0f - (float)t / DAMAGE_TIME));
+
+        Syscalls.R_AddRefEntityToScene(&ent);
+    }
+
+    private static void TrackDuckOffset()
+    {
+        ref var ps = ref Prediction.PredictedPlayerState;
+        int viewHeight = ps.ViewHeight;
+
+        if (viewHeight != _lastViewHeight)
+        {
+            if (_lastViewHeight != 0)
+            {
+                _duckChange = _lastViewHeight - viewHeight;
+                _duckTime = _time;
+            }
+            _lastViewHeight = viewHeight;
+        }
     }
 
     private static void AnglesToAxis(float pitch, float yaw, float roll, ref Q3RefDef refdef)
