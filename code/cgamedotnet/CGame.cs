@@ -337,15 +337,9 @@ public static unsafe class CGame
 		_chatIndex = 0; _pickupName = ""; _pickupTime = 0;
 		_rewardStack = 0; _rewardTime = 0;
 		_lagFrameCount = 0; _lagSnapshotCount = 0;
-		_oldPlayerState = default;
-
-		// Read third-person cvars
-		string tp = Syscalls.CvarGetString("cg_thirdPerson");
-		_thirdPerson = tp == "1";
-		string tpr = Syscalls.CvarGetString("cg_thirdPersonRange");
-		_thirdPersonRange = float.TryParse(tpr, out float tpRange) ? tpRange : 80.0f;
-		string tpa = Syscalls.CvarGetString("cg_thirdPersonAngle");
-		_thirdPersonAngle = float.TryParse(tpa, out float tpAngle) ? tpAngle : 0.0f;
+		// Zero sentinel so CheckLocalSounds skips first snapshot
+		_oldPlayerState.CommandTime = 0;
+		_thirdPerson = false; _thirdPersonRange = 80.0f; _thirdPersonAngle = 0.0f;
 		for (int i = 0; i < MAX_CHAT_LINES; i++) { _chatMessages[i] = ""; _chatTimes[i] = 0; }
 		Prediction.Reset();
 		_initialized = true;
