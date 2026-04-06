@@ -283,6 +283,21 @@ public static unsafe class BspLoader
             result[i].LightmapIndex = s[7];
             result[i].PatchWidth = s[24];   // offset 96
             result[i].PatchHeight = s[25];  // offset 100
+
+            // For MST_FLARE: extract origin/color/normal from lightmap fields
+            if (result[i].SurfaceType == SurfaceTypes.MST_FLARE)
+            {
+                float* f = (float*)(p + i * DSURFACE_SIZE);
+                result[i].FlareOriginX = f[12]; // lightmapOrigin[0]
+                result[i].FlareOriginY = f[13]; // lightmapOrigin[1]
+                result[i].FlareOriginZ = f[14]; // lightmapOrigin[2]
+                result[i].FlareColorR = f[15];  // lightmapVecs[0][0]
+                result[i].FlareColorG = f[16];  // lightmapVecs[0][1]
+                result[i].FlareColorB = f[17];  // lightmapVecs[0][2]
+                result[i].FlareNormalX = f[21]; // lightmapVecs[2][0]
+                result[i].FlareNormalY = f[22]; // lightmapVecs[2][1]
+                result[i].FlareNormalZ = f[23]; // lightmapVecs[2][2]
+            }
         }
         return result;
     }

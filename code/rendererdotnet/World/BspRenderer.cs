@@ -75,6 +75,16 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _fogDepthLoc;     // fog depth vector
     private int _fogEyeTLoc;      // eye position relative to fog surface
 
+    // Flare rendering
+    private uint _flareProgram;
+    private int _flareColorLoc;
+    private int _flarePosLoc;     // screen-space position
+    private int _flareSizeLoc;    // screen-space size
+    private uint _flareVao;
+    private uint _flareVbo;
+    private uint _flareTexture;   // radial glow texture
+    private readonly List<(float X, float Y, float Z, float R, float G, float B, float NX, float NY, float NZ)> _visibleFlares = new(64);
+
     // Surfaces drawn this frame (for dlight reuse)
     private readonly List<int> _visibleSurfaceIndices = new(4096);
 
@@ -163,6 +173,37 @@ public sealed unsafe class BspRenderer : IDisposable
             float alpha = sqrt(clamp(vFogFactor, 0.0, 1.0));
             if (alpha < 0.004) discard;
             oColor = vec4(uFogColor.rgb, alpha);
+        }
+        """;
+
+    private const string FlareVertSrc = """
+        #version 450 core
+        layout(location = 0) in vec2 aPos; // [-1,1] quad corners
+
+        uniform vec2 uFlarePos;   // screen-space center (NDC)
+        uniform vec2 uFlareSize;  // half-size in NDC
+
+        out vec2 vUV;
+
+        void main() {
+            vUV = aPos * 0.5 + vec2(0.5);
+            gl_Position = vec4(uFlarePos + aPos * uFlareSize, 0.0, 1.0);
+        }
+        """;
+
+    private const string FlareFragSrc = """
+        #version 450 core
+        in vec2 vUV;
+
+        uniform vec3 uFlareColor;
+        uniform sampler2D uFlareTex;
+
+        out vec4 oColor;
+
+        void main() {
+            float intensity = texture(uFlareTex, vUV).r;
+            if (intensity < 0.01) discard;
+            oColor = vec4(uFlareColor * intensity, intensity);
         }
         """;
 
@@ -370,6 +411,31 @@ public sealed unsafe class BspRenderer : IDisposable
         _fogDepthLoc = _gl.GetUniformLocation(_fogProgram, "uFogDepth");
         _fogEyeTLoc = _gl.GetUniformLocation(_fogProgram, "uFogEyeT");
 
+        // Flare shader program
+        _flareProgram = CreateFlareProgram();
+        _flarePosLoc = _gl.GetUniformLocation(_flareProgram, "uFlarePos");
+        _flareSizeLoc = _gl.GetUniformLocation(_flareProgram, "uFlareSize");
+        _flareColorLoc = _gl.GetUniformLocation(_flareProgram, "uFlareColor");
+        int flareTexLoc = _gl.GetUniformLocation(_flareProgram, "uFlareTex");
+        _gl.UseProgram(_flareProgram);
+        _gl.Uniform1(flareTexLoc, 0);
+        _gl.UseProgram(0);
+
+        // Flare quad VAO (screen-space unit quad)
+        _flareVao = _gl.GenVertexArray();
+        _flareVbo = _gl.GenBuffer();
+        float[] quadVerts = [-1f, -1f, 1f, -1f, 1f, 1f, -1f, -1f, 1f, 1f, -1f, 1f];
+        _gl.BindVertexArray(_flareVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _flareVbo);
+        fixed (float* qp = quadVerts)
+            _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(quadVerts.Length * sizeof(float)), qp, BufferUsageARB.StaticDraw);
+        _gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 2 * sizeof(float), null);
+        _gl.EnableVertexAttribArray(0);
+        _gl.BindVertexArray(0);
+
+        // Flare glow texture (radial falloff with soft edges)
+        _flareTexture = GenerateFlareTexture();
+
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
         _ebo = _gl.GenBuffer();
@@ -478,6 +544,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _frameCount++;
         _transparentSurfaces.Clear();
         _visibleSurfaceIndices.Clear();
+        _visibleFlares.Clear();
         _viewX = viewX;
         _viewY = viewY;
         _viewZ = viewZ;
@@ -550,6 +617,12 @@ public sealed unsafe class BspRenderer : IDisposable
         }
 
         _gl.BindVertexArray(0);
+
+        // Flare pass: render light flares as screen-space billboards
+        if (_visibleFlares.Count > 0)
+        {
+            RenderFlares(mvp, viewX, viewY, viewZ);
+        }
     }
 
     /// <summary>
@@ -693,6 +766,15 @@ public sealed unsafe class BspRenderer : IDisposable
 
     private void DrawSurface(ref BspSurface surf, int surfIdx, ShaderManager shaders)
     {
+        // Collect flare surfaces for later rendering as billboards
+        if (surf.SurfaceType == SurfaceTypes.MST_FLARE)
+        {
+            _visibleFlares.Add((surf.FlareOriginX, surf.FlareOriginY, surf.FlareOriginZ,
+                surf.FlareColorR, surf.FlareColorG, surf.FlareColorB,
+                surf.FlareNormalX, surf.FlareNormalY, surf.FlareNormalZ));
+            return;
+        }
+
         // Only draw planar faces, triangle soups, and tessellated patches
         if (surf.SurfaceType != SurfaceTypes.MST_PLANAR &&
             surf.SurfaceType != SurfaceTypes.MST_TRIANGLE_SOUP &&
@@ -1308,6 +1390,150 @@ public sealed unsafe class BspRenderer : IDisposable
     }
 
     /// <summary>
+    /// Create the shader program for flare rendering.
+    /// </summary>
+    private uint CreateFlareProgram()
+    {
+        uint vs = Compile(ShaderType.VertexShader, FlareVertSrc);
+        uint fs = Compile(ShaderType.FragmentShader, FlareFragSrc);
+
+        uint prog = _gl.CreateProgram();
+        _gl.AttachShader(prog, vs);
+        _gl.AttachShader(prog, fs);
+        _gl.LinkProgram(prog);
+
+        _gl.GetProgram(prog, ProgramPropertyARB.LinkStatus, out int ok);
+        if (ok == 0)
+        {
+            string log = _gl.GetProgramInfoLog(prog);
+            EngineImports.Printf(EngineImports.PRINT_ERROR,
+                $"[.NET] Flare shader link error: {log}\n");
+        }
+
+        _gl.DeleteShader(vs);
+        _gl.DeleteShader(fs);
+        return prog;
+    }
+
+    /// <summary>
+    /// Generate a 32x32 radial glow texture for flare rendering.
+    /// Soft circular falloff for a convincing light glow effect.
+    /// </summary>
+    private uint GenerateFlareTexture()
+    {
+        const int size = 32;
+        byte[] pixels = new byte[size * size];
+
+        float halfSize = size * 0.5f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x + 0.5f - halfSize) / halfSize;
+                float dy = (y + 0.5f - halfSize) / halfSize;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+                // Soft radial falloff with bright center
+                float intensity = MathF.Max(0f, 1f - dist);
+                intensity *= intensity; // quadratic falloff for softer edges
+                pixels[y * size + x] = (byte)(intensity * 255f);
+            }
+        }
+
+        uint tex = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, tex);
+        fixed (byte* ptr = pixels)
+        {
+            _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.R8, size, size,
+                0, PixelFormat.Red, PixelType.UnsignedByte, ptr);
+        }
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
+
+        return tex;
+    }
+
+    /// <summary>
+    /// Render visible flare surfaces as screen-space billboards.
+    /// Projects each flare origin to screen space, applies back-face culling,
+    /// and renders as an additive-blended glow quad.
+    /// </summary>
+    private void RenderFlares(float* mvp, float viewX, float viewY, float viewZ)
+    {
+        _gl.UseProgram(_flareProgram);
+        _gl.BindVertexArray(_flareVao);
+
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One); // additive
+        _gl.DepthMask(false);
+        _gl.Disable(EnableCap.DepthTest);
+
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _flareTexture);
+
+        foreach (var flare in _visibleFlares)
+        {
+            // Back-face culling: check if flare faces the viewer
+            float vdx = viewX - flare.X;
+            float vdy = viewY - flare.Y;
+            float vdz = viewZ - flare.Z;
+            float viewDist = MathF.Sqrt(vdx * vdx + vdy * vdy + vdz * vdz);
+            if (viewDist < 1f) continue;
+
+            float ndl = (vdx * flare.NX + vdy * flare.NY + vdz * flare.NZ) / viewDist;
+            if (ndl < 0f) continue; // flare faces away
+
+            // Project to clip space
+            float cx = mvp[0] * flare.X + mvp[4] * flare.Y + mvp[8] * flare.Z + mvp[12];
+            float cy = mvp[1] * flare.X + mvp[5] * flare.Y + mvp[9] * flare.Z + mvp[13];
+            float cz = mvp[2] * flare.X + mvp[6] * flare.Y + mvp[10] * flare.Z + mvp[14];
+            float cw = mvp[3] * flare.X + mvp[7] * flare.Y + mvp[11] * flare.Z + mvp[15];
+
+            if (cw <= 0f) continue; // behind camera
+
+            // NDC
+            float ndcX = cx / cw;
+            float ndcY = cy / cw;
+
+            // Skip if off screen
+            if (ndcX < -1.2f || ndcX > 1.2f || ndcY < -1.2f || ndcY > 1.2f) continue;
+
+            // Size based on distance, matching Q3's formula
+            // size = viewportW * (r_flareSize / 640 + 8 / distance)
+            float distance = MathF.Max(1f, -cz / cw * viewDist);
+            float baseSize = 0.04f + 8f / distance;
+            float size = MathF.Min(baseSize, 0.3f); // clamp max size
+
+            // Intensity based on Q3's formula + facing angle
+            float flareCoeff = 0.15f;
+            float intensity = flareCoeff * size * size /
+                ((distance + size * MathF.Sqrt(flareCoeff)) * (distance + size * MathF.Sqrt(flareCoeff)));
+            intensity = MathF.Min(intensity, 2f) * ndl;
+
+            if (intensity < 0.01f) continue;
+
+            // Set uniforms and draw
+            _gl.Uniform2(_flarePosLoc, ndcX, ndcY);
+            _gl.Uniform2(_flareSizeLoc, size, size);
+            _gl.Uniform3(_flareColorLoc,
+                flare.R * intensity,
+                flare.G * intensity,
+                flare.B * intensity);
+
+            _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
+        }
+
+        // Restore state
+        _gl.Enable(EnableCap.DepthTest);
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
+        _gl.BindVertexArray(0);
+        _gl.UseProgram(_program);
+    }
+
+    /// <summary>
     /// Create the shader program for fog pass rendering.
     /// </summary>
     private uint CreateFogProgram()
@@ -1408,6 +1634,10 @@ public sealed unsafe class BspRenderer : IDisposable
         if (_dlightTexture != 0) { _gl.DeleteTexture(_dlightTexture); _dlightTexture = 0; }
         if (_dlightProgram != 0) { _gl.DeleteProgram(_dlightProgram); _dlightProgram = 0; }
         if (_fogProgram != 0) { _gl.DeleteProgram(_fogProgram); _fogProgram = 0; }
+        if (_flareTexture != 0) { _gl.DeleteTexture(_flareTexture); _flareTexture = 0; }
+        if (_flareProgram != 0) { _gl.DeleteProgram(_flareProgram); _flareProgram = 0; }
+        if (_flareVbo != 0) { _gl.DeleteBuffer(_flareVbo); _flareVbo = 0; }
+        if (_flareVao != 0) { _gl.DeleteVertexArray(_flareVao); _flareVao = 0; }
         if (_ebo != 0) { _gl.DeleteBuffer(_ebo); _ebo = 0; }
         if (_vbo != 0) { _gl.DeleteBuffer(_vbo); _vbo = 0; }
         if (_vao != 0) { _gl.DeleteVertexArray(_vao); _vao = 0; }

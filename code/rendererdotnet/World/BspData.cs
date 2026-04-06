@@ -242,6 +242,11 @@ public struct BspSurface
     // For patches
     public int PatchWidth;
     public int PatchHeight;
+
+    // For flares (MST_FLARE): origin, color, normal from lightmap fields
+    public float FlareOriginX, FlareOriginY, FlareOriginZ;
+    public float FlareColorR, FlareColorG, FlareColorB;
+    public float FlareNormalX, FlareNormalY, FlareNormalZ;
 }
 
 public struct BspShaderEntry
