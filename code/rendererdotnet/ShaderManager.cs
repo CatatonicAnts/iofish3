@@ -446,6 +446,7 @@ public unsafe class ShaderManager
                         DepthFunc = src.DepthFunc,
                         DepthWrite = src.DepthWrite,
                         AnimFrequency = src.AnimFrequency,
+                        VideoMapHandle = src.VideoMapHandle,
                     };
 
                     // Load stage texture
@@ -600,5 +601,7 @@ public unsafe class ShaderManager
         public int DepthFunc { get; set; }
         /// <summary>Whether depthWrite is set</summary>
         public bool DepthWrite { get; set; }
+        /// <summary>Cinematic video handle (0-15), or -1 if not a video stage</summary>
+        public int VideoMapHandle { get; set; } = -1;
     }
 }

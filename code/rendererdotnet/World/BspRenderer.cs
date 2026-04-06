@@ -1417,10 +1417,23 @@ public sealed unsafe class BspRenderer : IDisposable
             }
             else
             {
-                // Regular texture stage
-                uint stageTexId = shaders.GetStageTextureId(stage, timeSec);
-                _gl.ActiveTexture(TextureUnit.Texture0);
-                _gl.BindTexture(TextureTarget.Texture2D, stageTexId);
+                // Check for cinematic (videoMap) stage
+                if (stage.VideoMapHandle >= 0)
+                {
+                    // Advance cinematic and upload frame to scratch texture
+                    EngineImports.CIN_RunCinematic(stage.VideoMapHandle);
+                    EngineImports.CIN_UploadCinematic(stage.VideoMapHandle);
+                    uint scratchTex = RendererExports.GetScratchTexture(stage.VideoMapHandle);
+                    _gl.ActiveTexture(TextureUnit.Texture0);
+                    _gl.BindTexture(TextureTarget.Texture2D, scratchTex != 0 ? scratchTex : shaders.WhiteTexture);
+                }
+                else
+                {
+                    // Regular texture stage
+                    uint stageTexId = shaders.GetStageTextureId(stage, timeSec);
+                    _gl.ActiveTexture(TextureUnit.Texture0);
+                    _gl.BindTexture(TextureTarget.Texture2D, stageTexId);
+                }
                 _gl.Uniform1(_useLightmapLoc, 0);
                 _gl.Uniform1(_useLmUVLoc, 0); // sample with regular UVs
                 _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);

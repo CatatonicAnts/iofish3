@@ -46,6 +46,12 @@ public static unsafe class RendererExports
     private static World.SkyboxRenderer? _skyboxRenderer;
     private static PostProcess? _postProcess;
 
+    // Scratch textures for cinematic playback (up to 16 simultaneous)
+    private const int MAX_SCRATCH_IMAGES = 16;
+    private static readonly uint[] _scratchTextures = new uint[MAX_SCRATCH_IMAGES];
+    private static readonly int[] _scratchWidths = new int[MAX_SCRATCH_IMAGES];
+    private static readonly int[] _scratchHeights = new int[MAX_SCRATCH_IMAGES];
+
     private const int WIDTH = 1280;
     private const int HEIGHT = 720;
 
@@ -84,6 +90,21 @@ public static unsafe class RendererExports
         _renderer2D?.Dispose();
         _renderer2D = null;
         _shaders = null;
+
+        // Clean up scratch textures
+        if (_gl != null)
+        {
+            for (int i = 0; i < MAX_SCRATCH_IMAGES; i++)
+            {
+                if (_scratchTextures[i] != 0)
+                {
+                    _gl.DeleteTexture(_scratchTextures[i]);
+                    _scratchTextures[i] = 0;
+                    _scratchWidths[i] = 0;
+                    _scratchHeights[i] = 0;
+                }
+            }
+        }
 
         if (destroyWindow != 0)
         {
@@ -438,7 +459,49 @@ public static unsafe class RendererExports
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void UploadCinematic(int w, int h, int cols, int rows,
-        byte* data, int client, int dirty) { }
+        byte* data, int client, int dirty)
+    {
+        if (_gl == null || client < 0 || client >= MAX_SCRATCH_IMAGES || data == null)
+            return;
+
+        // Create or resize scratch texture
+        if (_scratchTextures[client] == 0)
+            _scratchTextures[client] = _gl.GenTexture();
+
+        _gl.BindTexture(TextureTarget.Texture2D, _scratchTextures[client]);
+
+        if (cols != _scratchWidths[client] || rows != _scratchHeights[client])
+        {
+            // Size changed — re-upload entire texture
+            _scratchWidths[client] = cols;
+            _scratchHeights[client] = rows;
+            _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba,
+                (uint)cols, (uint)rows, 0,
+                Silk.NET.OpenGL.PixelFormat.Rgba,
+                Silk.NET.OpenGL.PixelType.UnsignedByte, data);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+        }
+        else if (dirty != 0)
+        {
+            // Same size but data changed — sub-image update
+            _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0,
+                (uint)cols, (uint)rows,
+                Silk.NET.OpenGL.PixelFormat.Rgba,
+                Silk.NET.OpenGL.PixelType.UnsignedByte, data);
+        }
+
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
+    }
+
+    /// <summary>Get the GL texture ID for a cinematic scratch image.</summary>
+    public static uint GetScratchTexture(int handle)
+    {
+        if (handle < 0 || handle >= MAX_SCRATCH_IMAGES) return 0;
+        return _scratchTextures[handle];
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void BeginFrame(int stereoFrame)

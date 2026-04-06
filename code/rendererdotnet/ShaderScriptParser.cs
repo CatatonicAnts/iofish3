@@ -183,6 +183,7 @@ public sealed unsafe class ShaderScriptParser
         bool stageIsLightmap = false;
         bool stageIsWhiteImage = false;
         string? stageMapRaw = null; // raw map token including $lightmap/$whiteimage
+        int stageVideoMapHandle = -1; // cinematic handle from videoMap directive
         var allStages = new List<ShaderStage>();
 
         while (depth > 0 && tokenizer.HasMore())
@@ -211,6 +212,7 @@ public sealed unsafe class ShaderScriptParser
                     stageIsLightmap = false;
                     stageIsWhiteImage = false;
                     stageMapRaw = null;
+                    stageVideoMapHandle = -1;
                 }
                 continue;
             }
@@ -264,7 +266,7 @@ public sealed unsafe class ShaderScriptParser
 
                     // Collect full stage data for multi-pass rendering
                     if (stageImage != null || stageIsLightmap || stageIsWhiteImage ||
-                        stageAnimFrames != null)
+                        stageAnimFrames != null || stageVideoMapHandle >= 0)
                     {
                         allStages.Add(new ShaderStage
                         {
@@ -282,6 +284,7 @@ public sealed unsafe class ShaderScriptParser
                             AlphaGen = stageAlphaGen,
                             DepthFunc = stageDepthFunc,
                             DepthWrite = stageDepthWrite,
+                            VideoMapHandle = stageVideoMapHandle,
                         });
                     }
                 }
@@ -422,6 +425,17 @@ public sealed unsafe class ShaderScriptParser
                     {
                         stageImage = mapToken;
                         stageClamp = true;
+                    }
+                }
+                else if (string.Equals(token, "videoMap", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? videoFile = tokenizer.NextToken();
+                    if (videoFile != null)
+                    {
+                        // CIN_loop=2, CIN_silent=8, CIN_shader=16
+                        int cinHandle = EngineImports.CIN_PlayCinematic(videoFile, 0, 0, 256, 256, 2 | 8 | 16);
+                        if (cinHandle >= 0)
+                            stageVideoMapHandle = cinHandle;
                     }
                 }
                 else if (string.Equals(token, "animMap", StringComparison.OrdinalIgnoreCase))
@@ -700,7 +714,8 @@ public sealed unsafe class ShaderScriptParser
                string.Equals(token, "depthWrite", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(token, "normalMap", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(token, "bumpMap", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(token, "specularMap", StringComparison.OrdinalIgnoreCase);
+               string.Equals(token, "specularMap", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "videoMap", StringComparison.OrdinalIgnoreCase);
     }
 
     private static TcMod? ParseTcMod(ref ShaderTokenizer tokenizer)
@@ -1215,4 +1230,7 @@ public sealed class ShaderStage
 
     /// <summary>Whether depthWrite is explicitly set.</summary>
     public bool DepthWrite { get; init; }
+
+    /// <summary>Cinematic video handle (0-15) from videoMap directive, or -1 if not a video stage.</summary>
+    public int VideoMapHandle { get; init; } = -1;
 }
