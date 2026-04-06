@@ -25,6 +25,7 @@ public sealed unsafe class SceneManager
     private GL? _gl;
     private int _screenW;
     private int _screenH;
+    private PostProcess? _postProcess;
 
     // GL resources for sprite/poly rendering
     private uint _spriteVao;
@@ -68,6 +69,11 @@ public sealed unsafe class SceneManager
     public void SetWorld(World.BspWorld? world)
     {
         _bspWorld = world;
+    }
+
+    public void SetPostProcess(PostProcess? pp)
+    {
+        _postProcess = pp;
     }
 
     public void ClearScene()
@@ -335,6 +341,14 @@ public sealed unsafe class SceneManager
         bool hasPolys = _polys.Count > 0;
         if (!hasWorld && !hasEntities && !hasPolys) return;
 
+        // Bind scene FBO for post-processing (only for world scenes)
+        bool usePostProcess = hasWorld && _postProcess != null && _postProcess.IsEnabled;
+        if (usePostProcess)
+        {
+            _postProcess!.BindSceneFbo();
+            _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+        }
+
         // Set GL viewport to the refdef rectangle
         int glY = _screenH - (y + height);
         _gl.Viewport(x, glY, (uint)width, (uint)height);
@@ -474,6 +488,12 @@ public sealed unsafe class SceneManager
         if (hasPolys)
         {
             DrawPolys(vp);
+        }
+
+        // Apply post-processing (bloom) and blit to default framebuffer
+        if (usePostProcess)
+        {
+            _postProcess!.ApplyAndBlit();
         }
 
         // Restore full-screen viewport for 2D rendering

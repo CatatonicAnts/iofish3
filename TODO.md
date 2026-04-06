@@ -40,7 +40,7 @@ A list of planned features, improvements, and tasks for this project.
 ### Tier 3 — GL2-Specific Advanced Features
 
 - [ ] **HDR rendering** - GL2 renders to GL_RGBA16F FBOs and does tonemapping with auto-exposure. Controlled by `r_hdr`. `CPX 4`
-- [ ] **Bloom / post-processing** - Bokeh blur, Gaussian blur, sun rays via post-process shaders. Requires FBO pipeline. `CPX 3`
+- [x] **Bloom / post-processing** - FBO-based bloom pipeline: bright-pass extraction, multi-pass Gaussian blur, additive composite. Controlled by `r_bloom` cvar. `CPX 3`
 - [ ] **Normal mapping** - `normalMap`/`bumpMap` stage type for per-pixel lighting. GL2 generates normals from height maps if missing. `CPX 3`
 - [ ] **Specular mapping** - `specularMap` stage type with `specularScale`, `specularReflectance`, `specularExponent`, `gloss` controls. `CPX 3`
 - [ ] **PBR (Physically Based Rendering)** - GL2 has `r_pbr` cvar for metallic/roughness workflow. Converts specular values to PBR parameters. `CPX 4`
@@ -54,7 +54,7 @@ A list of planned features, improvements, and tasks for this project.
 - [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
 - [ ] **VBO caching / batching** - GL2 has a VAO cache (16MB vertex, 5MB index) with surface batching (1024 surfaces per batch). We upload once and draw per-surface. `CPX 3`
 - [ ] **DDS texture format** - DDS loading with RGTC and BPTC compression. `CPX 2`
-- [ ] **FBO pipeline** - Framebuffer objects for render-to-texture, multi-pass effects, post-processing. Foundation for HDR/bloom/portals. `CPX 3`
+- [x] **FBO pipeline** - Framebuffer objects for render-to-texture, multi-pass effects, post-processing. Foundation for HDR/bloom/portals. `CPX 3`
 
 ### Tier 4 — Minor / Polish
 
@@ -257,6 +257,7 @@ The cgame DLL interface is:
 - [x] rgbGen / alphaGen — parse identity/vertex/entity/wave/identityLighting, apply vertex color path in BSP fragment shader
 - [x] polygonOffset — parse directive, apply `glPolygonOffset(-1,-1)` per-surface for decals
 - [x] depthFunc / depthWrite — parse `depthFunc equal` and `depthWrite`, apply per-surface depth state
+- [x] FBO pipeline and bloom post-processing — scene FBO with bright-pass extraction, multi-pass Gaussian blur at quarter resolution, additive bloom composite. Controlled by `r_bloom` cvar (default on)
 - [x] RemapShader — runtime shader handle remapping via dictionary, resolve in GetTextureId
 - [x] Sort order — parse `sort` directive (portal/sky/opaque/decal/seeThrough/banner/additive/nearest + numeric), sort transparent surfaces by key before drawing
 - [x] Entity alpha / shaderRGBA — all-zero detection (uninitialized→white), alpha<1 enables blending on models

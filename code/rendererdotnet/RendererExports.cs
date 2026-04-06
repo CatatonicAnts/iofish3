@@ -44,6 +44,7 @@ public static unsafe class RendererExports
     private static World.BspRenderer? _bspRenderer;
     private static World.BspWorld? _bspWorld;
     private static World.SkyboxRenderer? _skyboxRenderer;
+    private static PostProcess? _postProcess;
 
     private const int WIDTH = 1280;
     private const int HEIGHT = 720;
@@ -71,6 +72,8 @@ public static unsafe class RendererExports
         _scene = null;
         _models = null;
         _skins = null;
+        _postProcess?.Dispose();
+        _postProcess = null;
         _bspRenderer?.Dispose();
         _bspRenderer = null;
         _bspWorld = null;
@@ -187,6 +190,12 @@ public static unsafe class RendererExports
 
         _scene = new SceneManager();
         _scene.Init(_models, _shaders, _skins, _renderer3D, _bspRenderer, _skyboxRenderer, _gl!, WIDTH, HEIGHT);
+
+        // Initialize post-processing (bloom)
+        _postProcess?.Dispose();
+        _postProcess = new PostProcess();
+        _postProcess.Init(_gl!, WIDTH, HEIGHT);
+        _scene.SetPostProcess(_postProcess);
 
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
