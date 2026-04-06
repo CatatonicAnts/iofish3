@@ -37,6 +37,8 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _texSpecularMapLoc;
     private int _useNormalMapLoc;
     private int _useSpecularMapLoc;
+    private int _useParallaxLoc;
+    private int _parallaxScaleLoc;
     private float _greyscaleValue; // 0.0=color, 1.0=fully greyscale
 
     private uint _vao;
@@ -359,11 +361,55 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform float uGreyscale; // 0.0=color, 1.0=fully greyscale
         uniform int uUseNormalMap;
         uniform int uUseSpecularMap;
+        uniform int uUseParallax;
+        uniform float uParallaxScale; // height scale (default 0.05)
 
         out vec4 oColor;
 
+        // Steep parallax mapping: 16-step linear search + interpolation
+        vec2 ParallaxOffset(vec2 texCoords, vec3 viewDirTS) {
+            const int numSteps = 16;
+            float layerDepth = 1.0 / float(numSteps);
+            float currentDepth = 0.0;
+            vec2 deltaUV = viewDirTS.xy * uParallaxScale / max(viewDirTS.z, 0.1);
+            deltaUV /= float(numSteps);
+
+            vec2 currentUV = texCoords;
+            float heightValue = 1.0 - texture(uTexNormalMap, currentUV).a;
+
+            float prevDepth = 0.0;
+            float prevHeight = heightValue;
+            vec2 prevUV = currentUV;
+
+            for (int i = 0; i < numSteps; i++) {
+                currentDepth += layerDepth;
+                currentUV -= deltaUV;
+                heightValue = 1.0 - texture(uTexNormalMap, currentUV).a;
+
+                if (currentDepth >= heightValue) {
+                    // Interpolate between previous and current
+                    float w = (prevDepth - prevHeight) / 
+                              ((prevDepth - prevHeight) - (currentDepth - heightValue));
+                    return mix(prevUV, currentUV, w) - texCoords;
+                }
+                prevDepth = currentDepth;
+                prevHeight = heightValue;
+                prevUV = currentUV;
+            }
+            return currentUV - texCoords;
+        }
+
         void main() {
-            vec2 sampleUV = uUseLmUV != 0 ? vLmUV : vUV;
+            vec2 uv = vUV;
+
+            // Parallax offset (modifies UVs before all sampling)
+            if (uUseParallax != 0 && uUseNormalMap != 0) {
+                vec3 viewDir = normalize(uViewPos - vWorldPos);
+                vec3 viewDirTS = normalize(transpose(vTBN) * viewDir);
+                uv += ParallaxOffset(uv, viewDirTS);
+            }
+
+            vec2 sampleUV = uUseLmUV != 0 ? vLmUV : uv;
             vec4 texColor = texture(uTexDiffuse, sampleUV);
 
             // Alpha test — discard fragments based on alpha function
@@ -374,7 +420,7 @@ public sealed unsafe class BspRenderer : IDisposable
             // Compute shading normal (from normal map or interpolated)
             vec3 N = normalize(vNormal);
             if (uUseNormalMap != 0) {
-                vec3 mapN = texture(uTexNormalMap, vUV).rgb * 2.0 - 1.0;
+                vec3 mapN = texture(uTexNormalMap, uv).rgb * 2.0 - 1.0;
                 // Reconstruct Z if stored as two-component
                 if (abs(mapN.z) < 0.01) {
                     mapN.z = sqrt(max(0.0, 1.0 - mapN.x*mapN.x - mapN.y*mapN.y));
@@ -408,7 +454,7 @@ public sealed unsafe class BspRenderer : IDisposable
                 vec3 V = normalize(uViewPos - vWorldPos);
                 vec3 H = normalize(uLightDir + V);
                 float spec = pow(max(dot(N, H), 0.0), 16.0);
-                vec3 specColor = texture(uTexSpecularMap, vUV).rgb;
+                vec3 specColor = texture(uTexSpecularMap, uv).rgb;
                 oColor.rgb += specColor * spec;
             }
 
@@ -450,6 +496,8 @@ public sealed unsafe class BspRenderer : IDisposable
         _texSpecularMapLoc = _gl.GetUniformLocation(_program, "uTexSpecularMap");
         _useNormalMapLoc = _gl.GetUniformLocation(_program, "uUseNormalMap");
         _useSpecularMapLoc = _gl.GetUniformLocation(_program, "uUseSpecularMap");
+        _useParallaxLoc = _gl.GetUniformLocation(_program, "uUseParallax");
+        _parallaxScaleLoc = _gl.GetUniformLocation(_program, "uParallaxScale");
 
         // Set texture unit bindings (static)
         _gl.UseProgram(_program);
@@ -461,6 +509,8 @@ public sealed unsafe class BspRenderer : IDisposable
 
         // Register r_greyscale cvar (0.0 = color, 1.0 = fully grey)
         EngineImports.Cvar_Get("r_greyscale", "0", 1); // 1 = CVAR_ARCHIVE
+        EngineImports.Cvar_Get("r_parallaxMapping", "0", 1); // 1 = CVAR_ARCHIVE
+        EngineImports.Cvar_Get("r_baseParallax", "0.05", 1);
 
         // Dlight shader program
         _dlightProgram = CreateDlightProgram();
@@ -648,6 +698,11 @@ public sealed unsafe class BspRenderer : IDisposable
         int gsInt = EngineImports.Cvar_VariableIntegerValue("r_greyscale");
         _greyscaleValue = gsInt != 0 ? 1.0f : 0.0f;
         _gl.Uniform1(_greyscaleLoc, _greyscaleValue);
+
+        // Read parallax mapping cvar
+        int parallaxEnabled = EngineImports.Cvar_VariableIntegerValue("r_parallaxMapping");
+        _gl.Uniform1(_useParallaxLoc, parallaxEnabled);
+        _gl.Uniform1(_parallaxScaleLoc, 0.05f);
 
         ExtractFrustumPlanes(mvp);
 
