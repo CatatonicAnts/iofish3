@@ -72,6 +72,8 @@ public static unsafe class CGameExports
         CrashLog.Breadcrumb("CG_INIT begin");
         Syscalls.Print($"[.NET cgame] CG_Init: serverMsg={serverMessageNum}, cmdSeq={serverCommandSequence}, client={clientNum}\n");
         CGame.Init(serverMessageNum, serverCommandSequence, clientNum);
+        CrashLog.Breadcrumb("CG_INIT CGame.Init returned");
+        Syscalls.Print("[.NET cgame] DEBUG: CGame.Init returned OK\n");
         CrashLog.Breadcrumb("CG_INIT complete");
         return 0;
     }

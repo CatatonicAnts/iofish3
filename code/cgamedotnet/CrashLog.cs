@@ -19,11 +19,32 @@ public static class CrashLog
     private static int _breadcrumbId;
     private static bool _enabled = true;
 
+    [DllImport("kernel32.dll")]
+    private static extern nint SetUnhandledExceptionFilter(nint lpTopLevelExceptionFilter);
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe int NativeCrashHandler(nint exceptionInfo)
+    {
+        try
+        {
+            // EXCEPTION_POINTERS: first field is EXCEPTION_RECORD*, second is CONTEXT*
+            nint exceptionRecord = *(nint*)exceptionInfo;
+            // EXCEPTION_RECORD: ExceptionCode (uint), ExceptionFlags (uint), *ExceptionRecord, ExceptionAddress
+            uint code = *(uint*)exceptionRecord;
+            nint address = *(nint*)(exceptionRecord + 16); // offset 16 on x64
+
+            _writer?.WriteLine($"[{Environment.TickCount64}] NATIVE CRASH: code=0x{code:X8} address=0x{address:X16}");
+            _writer?.Flush();
+        }
+        catch { }
+        return 0; // EXCEPTION_CONTINUE_SEARCH
+    }
+
     /// <summary>
     /// Initialize crash logging. Call once at DLL load.
     /// Also installs a global unhandled exception handler.
     /// </summary>
-    public static void Init()
+    public static unsafe void Init()
     {
         try
         {
@@ -34,6 +55,9 @@ public static class CrashLog
             _writer.WriteLine($"=== cgame_dotnet crash log — {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===");
             _writer.WriteLine($"PID: {Environment.ProcessId}");
             _writer.WriteLine();
+
+            // Install native SEH filter to catch access violations etc.
+            SetUnhandledExceptionFilter((nint)(delegate* unmanaged[Stdcall]<nint, int>)&NativeCrashHandler);
 
             // Catch unhandled managed exceptions before they become fail-fast
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>

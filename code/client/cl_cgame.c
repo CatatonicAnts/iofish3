@@ -754,10 +754,12 @@ void CL_InitCGame( void ) {
 	// use the lastExecutedServerCommand instead of the serverCommandSequence
 	// otherwise server commands sent just before a gamestate are dropped
 	VM_Call( cgvm, CG_INIT, clc.serverMessageSequence, clc.lastExecutedServerCommand, clc.clientNum );
+	Com_Printf( "DEBUG: CG_INIT returned OK\n" );
 
 	// reset any CVAR_CHEAT cvars registered by cgame
 	if ( !clc.demoplaying && !cl_connectedToCheatServer )
 		Cvar_SetCheatState();
+	Com_Printf( "DEBUG: Cvar_SetCheatState done\n" );
 
 	// we will send a usercmd this frame, which
 	// will cause the server to send us the first snapshot
