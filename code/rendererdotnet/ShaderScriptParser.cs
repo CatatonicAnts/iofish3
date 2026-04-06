@@ -407,9 +407,22 @@ public sealed unsafe class ShaderScriptParser
                         else if (string.Equals(rgbToken, "entity", StringComparison.OrdinalIgnoreCase))
                             stageRgbGen = 2;
                         else if (string.Equals(rgbToken, "wave", StringComparison.OrdinalIgnoreCase))
+                        {
                             stageRgbGen = 3;
+                            // Consume wave params: func base amp phase freq
+                            tokenizer.NextToken(); tokenizer.NextToken();
+                            tokenizer.NextToken(); tokenizer.NextToken();
+                            tokenizer.NextToken();
+                        }
                         else if (string.Equals(rgbToken, "identityLighting", StringComparison.OrdinalIgnoreCase))
                             stageRgbGen = 4;
+                        else if (string.Equals(rgbToken, "const", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Consume const params: ( r g b )
+                            tokenizer.NextToken(); tokenizer.NextToken();
+                            tokenizer.NextToken(); tokenizer.NextToken();
+                            tokenizer.NextToken();
+                        }
                     }
                 }
                 else if (string.Equals(token, "alphaGen", StringComparison.OrdinalIgnoreCase))
@@ -422,7 +435,18 @@ public sealed unsafe class ShaderScriptParser
                         else if (string.Equals(alphaToken, "entity", StringComparison.OrdinalIgnoreCase))
                             stageAlphaGen = 2;
                         else if (string.Equals(alphaToken, "wave", StringComparison.OrdinalIgnoreCase))
+                        {
                             stageAlphaGen = 3;
+                            // Consume wave params: func base amp phase freq
+                            tokenizer.NextToken(); tokenizer.NextToken();
+                            tokenizer.NextToken(); tokenizer.NextToken();
+                            tokenizer.NextToken();
+                        }
+                        else if (string.Equals(alphaToken, "const", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Consume const value
+                            tokenizer.NextToken();
+                        }
                     }
                 }
                 else if (string.Equals(token, "depthFunc", StringComparison.OrdinalIgnoreCase))

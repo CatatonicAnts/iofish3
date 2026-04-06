@@ -132,7 +132,9 @@ public sealed unsafe class SceneManager
                 entity.Axis[i] = axis[i];
 
             byte* rgba = entityPtr + 116;
-            // Q3 convention: if all RGBA bytes are 0, treat as uninitialized → white
+            // Q3 convention: all-zero RGBA = uninitialized → default to white.
+            // If RGB is set but alpha is 0, treat alpha as fully opaque
+            // (alpha=0 typically means "not explicitly set" from memset).
             if (rgba[0] == 0 && rgba[1] == 0 && rgba[2] == 0 && rgba[3] == 0)
             {
                 entity.R = 1.0f;
@@ -145,7 +147,7 @@ public sealed unsafe class SceneManager
                 entity.R = rgba[0] / 255.0f;
                 entity.G = rgba[1] / 255.0f;
                 entity.B = rgba[2] / 255.0f;
-                entity.A = rgba[3] / 255.0f;
+                entity.A = rgba[3] == 0 ? 1.0f : rgba[3] / 255.0f;
             }
 
             _entities.Add(entity);
