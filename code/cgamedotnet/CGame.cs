@@ -477,6 +477,23 @@ public static unsafe class CGame
             int muzzleFlashTime = (clientNum2 >= 0 && clientNum2 < MAX_GENTITIES)
                 ? _entities[clientNum2].MuzzleFlashTime : 0;
             int eFlags = Prediction.PredictedPlayerState.EFlags;
+
+            // Drive weapon animation from predicted player state (more responsive than snapshot)
+            if (clientNum2 >= 0 && clientNum2 < MAX_CLIENTS)
+            {
+                // Build powerups bitmask from PowerupTimers array
+                int powerups = 0;
+                fixed (Q3PlayerState* pps2 = &Prediction.PredictedPlayerState)
+                {
+                    for (int pw = 0; pw < Q3PlayerState.MAX_POWERUPS; pw++)
+                        if (pps2->PowerupTimers[pw] > 0) powerups |= (1 << pw);
+                }
+                Player.UpdatePredictedAnimation(clientNum2,
+                    Prediction.PredictedPlayerState.LegsAnim,
+                    Prediction.PredictedPlayerState.TorsoAnim,
+                    powerups, _time);
+            }
+
             fixed (Q3PlayerState* pps = &Prediction.PredictedPlayerState)
             {
                 Player.AddViewWeapon(pps, _time,
@@ -1797,6 +1814,12 @@ public static unsafe class CGame
     {
         ref var s1 = ref cent.CurrentState;
         int weapon = s1.Weapon;
+        if (weapon >= Weapons.WP_NUM_WEAPONS) weapon = 0;
+
+        // Copy angles from entity state (Q3: VectorCopy(s1->angles, cent->lerpAngles))
+        cent.LerpAnglesX = s1.AnglesX;
+        cent.LerpAnglesY = s1.AnglesY;
+        cent.LerpAnglesZ = s1.AnglesZ;
 
         // Plasma bolts are rendered as sprites, not models
         if (weapon == Weapons.WP_PLASMAGUN)
@@ -1808,24 +1831,99 @@ public static unsafe class CGame
             return;
         }
 
-        if (s1.ModelIndex == 0) return;
-
-        Q3RefEntity rent = default;
-        rent.ReType = Q3RefEntity.RT_MODEL;
-
-        // Prefer the missile model registered by WeaponEffects (rocket.md3, grenade1.md3, etc.)
-        // since config-string model registration may have gaps.
-        int missileModel = WeaponEffects.GetMissileModel(weapon);
-        rent.HModel = missileModel != 0 ? missileModel : _gameModels[s1.ModelIndex];
-
-        SetEntityOriginAndAxis(ref rent, ref cent);
-        SetEntityColors(ref rent, 255, 255, 255, 255);
-        Syscalls.R_AddRefEntityToScene(&rent);
-
-        // Projectile trail (smoke puffs for rockets/grenades)
+        // Projectile trail + dynamic light + looping sound
         WeaponEffects.MissileTrail(s1.Number, weapon,
             s1.Pos.TrBaseX, s1.Pos.TrBaseY, s1.Pos.TrBaseZ,
             cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ, _time);
+
+        // Get missile model — use pre-registered WeaponEffects model (not ModelIndex from entity state,
+        // since server-side fire_rocket/fire_grenade don't set s.modelindex)
+        int missileModel = WeaponEffects.GetMissileModel(weapon);
+        if (missileModel == 0 && s1.ModelIndex != 0)
+            missileModel = _gameModels[s1.ModelIndex];
+        if (missileModel == 0) return;
+
+        Q3RefEntity rent = default;
+        rent.ReType = Q3RefEntity.RT_MODEL;
+        rent.HModel = missileModel;
+
+        // Flicker between two skins
+        rent.SkinNum = _frameCount & 1;
+        rent.RenderFx = Q3RefEntity.RF_NOSHADOW;
+
+        // Position
+        rent.OriginX = cent.LerpOriginX;
+        rent.OriginY = cent.LerpOriginY;
+        rent.OriginZ = cent.LerpOriginZ;
+        rent.OldOriginX = cent.LerpOriginX;
+        rent.OldOriginY = cent.LerpOriginY;
+        rent.OldOriginZ = cent.LerpOriginZ;
+
+        // Axis from direction of travel (VectorNormalize2(s1->pos.trDelta, axis[0]))
+        float dx = s1.Pos.TrDeltaX;
+        float dy = s1.Pos.TrDeltaY;
+        float dz = s1.Pos.TrDeltaZ;
+        float len = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (len > 0)
+        {
+            float inv = 1.0f / len;
+            rent.Axis0X = dx * inv;
+            rent.Axis0Y = dy * inv;
+            rent.Axis0Z = dz * inv;
+        }
+        else
+        {
+            rent.Axis0X = 0; rent.Axis0Y = 0; rent.Axis0Z = 1;
+        }
+
+        // Spin as it moves (RotateAroundDirection)
+        if (s1.Pos.TrType != TrajectoryType.TR_STATIONARY)
+            RotateAroundDirection(ref rent, _time / 4.0f);
+        else
+            RotateAroundDirection(ref rent, (float)s1.Time);
+
+        SetEntityColors(ref rent, 255, 255, 255, 255);
+        Syscalls.R_AddRefEntityToScene(&rent);
+    }
+
+    /// <summary>Build axis[1] and axis[2] perpendicular to axis[0], then rotate around axis[0].</summary>
+    private static void RotateAroundDirection(ref Q3RefEntity rent, float degrees)
+    {
+        float a0x = rent.Axis0X, a0y = rent.Axis0Y, a0z = rent.Axis0Z;
+
+        // Build a perpendicular vector
+        float px, py, pz;
+        if (MathF.Abs(a0x) < 0.99f)
+        {
+            // Cross with (1,0,0)
+            px = 0; py = a0z; pz = -a0y;
+        }
+        else
+        {
+            // Cross with (0,1,0)
+            px = -a0z; py = 0; pz = a0x;
+        }
+        float plen = MathF.Sqrt(px * px + py * py + pz * pz);
+        if (plen > 0) { float inv = 1.0f / plen; px *= inv; py *= inv; pz *= inv; }
+
+        // Rotate perpendicular vector around axis[0]
+        float rad = degrees * (MathF.PI / 180.0f);
+        float cr = MathF.Cos(rad), sr = MathF.Sin(rad);
+
+        // axis[1] = perp * cos + (axis[0] x perp) * sin
+        // axis[0] x perp
+        float cx = a0y * pz - a0z * py;
+        float cy = a0z * px - a0x * pz;
+        float cz = a0x * py - a0y * px;
+
+        rent.Axis1X = px * cr + cx * sr;
+        rent.Axis1Y = py * cr + cy * sr;
+        rent.Axis1Z = pz * cr + cz * sr;
+
+        // axis[2] = axis[0] x axis[1]
+        rent.Axis2X = a0y * rent.Axis1Z - a0z * rent.Axis1Y;
+        rent.Axis2Y = a0z * rent.Axis1X - a0x * rent.Axis1Z;
+        rent.Axis2Z = a0x * rent.Axis1Y - a0y * rent.Axis1X;
     }
 
     private static void AddMover(ref CEntity cent)

@@ -360,17 +360,25 @@ public static unsafe class Player
             anim.Reversed = false;
             anim.FlipFlop = false;
 
+            // Q3: if numFrames is negative, the animation is reversed
+            if (anim.NumFrames < 0)
+            {
+                anim.NumFrames = -anim.NumFrames;
+                anim.Reversed = true;
+            }
+
             if (fps == 0) fps = 1;
             anim.FrameLerp = 1000 / Math.Abs(fps);
             anim.InitialLerp = 1000 / Math.Abs(fps);
             if (fps < 0) anim.Reversed = true;
 
             // For legacy models (no tag_flag), legs frames use an offset
-            if (!ci.NewAnims && animIndex >= LEGS_WALKCR)
+            // Q3: skip = LEGS_WALKCR.firstFrame - TORSO_GESTURE.firstFrame
+            if (!ci.NewAnims && animIndex >= LEGS_WALKCR && animIndex < TORSO_GETFLAG)
             {
                 if (!foundLegsStart)
                 {
-                    legsStartFrame = firstFrame;
+                    legsStartFrame = firstFrame - ci.Animations[TORSO_GESTURE].FirstFrame;
                     foundLegsStart = true;
                 }
                 anim.FirstFrame -= legsStartFrame;
@@ -379,9 +387,33 @@ public static unsafe class Player
             animIndex++;
         }
 
-        // If we didn't get enough animations, fill with defaults
-        if (animIndex < MAX_ANIMATIONS)
+        // If we didn't parse enough core animations, use defaults
+        if (animIndex < TORSO_GETFLAG)
+        {
             SetDefaultAnimations(ci);
+            return;
+        }
+
+        // Fill in missing flag animations (TORSO_GETFLAG through TORSO_NEGATIVE)
+        // from TORSO_GESTURE, matching Q3 behavior
+        for (int i = TORSO_GETFLAG; i <= TORSO_NEGATIVE; i++)
+        {
+            if (i >= animIndex)
+            {
+                ci.Animations[i] = ci.Animations[TORSO_GESTURE];
+            }
+        }
+
+        // Backward crouch and walk animations (reversed copies)
+        ci.Animations[LEGS_BACKCR] = ci.Animations[LEGS_WALKCR];
+        ci.Animations[LEGS_BACKCR].Reversed = true;
+        ci.Animations[LEGS_BACKWALK] = ci.Animations[LEGS_WALK];
+        ci.Animations[LEGS_BACKWALK].Reversed = true;
+
+        // Flag animations
+        ci.Animations[FLAG_RUN] = ci.Animations[TORSO_GESTURE];
+        ci.Animations[FLAG_STAND] = ci.Animations[TORSO_GESTURE];
+        ci.Animations[FLAG_STAND2RUN] = ci.Animations[TORSO_GESTURE];
     }
 
     private static void SetDefaultAnimations(ClientInfo ci)
@@ -528,6 +560,23 @@ public static unsafe class Player
 
         RunLerpFrame(ci, ref pe.Legs, es->LegsAnim, speedScale, time);
         RunLerpFrame(ci, ref pe.Torso, es->TorsoAnim, speedScale, time);
+    }
+
+    /// <summary>
+    /// Update the predicted player entity's animation from the predicted player state.
+    /// Called before AddViewWeapon so first-person weapon uses responsive predicted animation.
+    /// </summary>
+    public static void UpdatePredictedAnimation(int clientNum, int legsAnim, int torsoAnim,
+        int powerups, int time)
+    {
+        if (clientNum < 0 || clientNum >= MAX_CLIENTS) return;
+        var ci = _clientInfo[clientNum];
+        if (!ci.InfoValid) return;
+
+        float speedScale = ((powerups & (1 << PW_HASTE)) != 0) ? 1.5f : 1.0f;
+        ref var pe = ref _playerEntities[clientNum];
+        RunLerpFrame(ci, ref pe.Legs, legsAnim, speedScale, time);
+        RunLerpFrame(ci, ref pe.Torso, torsoAnim, speedScale, time);
     }
 
     // ── Render (CG_Player equivalent) ──
