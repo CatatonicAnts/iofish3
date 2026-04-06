@@ -24,7 +24,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### High Priority
 
-- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. The .NET interop foundation is in place. `CPX 5`
+- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline and 3D model rendering (MD3) complete. Skin loading and viewport management working. Next: BSP world loading, lighting, shader blending modes. `CPX 5`
 
 ### Medium Priority
 
@@ -114,6 +114,15 @@ A list of planned features, improvements, and tasks for this project.
 
 - [x] Set up CMake build with Visual Studio 2022
 - [x] Add .NET 9 support — NativeAOT C# renderer DLL (`code/rendererdotnet/`) with full `refexport_t`/`refimport_t` interop, stub implementations, and `GetRefAPI` entry point. Loads via `+set cl_renderer dotnet`.
+- [x] Implement 2D rendering pipeline — batched quad renderer (Renderer2D) with GLSL 450 shaders, orthographic projection, texture batching, SetColor/DrawStretchPic, RegisterShader, RegisterFont with binary font data parsing.
+- [x] Add Q3 shader script parser — parses all `scripts/*.shader` files at startup via `FS_ListFiles`, resolves shader names to image paths (1434 definitions), supports `map`/`clampMap`/`animMap` directives. Fixed menu background rendering.
+- [x] Texture loading from pk3 — loads TGA/JPEG/PNG via StbImageSharp through engine's virtual filesystem (`FS_ReadFile`). Lazy loading with shader script fallback.
+- [x] Fix FS_ReadFile interop type — MSVC x64 C `long` is 4 bytes, changed delegate from C# `long` to `int`.
+- [x] Add FS_ListFiles/FS_FreeFileList engine import wrappers.
+- [x] Implement MD3 model loading and 3D rendering — binary MD3 parser, frame interpolation (backlerp), Renderer3D with GLSL 450 vertex/fragment shaders, per-entity model-view-projection transforms, directional lighting.
+- [x] Add scene management — ClearScene/AddRefEntityToScene/RenderScene pipeline with proper viewport/scissor from refdef_t, Q3→OpenGL coordinate conversion.
+- [x] Add skin loading (SkinManager) — parses `.skin` files mapping surface names to shader handles, customSkin/customShader priority in rendering.
+- [x] Fix window duplication — reuse existing SDL window/GL context on renderer re-init instead of spawning new windows.
 
 ### Fixed Bugs
 

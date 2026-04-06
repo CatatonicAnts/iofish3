@@ -17,13 +17,20 @@ public sealed unsafe class SceneManager
     private ShaderManager? _shaders;
     private SkinManager? _skins;
     private Renderer3D? _renderer3D;
+    private GL? _gl;
+    private int _screenW;
+    private int _screenH;
 
-    public void Init(ModelManager models, ShaderManager shaders, SkinManager skins, Renderer3D renderer3D)
+    public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
+                     Renderer3D renderer3D, GL gl, int screenW, int screenH)
     {
         _models = models;
         _shaders = shaders;
         _skins = skins;
         _renderer3D = renderer3D;
+        _gl = gl;
+        _screenW = screenW;
+        _screenH = screenH;
     }
 
     public void ClearScene()
@@ -113,7 +120,7 @@ public sealed unsafe class SceneManager
     /// </summary>
     public void RenderScene(byte* refdefPtr)
     {
-        if (refdefPtr == null || _renderer3D == null || _models == null || _shaders == null)
+        if (refdefPtr == null || _renderer3D == null || _models == null || _shaders == null || _gl == null)
             return;
 
         int x = *(int*)(refdefPtr + 0);
@@ -126,6 +133,17 @@ public sealed unsafe class SceneManager
         float* viewAxis = (float*)(refdefPtr + 36);
 
         if (width <= 0 || height <= 0) return;
+        if (_entities.Count == 0) return;
+
+        // Set GL viewport to the refdef rectangle
+        // Q3 y=0 is top of screen, OpenGL y=0 is bottom — flip vertically
+        int glY = _screenH - (y + height);
+        _gl.Viewport(x, glY, (uint)width, (uint)height);
+        _gl.Enable(EnableCap.ScissorTest);
+        _gl.Scissor(x, glY, (uint)width, (uint)height);
+        _gl.Enable(EnableCap.DepthTest);
+        _gl.DepthFunc(DepthFunction.Lequal);
+        _gl.Clear(ClearBufferMask.DepthBufferBit);
 
         // Build view matrix from vieworg + viewaxis
         Span<float> view = stackalloc float[16];
@@ -186,10 +204,12 @@ public sealed unsafe class SceneManager
                 }
             }
         }
-    }
 
-    /// <summary>
-    /// Build a view matrix from Q3's vieworg + viewaxis.
+        // Restore full-screen viewport for 2D rendering
+        _gl.Viewport(0, 0, (uint)_screenW, (uint)_screenH);
+        _gl.Disable(EnableCap.ScissorTest);
+        _gl.Disable(EnableCap.DepthTest);
+    }
     /// Q3 coordinate system: X=forward, Y=left, Z=up.
     /// OpenGL: X=right, Y=up, Z=-forward.
     /// </summary>

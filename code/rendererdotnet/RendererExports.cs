@@ -165,7 +165,7 @@ public static unsafe class RendererExports
         _models.SetShaderManager(_shaders);
 
         _scene = new SceneManager();
-        _scene.Init(_models, _shaders, _skins, _renderer3D);
+        _scene.Init(_models, _shaders, _skins, _renderer3D, _gl!, WIDTH, HEIGHT);
 
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
@@ -257,6 +257,8 @@ public static unsafe class RendererExports
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void RenderScene(nint fd)
     {
+        // Flush pending 2D draws before switching to 3D
+        _renderer2D?.Flush();
         _scene?.RenderScene((byte*)fd);
     }
 
