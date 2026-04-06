@@ -93,19 +93,26 @@ public sealed unsafe class SkyboxRenderer : IDisposable
         for (int i = 0; i < 6; i++)
         {
             string path = baseName + Suffixes[i];
-            var image = ImageLoader.LoadFromEngineFS(path);
+            var tex = ImageLoader.LoadTextureFromEngineFS(path);
 
-            if (image == null)
+            if (tex == null)
             {
                 EngineImports.Printf(EngineImports.PRINT_DEVELOPER,
                     $"[.NET] Skybox face not found: {path}\n");
                 continue;
             }
 
-            fixed (byte* data = image.Data)
+            if (tex.IsDds)
             {
-                _faceTextures[i] = renderer2D.CreateTexture(
-                    image.Width, image.Height, data, clamp: true);
+                _faceTextures[i] = renderer2D.CreateCompressedTexture(tex.Dds!, clamp: true);
+            }
+            else
+            {
+                fixed (byte* data = tex.Image!.Data)
+                {
+                    _faceTextures[i] = renderer2D.CreateTexture(
+                        tex.Image.Width, tex.Image.Height, data, clamp: true);
+                }
             }
             loadedCount++;
         }

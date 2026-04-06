@@ -53,7 +53,7 @@ A list of planned features, improvements, and tasks for this project.
 - [ ] **MDR model format** - Advanced skeletal model format with bone matrices. `CPX 3`
 - [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
 - [ ] **VBO caching / batching** - GL2 has a VAO cache (16MB vertex, 5MB index) with surface batching (1024 surfaces per batch). We upload once and draw per-surface. `CPX 3`
-- [ ] **DDS texture format** - DDS loading with RGTC and BPTC compression. `CPX 2`
+- [x] **DDS texture format** - DDS file loading with S3TC (DXT1/3/5), RGTC (BC4/5), BPTC (BC6H/7), and uncompressed RGBA support. DX10 extended header support. DDS tried first for all texture loads (preferred for GPU memory/performance). `CPX 2`
 - [x] **FBO pipeline** - Framebuffer objects for render-to-texture, multi-pass effects, post-processing. Foundation for HDR/bloom/portals. `CPX 3`
 
 ### Tier 4 — Minor / Polish

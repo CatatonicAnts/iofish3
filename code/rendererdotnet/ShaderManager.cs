@@ -354,17 +354,17 @@ public unsafe class ShaderManager
     {
         if (_renderer == null) return;
 
-        // First: try loading the image directly by shader name
-        var image = ImageLoader.LoadFromEngineFS(entry.Name);
+        // First: try loading the image directly by shader name (DDS → TGA → JPG → PNG)
+        var texResult = ImageLoader.LoadTextureFromEngineFS(entry.Name);
 
         // Look up shader script for metadata (blend, alpha test, transparency)
         ShaderDef? def = _scriptParser?.GetShaderDef(entry.Name);
 
         // If direct load failed, try the script's image path
-        if (image == null && def?.ImagePath != null && !def.ImagePath.StartsWith('*'))
+        if (texResult == null && def?.ImagePath != null && !def.ImagePath.StartsWith('*'))
         {
-            image = ImageLoader.LoadFromEngineFS(def.ImagePath);
-            if (image != null)
+            texResult = ImageLoader.LoadTextureFromEngineFS(def.ImagePath);
+            if (texResult != null)
                 entry.Clamp = def.Clamp;
         }
 
@@ -390,25 +390,15 @@ public unsafe class ShaderManager
             // Load normal map if specified
             if (def.NormalMapPath != null && _renderer != null)
             {
-                var nmImg = ImageLoader.LoadFromEngineFS(def.NormalMapPath);
-                if (nmImg != null)
-                {
-                    fixed (byte* nd = nmImg.Data)
-                        entry.NormalMapTexId = _renderer.CreateTexture(
-                            nmImg.Width, nmImg.Height, nd, clamp: false, generateMipmaps: true);
-                }
+                entry.NormalMapTexId = UploadTexture(
+                    ImageLoader.LoadTextureFromEngineFS(def.NormalMapPath), false, true);
             }
 
             // Load specular map if specified
             if (def.SpecularMapPath != null && _renderer != null)
             {
-                var smImg = ImageLoader.LoadFromEngineFS(def.SpecularMapPath);
-                if (smImg != null)
-                {
-                    fixed (byte* sd = smImg.Data)
-                        entry.SpecularMapTexId = _renderer.CreateTexture(
-                            smImg.Width, smImg.Height, sd, clamp: false, generateMipmaps: true);
-                }
+                entry.SpecularMapTexId = UploadTexture(
+                    ImageLoader.LoadTextureFromEngineFS(def.SpecularMapPath), false, true);
             }
 
             // Determine mipmap generation policy
@@ -421,16 +411,9 @@ public unsafe class ShaderManager
                 var animIds = new uint[def.AnimFrames.Length];
                 for (int i = 0; i < def.AnimFrames.Length; i++)
                 {
-                    var frameImage = ImageLoader.LoadFromEngineFS(def.AnimFrames[i]);
-                    if (frameImage != null && _renderer != null)
-                    {
-                        fixed (byte* frameData = frameImage.Data)
-                        {
-                            animIds[i] = _renderer.CreateTexture(
-                                frameImage.Width, frameImage.Height, frameData,
-                                clamp: entry.Clamp, generateMipmaps: useMipmaps);
-                        }
-                    }
+                    animIds[i] = UploadTexture(
+                        ImageLoader.LoadTextureFromEngineFS(def.AnimFrames[i]),
+                        entry.Clamp, useMipmaps);
                 }
                 entry.AnimTextureIds = animIds;
             }
@@ -463,29 +446,18 @@ public unsafe class ShaderManager
                         var sAnimIds = new uint[src.AnimFrames.Length];
                         for (int fi = 0; fi < src.AnimFrames.Length; fi++)
                         {
-                            var frameImg = ImageLoader.LoadFromEngineFS(src.AnimFrames[fi]);
-                            if (frameImg != null && _renderer != null)
-                            {
-                                fixed (byte* fd = frameImg.Data)
-                                    sAnimIds[fi] = _renderer.CreateTexture(
-                                        frameImg.Width, frameImg.Height, fd,
-                                        clamp: src.Clamp, generateMipmaps: useMipmaps);
-                            }
+                            sAnimIds[fi] = UploadTexture(
+                                ImageLoader.LoadTextureFromEngineFS(src.AnimFrames[fi]),
+                                src.Clamp, useMipmaps);
                         }
                         rs.AnimTextureIds = sAnimIds;
-                        // Use first frame as fallback
                         if (sAnimIds.Length > 0) rs.TextureId = sAnimIds[0];
                     }
                     else if (src.ImagePath != null && !src.IsLightmap && !src.IsWhiteImage)
                     {
-                        var stageImg = ImageLoader.LoadFromEngineFS(src.ImagePath);
-                        if (stageImg != null && _renderer != null)
-                        {
-                            fixed (byte* sd = stageImg.Data)
-                                rs.TextureId = _renderer.CreateTexture(
-                                    stageImg.Width, stageImg.Height, sd,
-                                    clamp: src.Clamp, generateMipmaps: useMipmaps);
-                        }
+                        rs.TextureId = UploadTexture(
+                            ImageLoader.LoadTextureFromEngineFS(src.ImagePath),
+                            src.Clamp, useMipmaps);
                     }
 
                     runtimeStages[si] = rs;
@@ -494,22 +466,37 @@ public unsafe class ShaderManager
             }
         }
 
-        if (image == null)
+        if (texResult == null)
         {
             Interop.EngineImports.Printf(Interop.EngineImports.PRINT_DEVELOPER,
                 $"[.NET] Could not load texture: {entry.Name}\n");
             return;
         }
 
-        fixed (byte* data = image.Data)
-        {
-            bool mips = def == null || !def.NoMipMaps;
-            entry.TextureId = _renderer.CreateTexture(
-                image.Width, image.Height, data, clamp: entry.Clamp, generateMipmaps: mips);
-        }
+        bool mips2 = def == null || !def.NoMipMaps;
+        entry.TextureId = UploadTexture(texResult, entry.Clamp, mips2);
 
         Interop.EngineImports.Printf(Interop.EngineImports.PRINT_DEVELOPER,
-            $"[.NET] Loaded texture: {entry.Name} ({image.Width}x{image.Height})\n");
+            $"[.NET] Loaded texture: {entry.Name} ({texResult.Width}x{texResult.Height}" +
+            $"{(texResult.IsDds ? " DDS" : "")})\n");
+    }
+
+    /// <summary>Upload a TextureResult (DDS compressed or standard RGBA) to GPU.</summary>
+    private uint UploadTexture(ImageLoader.TextureResult? tex, bool clamp, bool generateMipmaps)
+    {
+        if (tex == null || _renderer == null) return 0;
+
+        if (tex.IsDds)
+        {
+            return _renderer.CreateCompressedTexture(tex.Dds!, clamp);
+        }
+        else
+        {
+            var img = tex.Image!;
+            fixed (byte* data = img.Data)
+                return _renderer.CreateTexture(img.Width, img.Height, data,
+                    clamp: clamp, generateMipmaps: generateMipmaps);
+        }
     }
 
     public string? GetName(int handle)

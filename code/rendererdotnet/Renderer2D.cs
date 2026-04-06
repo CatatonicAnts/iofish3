@@ -277,6 +277,69 @@ public sealed unsafe class Renderer2D : System.IDisposable
         return tex;
     }
 
+    /// <summary>
+    /// Upload a DDS compressed texture (with optional pre-built mip levels).
+    /// </summary>
+    public uint CreateCompressedTexture(DdsLoader.DdsResult dds, bool clamp = false)
+    {
+        uint tex = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, tex);
+
+        int w = dds.Width, h = dds.Height;
+        int offset = 0;
+        int numMips = dds.NumMips;
+
+        fixed (byte* ptr = dds.Data)
+        {
+            if (dds.IsCompressed)
+            {
+                for (int mip = 0; mip < numMips; mip++)
+                {
+                    int mipSize = DdsLoader.CompressedMipSize(dds.GlFormat, w, h);
+                    if (offset + mipSize > dds.Data.Length) break;
+
+                    _gl.CompressedTexImage2D(TextureTarget.Texture2D, mip,
+                        (InternalFormat)dds.GlFormat, (uint)w, (uint)h, 0,
+                        (uint)mipSize, ptr + offset);
+                    offset += mipSize;
+                    w = Math.Max(1, w >> 1);
+                    h = Math.Max(1, h >> 1);
+                }
+            }
+            else
+            {
+                // Uncompressed RGBA8 DDS
+                _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8,
+                    (uint)w, (uint)h, 0, PixelFormat.Rgba, PixelType.UnsignedByte, ptr);
+                _gl.GenerateMipmap(TextureTarget.Texture2D);
+            }
+        }
+
+        bool hasMips = dds.IsCompressed ? numMips > 1 : true;
+        if (hasMips)
+        {
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter,
+                (int)GLEnum.LinearMipmapLinear);
+            if (_maxAnisotropy > 1.0f)
+            {
+                _gl.TexParameter(TextureTarget.Texture2D,
+                    (TextureParameterName)0x84FE, _maxAnisotropy);
+            }
+        }
+        else
+        {
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter,
+                (int)GLEnum.Linear);
+        }
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
+
+        var wrap = clamp ? (int)GLEnum.ClampToEdge : (int)GLEnum.Repeat;
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, wrap);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, wrap);
+
+        return tex;
+    }
+
     public void DeleteTexture(uint tex)
     {
         if (tex != 0 && tex != _whiteTexture)
