@@ -7,6 +7,17 @@ namespace CGameDotNet;
 /// All sizes and layouts must match the C definitions exactly.
 /// </summary>
 
+// trType_t trajectory types
+public static class TrajectoryType
+{
+    public const int TR_STATIONARY = 0;
+    public const int TR_INTERPOLATE = 1;
+    public const int TR_LINEAR = 2;
+    public const int TR_LINEAR_STOP = 3;
+    public const int TR_SINE = 4;
+    public const int TR_GRAVITY = 5;
+}
+
 // trajectory_t — 36 bytes
 [StructLayout(LayoutKind.Sequential)]
 public struct Q3Trajectory
