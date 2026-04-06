@@ -314,6 +314,24 @@ public unsafe class ShaderManager
         return entry.IsTransparent;
     }
 
+    public bool GetNoDLight(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return false;
+        var entry = _shaders[handle];
+        if (!entry.Loaded) { entry.Loaded = true; TryLoadTexture(entry); }
+        return entry.NoDLight;
+    }
+
+    public bool GetNoMarks(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return false;
+        var entry = _shaders[handle];
+        if (!entry.Loaded) { entry.Loaded = true; TryLoadTexture(entry); }
+        return entry.NoMarks;
+    }
+
     private void TryLoadTexture(ShaderEntry entry)
     {
         if (_renderer == null) return;
@@ -348,6 +366,11 @@ public unsafe class ShaderManager
             entry.DepthWrite = def.DepthWrite;
             entry.SortKey = def.SortKey;
             entry.Deforms = def.Deforms;
+            entry.NoDLight = def.NoDLight;
+            entry.NoMarks = def.NoMarks;
+
+            // Determine mipmap generation policy
+            bool useMipmaps = !def.NoMipMaps;
 
             // Load animated texture frames (single-stage fallback path)
             if (def.AnimFrames != null && def.AnimFrames.Length > 1)
@@ -362,7 +385,8 @@ public unsafe class ShaderManager
                         fixed (byte* frameData = frameImage.Data)
                         {
                             animIds[i] = _renderer.CreateTexture(
-                                frameImage.Width, frameImage.Height, frameData, clamp: entry.Clamp);
+                                frameImage.Width, frameImage.Height, frameData,
+                                clamp: entry.Clamp, generateMipmaps: useMipmaps);
                         }
                     }
                 }
@@ -402,7 +426,8 @@ public unsafe class ShaderManager
                             {
                                 fixed (byte* fd = frameImg.Data)
                                     sAnimIds[fi] = _renderer.CreateTexture(
-                                        frameImg.Width, frameImg.Height, fd, clamp: src.Clamp);
+                                        frameImg.Width, frameImg.Height, fd,
+                                        clamp: src.Clamp, generateMipmaps: useMipmaps);
                             }
                         }
                         rs.AnimTextureIds = sAnimIds;
@@ -416,7 +441,8 @@ public unsafe class ShaderManager
                         {
                             fixed (byte* sd = stageImg.Data)
                                 rs.TextureId = _renderer.CreateTexture(
-                                    stageImg.Width, stageImg.Height, sd, clamp: src.Clamp);
+                                    stageImg.Width, stageImg.Height, sd,
+                                    clamp: src.Clamp, generateMipmaps: useMipmaps);
                         }
                     }
 
@@ -435,8 +461,9 @@ public unsafe class ShaderManager
 
         fixed (byte* data = image.Data)
         {
+            bool mips = def == null || !def.NoMipMaps;
             entry.TextureId = _renderer.CreateTexture(
-                image.Width, image.Height, data, clamp: entry.Clamp);
+                image.Width, image.Height, data, clamp: entry.Clamp, generateMipmaps: mips);
         }
 
         Interop.EngineImports.Printf(Interop.EngineImports.PRINT_DEVELOPER,
@@ -493,6 +520,10 @@ public unsafe class ShaderManager
         public DeformVertexes[]? Deforms { get; set; }
         /// <summary>Multi-stage rendering data (null = single-stage shader)</summary>
         public RuntimeStage[]? Stages { get; set; }
+        /// <summary>Surface ignores dynamic lights</summary>
+        public bool NoDLight { get; set; }
+        /// <summary>Surface doesn't receive impact marks</summary>
+        public bool NoMarks { get; set; }
     }
 
     /// <summary>

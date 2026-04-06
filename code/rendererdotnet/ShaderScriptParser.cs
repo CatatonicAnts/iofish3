@@ -171,6 +171,12 @@ public sealed unsafe class ShaderScriptParser
         bool hasFogParms = false;
         float fogColorR = 0, fogColorG = 0, fogColorB = 0;
         float fogDepthForOpaque = 0;
+        bool noLightMap = false;
+        bool noDLight = false;
+        bool noMarks = false;
+        bool noPicMip = false;
+        bool noMipMaps = false;
+        bool isPortal = false;
         bool stageIsLightmap = false;
         bool stageIsWhiteImage = false;
         string? stageMapRaw = null; // raw map token including $lightmap/$whiteimage
@@ -301,8 +307,27 @@ public sealed unsafe class ShaderScriptParser
                 else if (string.Equals(token, "surfaceparm", StringComparison.OrdinalIgnoreCase))
                 {
                     string? parm = tokenizer.NextToken();
-                    if (parm != null && string.Equals(parm, "trans", StringComparison.OrdinalIgnoreCase))
-                        isTransparent = true;
+                    if (parm != null)
+                    {
+                        if (string.Equals(parm, "trans", StringComparison.OrdinalIgnoreCase))
+                            isTransparent = true;
+                        else if (string.Equals(parm, "nolightmap", StringComparison.OrdinalIgnoreCase))
+                            noLightMap = true;
+                        else if (string.Equals(parm, "nodlight", StringComparison.OrdinalIgnoreCase))
+                            noDLight = true;
+                        else if (string.Equals(parm, "nomarks", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(parm, "noimpact", StringComparison.OrdinalIgnoreCase))
+                            noMarks = true;
+                    }
+                }
+                else if (string.Equals(token, "nopicmip", StringComparison.OrdinalIgnoreCase))
+                {
+                    noPicMip = true;
+                }
+                else if (string.Equals(token, "nomipmaps", StringComparison.OrdinalIgnoreCase))
+                {
+                    noMipMaps = true;
+                    noPicMip = true; // nomipmaps implies nopicmip (Q3 behavior)
                 }
                 else if (string.Equals(token, "cull", StringComparison.OrdinalIgnoreCase))
                 {
@@ -353,7 +378,7 @@ public sealed unsafe class ShaderScriptParser
                     string? sortToken = tokenizer.NextToken();
                     if (sortToken != null)
                     {
-                        if (string.Equals(sortToken, "portal", StringComparison.OrdinalIgnoreCase)) sortKey = 1;
+                        if (string.Equals(sortToken, "portal", StringComparison.OrdinalIgnoreCase)) { sortKey = 1; isPortal = true; }
                         else if (string.Equals(sortToken, "sky", StringComparison.OrdinalIgnoreCase)) sortKey = 2;
                         else if (string.Equals(sortToken, "opaque", StringComparison.OrdinalIgnoreCase)) sortKey = 3;
                         else if (string.Equals(sortToken, "decal", StringComparison.OrdinalIgnoreCase)) sortKey = 4;
@@ -575,7 +600,13 @@ public sealed unsafe class ShaderScriptParser
             FogColorR = fogColorR,
             FogColorG = fogColorG,
             FogColorB = fogColorB,
-            FogDepthForOpaque = fogDepthForOpaque
+            FogDepthForOpaque = fogDepthForOpaque,
+            NoLightMap = noLightMap,
+            NoDLight = noDLight,
+            NoMarks = noMarks,
+            NoPicMip = noPicMip,
+            NoMipMaps = noMipMaps,
+            IsPortal = isPortal
         };
     }
 
@@ -991,6 +1022,24 @@ public sealed class ShaderDef
 
     /// <summary>Distance at which fog becomes fully opaque.</summary>
     public float FogDepthForOpaque { get; init; }
+
+    /// <summary>surfaceparm nolightmap — surface has no lightmap.</summary>
+    public bool NoLightMap { get; init; }
+
+    /// <summary>surfaceparm nodlight — surface ignores dynamic lights.</summary>
+    public bool NoDLight { get; init; }
+
+    /// <summary>surfaceparm nomarks — surface doesn't receive impact marks.</summary>
+    public bool NoMarks { get; init; }
+
+    /// <summary>Whether nopicmip directive is set (skip picmip quality reduction).</summary>
+    public bool NoPicMip { get; init; }
+
+    /// <summary>Whether nomipmaps directive is set (no mipmaps AND no picmip).</summary>
+    public bool NoMipMaps { get; init; }
+
+    /// <summary>Whether this is a portal/mirror shader (sort portal or surfaceparm).</summary>
+    public bool IsPortal { get; init; }
 }
 
 /// <summary>

@@ -65,6 +65,17 @@ public sealed unsafe class Renderer2D : System.IDisposable
         _screenW = width;
         _screenH = height;
 
+        // Detect anisotropic filtering support
+        _maxAnisotropy = 0;
+        try
+        {
+            float maxAniso = 0;
+            _gl.GetFloat((GLEnum)0x84FF, &maxAniso); // GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+            if (maxAniso > 1.0f)
+                _maxAnisotropy = System.Math.Min(maxAniso, 16.0f);
+        }
+        catch { /* Extension not available */ }
+
         _program = CreateProgram();
         _projLoc = _gl.GetUniformLocation(_program, "uProj");
 
@@ -229,14 +240,34 @@ public sealed unsafe class Renderer2D : System.IDisposable
     /// <summary>
     /// Upload RGBA pixel data as a GL texture. Returns the texture ID.
     /// </summary>
-    public uint CreateTexture(int width, int height, byte* data, bool clamp = false)
+    /// <summary>Maximum anisotropic filtering level (0 = not supported).</summary>
+    private float _maxAnisotropy;
+
+    public uint CreateTexture(int width, int height, byte* data, bool clamp = false, bool generateMipmaps = true)
     {
         uint tex = _gl.GenTexture();
         _gl.BindTexture(TextureTarget.Texture2D, tex);
         _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8,
             (uint)width, (uint)height, 0, PixelFormat.Rgba, PixelType.UnsignedByte, data);
 
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
+        if (generateMipmaps && width > 1 && height > 1)
+        {
+            _gl.GenerateMipmap(TextureTarget.Texture2D);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter,
+                (int)GLEnum.LinearMipmapLinear);
+
+            // Apply anisotropic filtering when available
+            if (_maxAnisotropy > 1.0f)
+            {
+                _gl.TexParameter(TextureTarget.Texture2D,
+                    (TextureParameterName)0x84FE, // GL_TEXTURE_MAX_ANISOTROPY_EXT
+                    _maxAnisotropy);
+            }
+        }
+        else
+        {
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
+        }
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
 
         var wrap = clamp ? (int)GLEnum.ClampToEdge : (int)GLEnum.Repeat;
