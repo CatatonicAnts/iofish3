@@ -15,11 +15,12 @@ public sealed unsafe class PostProcess : IDisposable
     private bool _enabled;
     private bool _hdrEnabled;
     private bool _bloomEnabled;
+    private bool _ssaoEnabled;
 
     // Main scene FBO (full resolution)
     private uint _sceneFbo;
     private uint _sceneColorTex;
-    private uint _sceneDepthRbo;
+    private uint _sceneDepthTex; // depth texture (for SSAO sampling)
 
     // Bloom pipeline: half-res bright extract, quarter-res ping-pong blur
     private uint _brightFbo, _brightTex;
@@ -45,6 +46,8 @@ public sealed unsafe class PostProcess : IDisposable
     private uint _blitProgram;     // simple texture blit (for downsample)
     private uint _lumInitProgram;  // initial log-luminance from HDR scene
     private uint _lumBlendProgram; // temporal exposure blending
+    private uint _ssaoProgram;     // SSAO computation
+    private uint _ssaoBlurProgram; // bilateral blur for SSAO
 
     // Fullscreen quad VAO
     private uint _quadVao, _quadVbo;
@@ -54,8 +57,14 @@ public sealed unsafe class PostProcess : IDisposable
     private int _blurHTexelSizeLoc;
     private int _blurVTexelSizeLoc;
     private int _compSceneLoc, _compBloomLoc, _compStrengthLoc;
-    private int _compHdrLoc, _compExposureTexLoc;
+    private int _compHdrLoc, _compExposureTexLoc, _compUseSsaoLoc;
     private int _lumBlendFactorLoc;
+
+    // SSAO
+    private uint _ssaoFbo, _ssaoTex;           // half-res SSAO result
+    private uint _ssaoBlurFbo, _ssaoBlurTex;   // blurred SSAO
+    private int _ssaoViewInfoLoc;              // zNear, zFar, 1/width, 1/height
+    private int _ssaoBlurTexelLoc;
 
     // Bloom settings
     private const float BloomThreshold = 0.7f;
@@ -133,8 +142,10 @@ public sealed unsafe class PostProcess : IDisposable
         uniform sampler2D uScene;
         uniform sampler2D uBloom;
         uniform sampler2D uExposure;
+        uniform sampler2D uSsao;
         uniform float uBloomStrength;
         uniform int uHdr;
+        uniform int uUseSsao;
 
         // Filmic tonemapping (Uncharted 2 / Hable)
         vec3 FilmicTonemap(vec3 x) {
@@ -152,6 +163,12 @@ public sealed unsafe class PostProcess : IDisposable
             vec3 scene = texture(uScene, vUV).rgb;
             vec3 bloom = texture(uBloom, vUV).rgb;
             vec3 color = scene + bloom * uBloomStrength;
+
+            // Apply SSAO (multiplicative darkening)
+            if (uUseSsao != 0) {
+                float ao = texture(uSsao, vUV).r;
+                color *= ao;
+            }
 
             if (uHdr == 1) {
                 // Read auto-exposure from 1x1 texture
@@ -213,6 +230,106 @@ public sealed unsafe class PostProcess : IDisposable
         }
         """;
 
+    // SSAO: depth-based ambient occlusion with Poisson disc sampling
+    private const string SsaoFragSrc = """
+        #version 450 core
+        in vec2 vUV;
+        uniform sampler2D uDepth;
+        uniform vec4 uViewInfo; // x=zNear, y=zFar, z=1/width, w=1/height
+        out vec4 oColor;
+
+        float linearizeDepth(float d) {
+            float zNear = uViewInfo.x;
+            float zFar = uViewInfo.y;
+            return zNear * zFar / (zFar - d * (zFar - zNear));
+        }
+
+        // Hash-based pseudo-random rotation
+        float random(vec2 co) {
+            return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+
+        void main() {
+            float depth = texture(uDepth, vUV).r;
+            if (depth >= 0.9999) { oColor = vec4(1.0); return; } // skip skybox
+
+            float z = linearizeDepth(depth);
+            float zFar = uViewInfo.y;
+            vec2 texelSize = uViewInfo.zw;
+
+            // Poisson disc samples (9 points)
+            vec2 disc[9] = vec2[](
+                vec2(-0.7071,  0.7071), vec2( 0.0, -0.875), vec2( 0.5303,  0.5303),
+                vec2(-0.625,  -0.0), vec2( 0.8660, -0.25), vec2(-0.25,   0.433),
+                vec2( 0.25,    0.25), vec2(-0.433, -0.433), vec2( 0.0,    0.625)
+            );
+
+            // Random rotation per pixel
+            float angle = random(vUV) * 6.283185;
+            float sa = sin(angle), ca = cos(angle);
+            mat2 rot = mat2(ca, sa, -sa, ca);
+
+            // Adaptive radius based on depth
+            float radius = 24.0 * texelSize.x * zFar / z;
+            radius = clamp(radius, 2.0 * texelSize.x, 48.0 * texelSize.x);
+
+            float occlusion = 0.0;
+            int samples = 9;
+            for (int i = 0; i < samples; i++) {
+                vec2 offset = rot * disc[i] * radius;
+                float sampleDepth = texture(uDepth, vUV + offset).r;
+                float sampleZ = linearizeDepth(sampleDepth);
+
+                float diff = z - sampleZ;
+                // Occlude if sample is closer and within range
+                float rangeCheck = smoothstep(0.0, 1.0, radius * zFar / abs(diff));
+                occlusion += step(0.001 * z, diff) * rangeCheck;
+            }
+
+            float ao = 1.0 - occlusion / float(samples);
+            ao = clamp(ao, 0.0, 1.0);
+            ao = pow(ao, 1.5); // contrast boost
+            oColor = vec4(ao, ao, ao, 1.0);
+        }
+        """;
+
+    // Bilateral blur for SSAO (depth-aware to preserve edges)
+    private const string SsaoBlurFragSrc = """
+        #version 450 core
+        in vec2 vUV;
+        uniform sampler2D uTex;
+        uniform sampler2D uDepth;
+        uniform vec2 uTexelSize;
+        out vec4 oColor;
+
+        float linearizeDepth(float d, float zNear, float zFar) {
+            return zNear * zFar / (zFar - d * (zFar - zNear));
+        }
+
+        void main() {
+            float result = 0.0;
+            float totalWeight = 0.0;
+            float centerDepth = texture(uDepth, vUV).r;
+            float centerZ = linearizeDepth(centerDepth, 1.0, 4096.0);
+
+            for (int x = -2; x <= 2; x++) {
+                for (int y = -2; y <= 2; y++) {
+                    vec2 offset = vec2(float(x), float(y)) * uTexelSize;
+                    float sampleAO = texture(uTex, vUV + offset).r;
+                    float sampleDepth = texture(uDepth, vUV + offset).r;
+                    float sampleZ = linearizeDepth(sampleDepth, 1.0, 4096.0);
+
+                    float depthDiff = abs(centerZ - sampleZ);
+                    float w = exp(-depthDiff * 10.0 / max(centerZ, 0.1));
+                    result += sampleAO * w;
+                    totalWeight += w;
+                }
+            }
+
+            oColor = vec4(vec3(result / max(totalWeight, 0.001)), 1.0);
+        }
+        """;
+
     #endregion
 
     public bool IsEnabled => _enabled;
@@ -233,16 +350,18 @@ public sealed unsafe class PostProcess : IDisposable
         Interop.EngineImports.Cvar_Get("r_hdr", "1", 0x01);   // CVAR_ARCHIVE
         Interop.EngineImports.Cvar_Get("r_autoExposure", "1", 0x01);
         Interop.EngineImports.Cvar_Get("r_cameraExposure", "0", 0);
+        Interop.EngineImports.Cvar_Get("r_ssao", "0", 0x01);  // CVAR_ARCHIVE
 
         _bloomEnabled = Interop.EngineImports.Cvar_VariableIntegerValue("r_bloom") != 0;
         _hdrEnabled = Interop.EngineImports.Cvar_VariableIntegerValue("r_hdr") != 0;
         _autoExposure = Interop.EngineImports.Cvar_VariableIntegerValue("r_autoExposure") != 0;
+        _ssaoEnabled = Interop.EngineImports.Cvar_VariableIntegerValue("r_ssao") != 0;
 
-        if (!_bloomEnabled && !_hdrEnabled)
+        if (!_bloomEnabled && !_hdrEnabled && !_ssaoEnabled)
         {
             _enabled = false;
             Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
-                "[.NET] Post-processing disabled (r_bloom 0, r_hdr 0)\n");
+                "[.NET] Post-processing disabled (r_bloom 0, r_hdr 0, r_ssao 0)\n");
             return;
         }
 
@@ -262,6 +381,12 @@ public sealed unsafe class PostProcess : IDisposable
         if (_hdrEnabled)
         {
             CreateLuminancePyramid();
+        }
+
+        if (_ssaoEnabled)
+        {
+            _ssaoFbo = CreateColorFbo(_halfW, _halfH, out _ssaoTex);
+            _ssaoBlurFbo = CreateColorFbo(_halfW, _halfH, out _ssaoBlurTex);
         }
 
         // Create shader programs
@@ -289,10 +414,14 @@ public sealed unsafe class PostProcess : IDisposable
         _compStrengthLoc = _gl.GetUniformLocation(_compositeProgram, "uBloomStrength");
         _compHdrLoc = _gl.GetUniformLocation(_compositeProgram, "uHdr");
         _compExposureTexLoc = _gl.GetUniformLocation(_compositeProgram, "uExposure");
+        int compSsaoLoc = _gl.GetUniformLocation(_compositeProgram, "uSsao");
+        int compUseSsaoLoc = _gl.GetUniformLocation(_compositeProgram, "uUseSsao");
         _gl.UseProgram(_compositeProgram);
         _gl.Uniform1(_compSceneLoc, 0);
         _gl.Uniform1(_compBloomLoc, 1);
         _gl.Uniform1(_compExposureTexLoc, 2);
+        _gl.Uniform1(compSsaoLoc, 3);
+        _compUseSsaoLoc = compUseSsaoLoc;
 
         _blitProgram = CreateProgram(QuadVertSrc, BlitFragSrc);
         _gl.UseProgram(_blitProgram);
@@ -310,10 +439,28 @@ public sealed unsafe class PostProcess : IDisposable
             _gl.Uniform1(_gl.GetUniformLocation(_lumBlendProgram, "uTex"), 0);
         }
 
+        if (_ssaoEnabled)
+        {
+            _ssaoProgram = CreateProgram(QuadVertSrc, SsaoFragSrc);
+            _ssaoViewInfoLoc = _gl.GetUniformLocation(_ssaoProgram, "uViewInfo");
+            _gl.UseProgram(_ssaoProgram);
+            _gl.Uniform1(_gl.GetUniformLocation(_ssaoProgram, "uDepth"), 0);
+
+            _ssaoBlurProgram = CreateProgram(QuadVertSrc, SsaoBlurFragSrc);
+            _ssaoBlurTexelLoc = _gl.GetUniformLocation(_ssaoBlurProgram, "uTexelSize");
+            _gl.UseProgram(_ssaoBlurProgram);
+            _gl.Uniform1(_gl.GetUniformLocation(_ssaoBlurProgram, "uTex"), 0);
+            _gl.Uniform1(_gl.GetUniformLocation(_ssaoBlurProgram, "uDepth"), 1);
+        }
+
         _gl.UseProgram(0);
         _enabled = true;
 
-        string features = _hdrEnabled ? (_bloomEnabled ? "HDR + bloom" : "HDR") : "bloom";
+        string features = "";
+        if (_hdrEnabled) features += "HDR";
+        if (_bloomEnabled) features += (features.Length > 0 ? " + " : "") + "bloom";
+        if (_ssaoEnabled) features += (features.Length > 0 ? " + " : "") + "SSAO";
+        if (features.Length == 0) features = "basic FBO";
         Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
             $"[.NET] Post-processing initialized ({features})\n");
     }
@@ -391,12 +538,40 @@ public sealed unsafe class PostProcess : IDisposable
             ComputeAutoExposure();
         }
 
-        // Final composite — scene + bloom → default framebuffer (with optional tonemapping)
+        // SSAO passes
+        uint ssaoResult = 0;
+        if (_ssaoEnabled)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture0);
+
+            // Pass 1: Compute raw SSAO at half resolution
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _ssaoFbo);
+            _gl.Viewport(0, 0, (uint)_halfW, (uint)_halfH);
+            _gl.UseProgram(_ssaoProgram);
+            _gl.Uniform4(_ssaoViewInfoLoc, 1.0f, 4096.0f, 1.0f / _halfW, 1.0f / _halfH);
+            _gl.BindTexture(TextureTarget.Texture2D, _sceneDepthTex);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+
+            // Pass 2: Bilateral blur (depth-aware)
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _ssaoBlurFbo);
+            _gl.UseProgram(_ssaoBlurProgram);
+            _gl.Uniform2(_ssaoBlurTexelLoc, 1.0f / _halfW, 1.0f / _halfH);
+            _gl.ActiveTexture(TextureUnit.Texture0);
+            _gl.BindTexture(TextureTarget.Texture2D, _ssaoTex);
+            _gl.ActiveTexture(TextureUnit.Texture1);
+            _gl.BindTexture(TextureTarget.Texture2D, _sceneDepthTex);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+
+            ssaoResult = _ssaoBlurTex;
+        }
+
+        // Final composite — scene + bloom + SSAO → default framebuffer (with optional tonemapping)
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         _gl.Viewport(0, 0, (uint)_width, (uint)_height);
         _gl.UseProgram(_compositeProgram);
         _gl.Uniform1(_compStrengthLoc, _bloomEnabled ? BloomStrength : 0.0f);
         _gl.Uniform1(_compHdrLoc, _hdrEnabled ? 1 : 0);
+        _gl.Uniform1(_compUseSsaoLoc, _ssaoEnabled ? 1 : 0);
 
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _sceneColorTex);
@@ -404,6 +579,8 @@ public sealed unsafe class PostProcess : IDisposable
         _gl.BindTexture(TextureTarget.Texture2D, bloomTex != 0 ? bloomTex : _sceneColorTex);
         _gl.ActiveTexture(TextureUnit.Texture2);
         _gl.BindTexture(TextureTarget.Texture2D, _hdrEnabled ? _exposureTex : 0);
+        _gl.ActiveTexture(TextureUnit.Texture3);
+        _gl.BindTexture(TextureTarget.Texture2D, ssaoResult);
         _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
         // Restore state for 2D rendering
@@ -468,11 +645,18 @@ public sealed unsafe class PostProcess : IDisposable
         if (_lumInitProgram != 0) _gl.DeleteProgram(_lumInitProgram);
         if (_lumBlendProgram != 0) _gl.DeleteProgram(_lumBlendProgram);
 
+        if (_ssaoProgram != 0) _gl.DeleteProgram(_ssaoProgram);
+        if (_ssaoBlurProgram != 0) _gl.DeleteProgram(_ssaoBlurProgram);
+
+        DeleteFbo(ref _ssaoBlurFbo, ref _ssaoBlurTex, 0);
+        DeleteFbo(ref _ssaoFbo, ref _ssaoTex, 0);
         DeleteFbo(ref _blurFboB, ref _blurTexB, 0);
         DeleteFbo(ref _blurFboA, ref _blurTexA, 0);
         DeleteFbo(ref _brightFbo, ref _brightTex, 0);
-        DeleteFbo(ref _sceneFbo, ref _sceneColorTex, _sceneDepthRbo);
-        _sceneDepthRbo = 0;
+
+        // Scene FBO: depth is a texture, not a renderbuffer
+        if (_sceneDepthTex != 0) { _gl.DeleteTexture(_sceneDepthTex); _sceneDepthTex = 0; }
+        DeleteFbo(ref _sceneFbo, ref _sceneColorTex, 0);
 
         // Clean up HDR luminance pyramid
         for (int i = 0; i < _lumLevels; i++)
@@ -518,13 +702,18 @@ public sealed unsafe class PostProcess : IDisposable
         _gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0,
             TextureTarget.Texture2D, _sceneColorTex, 0);
 
-        // Depth attachment: renderbuffer
-        _sceneDepthRbo = _gl.GenRenderbuffer();
-        _gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, _sceneDepthRbo);
-        _gl.RenderbufferStorage(RenderbufferTarget.Renderbuffer, InternalFormat.DepthComponent24,
-            (uint)_width, (uint)_height);
-        _gl.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment,
-            RenderbufferTarget.Renderbuffer, _sceneDepthRbo);
+        // Depth attachment: texture (so SSAO can sample it)
+        _sceneDepthTex = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, _sceneDepthTex);
+        _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.DepthComponent24,
+            (uint)_width, (uint)_height, 0, Silk.NET.OpenGL.PixelFormat.DepthComponent,
+            Silk.NET.OpenGL.PixelType.Float, null);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Nearest);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Nearest);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+        _gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment,
+            TextureTarget.Texture2D, _sceneDepthTex, 0);
 
         var status = _gl.CheckFramebufferStatus(FramebufferTarget.Framebuffer);
         if (status != GLEnum.FramebufferComplete)

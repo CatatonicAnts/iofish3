@@ -48,7 +48,7 @@ A list of planned features, improvements, and tasks for this project.
 - [ ] **Cubemap reflections** - GL2 loads/renders cubemaps for environment reflections with parallax correction. `CPX 4`
 - [ ] **Shadow mapping** - Projection shadows (512×512 maps), sun shadow framework. Partially implemented in GL2 itself. `CPX 5`
 - [x] **Deluxe mapping** - World deluxe maps store per-pixel light direction. Detected automatically from interleaved BSP lightmaps (even=lightmap, odd=deluxe). Enhances normal-mapped surfaces with per-texel lighting and specular direction. Controlled by `r_deluxeMapping` cvar (default on). `CPX 3`
-- [ ] **SSAO** - Screen-space ambient occlusion framework (`r_ssao` cvar). `CPX 3`
+- [x] **SSAO** - Screen-space ambient occlusion with Poisson disc sampling (9-tap), bilateral blur, and multiplicative compositing. Depth texture from scene FBO sampled at half resolution. Controlled by `r_ssao` cvar (default off). `CPX 3`
 - [ ] **IQM model format** - Inter-Quake Model format with GPU bone skinning. GL2 has full loader and renderer. `CPX 4`
 - [ ] **MDR model format** - Advanced skeletal model format with bone matrices. `CPX 3`
 - [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
