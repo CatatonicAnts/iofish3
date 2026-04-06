@@ -20,6 +20,9 @@ public unsafe class ShaderManager
 
     public uint WhiteTexture { get; set; }
 
+    /// <summary>Current renderer time in milliseconds, updated per-frame from refdef_t.time.</summary>
+    public int CurrentTimeMs { get; set; }
+
     public ShaderManager()
     {
         // Handle 0 = invalid/default, occupies index 0
@@ -79,6 +82,15 @@ public unsafe class ShaderManager
             TryLoadTexture(entry);
         }
 
+        // Animated texture: cycle through frames based on time
+        if (entry.AnimTextureIds != null && entry.AnimTextureIds.Length > 0 && entry.AnimFrequency > 0)
+        {
+            float timeSec = CurrentTimeMs / 1000.0f;
+            int frameIdx = (int)(timeSec * entry.AnimFrequency) % entry.AnimTextureIds.Length;
+            if (frameIdx < 0) frameIdx = 0;
+            return entry.AnimTextureIds[frameIdx] != 0 ? entry.AnimTextureIds[frameIdx] : WhiteTexture;
+        }
+
         return entry.TextureId != 0 ? entry.TextureId : WhiteTexture;
     }
 
@@ -110,6 +122,66 @@ public unsafe class ShaderManager
         }
 
         return entry.AlphaFunc;
+    }
+
+    public int GetCullMode(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return 0;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.CullMode;
+    }
+
+    public bool GetHasEnvMap(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return false;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.HasEnvMap;
+    }
+
+    public TcMod[]? GetTcMods(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return null;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.TcMods;
+    }
+
+    public int GetRgbGen(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return 0;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.RgbGen;
     }
 
     public bool IsTransparent(int handle)
@@ -151,6 +223,31 @@ public unsafe class ShaderManager
             entry.Blend = def.Blend;
             entry.IsTransparent = def.IsTransparent;
             entry.AlphaFunc = def.AlphaFunc;
+            entry.CullMode = def.CullMode;
+            entry.HasEnvMap = def.HasEnvMap;
+            entry.TcMods = def.TcMods;
+            entry.RgbGen = def.RgbGen;
+            entry.AlphaGen = def.AlphaGen;
+
+            // Load animated texture frames
+            if (def.AnimFrames != null && def.AnimFrames.Length > 1)
+            {
+                entry.AnimFrequency = def.AnimFrequency;
+                var animIds = new uint[def.AnimFrames.Length];
+                for (int i = 0; i < def.AnimFrames.Length; i++)
+                {
+                    var frameImage = ImageLoader.LoadFromEngineFS(def.AnimFrames[i]);
+                    if (frameImage != null && _renderer != null)
+                    {
+                        fixed (byte* frameData = frameImage.Data)
+                        {
+                            animIds[i] = _renderer.CreateTexture(
+                                frameImage.Width, frameImage.Height, frameData, clamp: entry.Clamp);
+                        }
+                    }
+                }
+                entry.AnimTextureIds = animIds;
+            }
         }
 
         if (image == null)
@@ -196,5 +293,19 @@ public unsafe class ShaderManager
         public bool IsTransparent { get; set; }
         /// <summary>0=none, 1=GT0, 2=LT128, 3=GE128</summary>
         public int AlphaFunc { get; set; }
+        /// <summary>0=front (default), 1=back, 2=none/twosided</summary>
+        public int CullMode { get; set; }
+        /// <summary>Any stage uses tcGen environment</summary>
+        public bool HasEnvMap { get; set; }
+        /// <summary>Loaded texture IDs for animated frames (null if not animated)</summary>
+        public uint[]? AnimTextureIds { get; set; }
+        /// <summary>Animation frequency in FPS</summary>
+        public float AnimFrequency { get; set; }
+        /// <summary>tcMod operations for this shader</summary>
+        public TcMod[]? TcMods { get; set; }
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting</summary>
+        public int RgbGen { get; set; }
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave</summary>
+        public int AlphaGen { get; set; }
     }
 }

@@ -17,6 +17,8 @@ public sealed unsafe class Renderer3D : IDisposable
     private int _modelLoc;
     private int _colorLoc;
     private int _lightDirLoc;
+    private int _envMapLoc;
+    private int _viewPosLoc;
 
     // Reusable buffers for interpolated vertex data
     private uint _vao;
@@ -36,14 +38,27 @@ public sealed unsafe class Renderer3D : IDisposable
 
         uniform mat4 uMVP;
         uniform mat4 uModel;
+        uniform int uEnvMap;
+        uniform vec3 uViewPos;
 
         out vec2 vUV;
         out vec3 vNormal;
 
         void main() {
+            vec4 worldPos = uModel * vec4(aPos, 1.0);
             gl_Position = uMVP * vec4(aPos, 1.0);
-            vUV = aUV;
             vNormal = mat3(uModel) * aNormal;
+
+            if (uEnvMap != 0) {
+                // Q3 environment mapping: reflect view vector off normal
+                vec3 viewDir = normalize(worldPos.xyz - uViewPos);
+                vec3 n = normalize(vNormal);
+                vec3 reflected = reflect(viewDir, n);
+                // Map reflected vector to 2D UV (spherical mapping)
+                vUV = vec2(0.5 + reflected.x * 0.5, 0.5 - reflected.y * 0.5);
+            } else {
+                vUV = aUV;
+            }
         }
         """;
 
@@ -60,7 +75,6 @@ public sealed unsafe class Renderer3D : IDisposable
 
         void main() {
             vec4 texColor = texture(uTex, vUV);
-            // Simple directional lighting
             float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
             float light = 0.3 + 0.7 * ndl;
             oColor = texColor * uColor * vec4(vec3(light), 1.0);
@@ -75,6 +89,8 @@ public sealed unsafe class Renderer3D : IDisposable
         _modelLoc = _gl.GetUniformLocation(_program, "uModel");
         _colorLoc = _gl.GetUniformLocation(_program, "uColor");
         _lightDirLoc = _gl.GetUniformLocation(_program, "uLightDir");
+        _envMapLoc = _gl.GetUniformLocation(_program, "uEnvMap");
+        _viewPosLoc = _gl.GetUniformLocation(_program, "uViewPos");
 
         _vao = _gl.GenVertexArray();
         _gl.BindVertexArray(_vao);
@@ -104,7 +120,8 @@ public sealed unsafe class Renderer3D : IDisposable
     /// </summary>
     public void DrawSurface(Md3Surface surface, int frame, int oldFrame, float backlerp,
                             float* mvp, float* modelMatrix, uint textureId,
-                            float r, float g, float b, float a)
+                            float r, float g, float b, float a,
+                            bool envMap = false, float viewX = 0, float viewY = 0, float viewZ = 0)
     {
         int numVerts = surface.NumVerts;
         int numTris = surface.NumTriangles;
@@ -161,6 +178,8 @@ public sealed unsafe class Renderer3D : IDisposable
         _gl.Uniform4(_colorLoc, r, g, b, a);
         // Default light direction (down from upper-right-front)
         _gl.Uniform3(_lightDirLoc, 0.57735f, 0.57735f, 0.57735f);
+        _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
+        _gl.Uniform3(_viewPosLoc, viewX, viewY, viewZ);
 
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, textureId);

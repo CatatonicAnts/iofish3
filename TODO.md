@@ -28,23 +28,16 @@ A list of planned features, improvements, and tasks for this project.
 ### Tier 1 — Core Q3 Rendering (Required for visual correctness)
 
 - [ ] **Multi-stage shader rendering** - Q3 shaders have up to 8 stages (e.g. lightmap pass + texture pass + glow pass). We only use the first usable stage's texture/blend. Need to render each stage as a separate draw call with its own blend mode, producing correct multi-pass effects (lightmap×texture, glow overlays, detail textures). `CPX 5`
-- [ ] **tcMod support** - Texture coordinate modifiers: `scroll` (conveyor belts, flowing lava), `scale`, `rotate` (fans, radar), `turb` (water distortion), `stretch` (pulsing lights), `transform` (6-param matrix), `entityTranslate`. Many world surfaces and effects depend on these. `CPX 3`
-- [ ] **rgbGen / alphaGen** - Color and alpha generation per-vertex: `wave` (pulsing lights/colors), `vertex`/`exactVertex` (vertex colors in BSP — note: `vColor` is declared but **unused** in BSP fragment shader), `entity` (entity RGBA tinting), `identity`, `identityLighting`, `lightingDiffuse`, `oneMinusEntity`, `const`, `portal`. `CPX 3`
-- [ ] **tcGen environment** - Environment/reflection mapping using view-space normals to generate UVs. Needed for health pickups (still white), chrome/metallic surfaces, glass reflections. Currently detected but not implemented — envmap stages are skipped. `CPX 2`
 - [ ] **Dynamic lighting (AddLightToScene)** - Per-frame point lights from rockets, plasma, railgun, etc. GL2 transforms dlights to surface-local coordinates and accumulates light contribution. Currently stubbed (AddLightToScene/AddAdditiveLightToScene are empty). `CPX 4`
 - [ ] **Fog rendering** - Q3 fog volumes defined via `fogParms` (color, depthForOpaque). Surfaces inside fog fade toward the fog color based on depth. GL2 has per-surface fog adjustment, fog culling, and fog-in-water handling. `CPX 4`
-- [ ] **Frustum culling** - GL2 tests every node/surface against a 6-plane view frustum before rendering. Our BSP renderer only uses PVS cluster culling — no frustum test. This means we draw many off-screen surfaces. `CPX 2`
-- [ ] **cull directive** - Parse and apply `cull none`/`cull twosided`/`cull back`/`cull disable` per shader. Some surfaces (grates, foliage, glass) need two-sided rendering. Currently hardcoded to cull front faces. `CPX 2`
 - [ ] **depthFunc / depthWrite directives** - Parse `depthFunc equal` (for multi-pass lightmap rendering) and `depthWrite` (force depth writes on blended surfaces). Missing `depthFunc equal` causes z-fighting on multi-stage surfaces. `CPX 2`
 - [ ] **Sort order** - Q3 assigns each shader a sort key (portal=1, sky=2, opaque=3, decal=4, seeThrough=5, banner=6, fog=7, blend0-3=8-11, nearest=14). This controls render order. We only have opaque vs transparent. Need proper sort ordering for correct layering of decals, banners, see-through surfaces. `CPX 3`
 - [ ] **deformVertexes** - Vertex deformation effects: `wave` (flag waving), `bulge` (pulsing pipes), `move` (floating items), `normal` (water surface perturbation), `autosprite`/`autosprite2` (always-facing quads). Many world decorations use these. `CPX 3`
-- [ ] **Animated textures (animMap)** - We parse `animMap` but only use the first frame. Need to cycle frames based on `frequency` parameter and `shaderTime`. Used for console screens, warning lights, teleporter pads. `CPX 2`
 - [ ] **RemapShader** - Runtime shader replacement (e.g. team-colored textures, powerup effects). Currently an empty stub. `CPX 2`
 
 ### Tier 2 — Important Visual Quality
 
 - [ ] **Light grid for entity lighting** - BSP stores a 3D grid of ambient+directed light samples. GL2 uses this to light entities (models, weapons) based on world position. We use a hardcoded directional light (0.57, 0.57, 0.57). `CPX 3`
-- [ ] **Vertex colors in BSP** - BSP vertices have per-vertex RGBA colors used by `rgbGen vertex` shaders. Our fragment shader declares `vColor` but never uses it. Some surfaces rely on vertex colors for tinting/fading. `CPX 1`
 - [ ] **Overbright / gamma correction** - Q3 uses overbright bits (`r_mapOverBrightBits`) and gamma tables to adjust brightness. GL2 builds lookup tables and applies them to textures and lightmaps. We multiply lightmaps by 2.0 which is an approximation. `CPX 2`
 - [ ] **Flare rendering** - Light flares (RT_FLARE, MST_FLARE) with depth-based visibility testing and intensity fading. GL2 uses depth reads to check occlusion. We skip MST_FLARE surfaces entirely. `CPX 3`
 - [ ] **Portal / mirror rendering** - Recursive scene rendering through portal surfaces. GL2 detects portal sort, renders the scene from the mirrored viewpoint into an FBO, then composites it. Complex but needed for maps with mirrors/portals. `CPX 5`
@@ -187,6 +180,13 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Blend state leak fix — explicit GL_BLEND disable at BSP opaque pass start
 - [x] GetEntityToken, InPVS, ModelBounds — engine interop functions
 - [x] Remove intro video and CD key prompt
+- [x] BSP vertex colors — wired `vColor` into fragment shader for `rgbGen vertex` and vertex-colored surfaces
+- [x] Cull directive — parse `cull none/twosided/back/disable` from shader scripts, apply per-surface GL cull mode
+- [x] tcGen environment — reflection UV generation from view-space normals in both BSP and MD3 vertex shaders
+- [x] Frustum culling — 6-plane frustum extraction from MVP matrix, AABB test on BSP nodes and leaves
+- [x] Animated textures (animMap) — parse all frames and frequency, lazy-load each frame, time-based cycling
+- [x] tcMod support — scroll, scale, rotate, turb parsed and applied via vertex shader uniforms (up to 4 ops per surface)
+- [x] rgbGen / alphaGen — parse identity/vertex/entity/wave/identityLighting, apply vertex color path in BSP fragment shader
 
 ### Fixed Bugs
 

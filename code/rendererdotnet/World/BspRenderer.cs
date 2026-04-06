@@ -21,6 +21,12 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _texDiffuseLoc;
     private int _texLightmapLoc;
     private int _alphaFuncLoc;
+    private int _envMapLoc;
+    private int _viewPosLoc;
+    private int _timeLoc;
+    private int _tcModCountLoc;
+    private int _tcModLoc;
+    private int _rgbGenLoc;
 
     private uint _vao;
     private uint _vbo;
@@ -39,6 +45,12 @@ public sealed unsafe class BspRenderer : IDisposable
     // Transparent surfaces deferred to second pass
     private readonly List<(int SurfIdx, BlendMode Blend)> _transparentSurfaces = new(256);
 
+    // Current view position, stored per-frame for tcGen environment
+    private float _viewX, _viewY, _viewZ;
+
+    // Frustum planes for culling (6 planes, each: nx, ny, nz, d)
+    private readonly float[] _frustum = new float[24]; // 6 * 4
+
     private const string VertSrc = """
         #version 450 core
         layout(location = 0) in vec3 aPos;
@@ -48,6 +60,12 @@ public sealed unsafe class BspRenderer : IDisposable
         layout(location = 4) in vec4 aColor;
 
         uniform mat4 uMVP;
+        uniform int uEnvMap;
+        uniform vec3 uViewPos;
+        uniform float uTime;
+        // tcMod: up to 4 ops, each encoded as vec4(type, p0, p1, p2)
+        uniform int uTcModCount;
+        uniform vec4 uTcMod[4];
 
         out vec2 vUV;
         out vec2 vLmUV;
@@ -56,10 +74,45 @@ public sealed unsafe class BspRenderer : IDisposable
 
         void main() {
             gl_Position = uMVP * vec4(aPos, 1.0);
-            vUV = aUV;
             vLmUV = aLmUV;
             vNormal = aNormal;
             vColor = aColor;
+
+            if (uEnvMap != 0) {
+                vec3 viewDir = normalize(aPos - uViewPos);
+                vec3 n = normalize(aNormal);
+                vec3 reflected = reflect(viewDir, n);
+                vUV = vec2(0.5 + reflected.x * 0.5, 0.5 - reflected.y * 0.5);
+            } else {
+                vec2 uv = aUV;
+
+                // Apply tcMod operations in order
+                for (int i = 0; i < uTcModCount && i < 4; i++) {
+                    int modType = int(uTcMod[i].x);
+                    if (modType == 0) { // scroll
+                        uv.x += uTcMod[i].y * uTime;
+                        uv.y += uTcMod[i].z * uTime;
+                    } else if (modType == 1) { // scale
+                        uv.x *= uTcMod[i].y;
+                        uv.y *= uTcMod[i].z;
+                    } else if (modType == 2) { // rotate
+                        float angle = radians(uTcMod[i].y * uTime);
+                        float s = sin(angle);
+                        float c = cos(angle);
+                        vec2 centered = uv - vec2(0.5);
+                        uv = vec2(centered.x * c - centered.y * s,
+                                  centered.x * s + centered.y * c) + vec2(0.5);
+                    } else if (modType == 3) { // turb
+                        float amp = uTcMod[i].z;
+                        float phase = uTcMod[i].w;
+                        float freq = uTcMod[i].y; // reuse slot for freq
+                        uv.x += amp * sin((aPos.x + aPos.z) * 0.0625 + uTime * freq + phase);
+                        uv.y += amp * sin((aPos.y) * 0.0625 + uTime * freq + phase);
+                    }
+                }
+
+                vUV = uv;
+            }
         }
         """;
 
@@ -76,6 +129,7 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform vec3 uLightDir;
         uniform int uUseLightmap;
         uniform int uAlphaFunc; // 0=none, 1=GT0, 2=LT128, 3=GE128
+        uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 4=identityLighting
 
         out vec4 oColor;
 
@@ -89,12 +143,22 @@ public sealed unsafe class BspRenderer : IDisposable
 
             if (uUseLightmap != 0) {
                 vec4 lmColor = texture(uTexLightmap, vLmUV);
-                oColor = texColor * lmColor * 2.0 * uColor;
+                oColor = texColor * lmColor * 2.0;
+            } else if (uRgbGen == 1) {
+                // rgbGen vertex — multiply by vertex color directly
+                oColor = texColor * vColor;
             } else {
-                float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
-                float light = 0.3 + 0.7 * ndl;
-                oColor = texColor * uColor * vec4(vec3(light), 1.0);
+                // Default or identity — use directional lighting
+                float vcSum = vColor.r + vColor.g + vColor.b;
+                if (vcSum > 0.01) {
+                    oColor = texColor * vColor;
+                } else {
+                    float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
+                    float light = 0.3 + 0.7 * ndl;
+                    oColor = texColor * vec4(vec3(light), 1.0);
+                }
             }
+            oColor *= uColor;
             oColor.a = texColor.a * uColor.a;
         }
         """;
@@ -110,6 +174,12 @@ public sealed unsafe class BspRenderer : IDisposable
         _texDiffuseLoc = _gl.GetUniformLocation(_program, "uTexDiffuse");
         _texLightmapLoc = _gl.GetUniformLocation(_program, "uTexLightmap");
         _alphaFuncLoc = _gl.GetUniformLocation(_program, "uAlphaFunc");
+        _envMapLoc = _gl.GetUniformLocation(_program, "uEnvMap");
+        _viewPosLoc = _gl.GetUniformLocation(_program, "uViewPos");
+        _timeLoc = _gl.GetUniformLocation(_program, "uTime");
+        _tcModCountLoc = _gl.GetUniformLocation(_program, "uTcModCount");
+        _tcModLoc = _gl.GetUniformLocation(_program, "uTcMod");
+        _rgbGenLoc = _gl.GetUniformLocation(_program, "uRgbGen");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -211,12 +281,15 @@ public sealed unsafe class BspRenderer : IDisposable
     /// Renders opaque surfaces first, then transparent surfaces in a second pass.
     /// </summary>
     public void Render(float* mvp, float viewX, float viewY, float viewZ,
-                       ShaderManager shaders)
+                       ShaderManager shaders, float timeSec)
     {
         if (_world == null) return;
 
         _frameCount++;
         _transparentSurfaces.Clear();
+        _viewX = viewX;
+        _viewY = viewY;
+        _viewZ = viewZ;
 
         _gl.UseProgram(_program);
         _gl.UniformMatrix4(_mvpLoc, 1, false, mvp);
@@ -224,6 +297,12 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform3(_lightDirLoc, 0.57735f, 0.57735f, 0.57735f);
         _gl.Uniform1(_texDiffuseLoc, 0);
         _gl.Uniform1(_texLightmapLoc, 1);
+        _gl.Uniform1(_envMapLoc, 0);
+        _gl.Uniform3(_viewPosLoc, viewX, viewY, viewZ);
+        _gl.Uniform1(_timeLoc, timeSec);
+        _gl.Uniform1(_tcModCountLoc, 0);
+
+        ExtractFrustumPlanes(mvp);
 
         _gl.BindVertexArray(_vao);
         _gl.Enable(EnableCap.DepthTest);
@@ -279,6 +358,11 @@ public sealed unsafe class BspRenderer : IDisposable
             if (leaf.Cluster >= 0 && !_world.ClusterVisible(cameraCluster, leaf.Cluster))
                 return;
 
+            // Frustum cull leaf bounding box
+            if (!BoxInFrustum(leaf.MinX, leaf.MinY, leaf.MinZ,
+                              leaf.MaxX, leaf.MaxY, leaf.MaxZ))
+                return;
+
             // Draw all surfaces in this leaf
             for (int i = 0; i < leaf.NumLeafSurfaces; i++)
             {
@@ -298,7 +382,12 @@ public sealed unsafe class BspRenderer : IDisposable
 
         ref var node = ref _world.Nodes[nodeIdx];
 
-        // Traverse both children (front first would be ideal but both works)
+        // Frustum cull node bounding box
+        if (!BoxInFrustum(node.MinX, node.MinY, node.MinZ,
+                          node.MaxX, node.MaxY, node.MaxZ))
+            return;
+
+        // Traverse both children
         WalkBspTree(node.Child0, cameraCluster, shaders);
         WalkBspTree(node.Child1, cameraCluster, shaders);
     }
@@ -374,10 +463,122 @@ public sealed unsafe class BspRenderer : IDisposable
         // Set alpha test mode
         _gl.Uniform1(_alphaFuncLoc, alphaFunc);
 
+        // Per-surface rgbGen
+        int rgbGen = shaders.GetRgbGen(surf.ShaderHandle);
+        _gl.Uniform1(_rgbGenLoc, rgbGen);
+
+        // Per-surface environment mapping
+        bool envMap = shaders.GetHasEnvMap(surf.ShaderHandle);
+        _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
+
+        // Per-surface tcMod
+        TcMod[]? tcMods = shaders.GetTcMods(surf.ShaderHandle);
+        if (tcMods != null && tcMods.Length > 0)
+        {
+            int count = Math.Min(tcMods.Length, 4);
+            _gl.Uniform1(_tcModCountLoc, count);
+            for (int i = 0; i < count; i++)
+            {
+                ref var m = ref tcMods[i];
+                float typeF = (float)m.Type;
+                switch (m.Type)
+                {
+                    case TcModType.Scroll:
+                        _gl.Uniform4(_tcModLoc + i, 0f, m.Param0, m.Param1, 0f);
+                        break;
+                    case TcModType.Scale:
+                        _gl.Uniform4(_tcModLoc + i, 1f, m.Param0, m.Param1, 0f);
+                        break;
+                    case TcModType.Rotate:
+                        _gl.Uniform4(_tcModLoc + i, 2f, m.Param0, 0f, 0f);
+                        break;
+                    case TcModType.Turb:
+                        _gl.Uniform4(_tcModLoc + i, 3f, m.Param3, m.Param1, m.Param2);
+                        break;
+                    default:
+                        _gl.Uniform4(_tcModLoc + i, -1f, 0f, 0f, 0f);
+                        break;
+                }
+            }
+        }
+        else
+        {
+            _gl.Uniform1(_tcModCountLoc, 0);
+        }
+
+        // Per-surface cull mode
+        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+        if (cullMode == 2) // none/twosided
+            _gl.Disable(EnableCap.CullFace);
+        else if (cullMode == 1) // back
+            _gl.CullFace(TriangleFace.Back);
+        // else cullMode == 0 → front (already set as default)
+
         _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
             (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
             (void*)(surf.FirstIndex * sizeof(int)),
             surf.FirstVertex);
+
+        // Restore default cull state
+        if (cullMode != 0)
+        {
+            _gl.Enable(EnableCap.CullFace);
+            _gl.CullFace(TriangleFace.Front);
+        }
+    }
+
+    /// <summary>
+    /// Extract 6 frustum planes from the MVP matrix (column-major).
+    /// Each plane: nx, ny, nz, d where nx*x + ny*y + nz*z + d >= 0 means inside.
+    /// </summary>
+    private void ExtractFrustumPlanes(float* m)
+    {
+        // Left:   row3 + row0
+        SetPlane(0, m[3]+m[0], m[7]+m[4], m[11]+m[8], m[15]+m[12]);
+        // Right:  row3 - row0
+        SetPlane(1, m[3]-m[0], m[7]-m[4], m[11]-m[8], m[15]-m[12]);
+        // Bottom: row3 + row1
+        SetPlane(2, m[3]+m[1], m[7]+m[5], m[11]+m[9], m[15]+m[13]);
+        // Top:    row3 - row1
+        SetPlane(3, m[3]-m[1], m[7]-m[5], m[11]-m[9], m[15]-m[13]);
+        // Near:   row3 + row2
+        SetPlane(4, m[3]+m[2], m[7]+m[6], m[11]+m[10], m[15]+m[14]);
+        // Far:    row3 - row2
+        SetPlane(5, m[3]-m[2], m[7]-m[6], m[11]-m[10], m[15]-m[14]);
+    }
+
+    private void SetPlane(int idx, float a, float b, float c, float d)
+    {
+        float len = MathF.Sqrt(a*a + b*b + c*c);
+        if (len > 0.0001f)
+        {
+            float inv = 1.0f / len;
+            _frustum[idx*4]   = a * inv;
+            _frustum[idx*4+1] = b * inv;
+            _frustum[idx*4+2] = c * inv;
+            _frustum[idx*4+3] = d * inv;
+        }
+    }
+
+    /// <summary>
+    /// Test if an AABB is at least partially inside the frustum.
+    /// Returns true if visible (not fully outside any plane).
+    /// </summary>
+    private bool BoxInFrustum(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
+    {
+        for (int i = 0; i < 6; i++)
+        {
+            float nx = _frustum[i*4], ny = _frustum[i*4+1], nz = _frustum[i*4+2], d = _frustum[i*4+3];
+
+            // Find the corner of the AABB most in the direction of the plane normal (p-vertex)
+            float px = nx >= 0 ? maxX : minX;
+            float py = ny >= 0 ? maxY : minY;
+            float pz = nz >= 0 ? maxZ : minZ;
+
+            if (nx*px + ny*py + nz*pz + d < 0)
+                return false; // Entirely outside this plane
+        }
+        return true;
     }
 
     private uint CreateProgram()

@@ -260,9 +260,14 @@ public sealed unsafe class SceneManager
         float fovY = *(float*)(refdefPtr + 20);
         float* viewOrg = (float*)(refdefPtr + 24);
         float* viewAxis = (float*)(refdefPtr + 36);
+        int time = *(int*)(refdefPtr + 72);
         int rdflags = *(int*)(refdefPtr + 76);
 
         if (width <= 0 || height <= 0) return;
+
+        // Update shader manager time for animated textures
+        if (_shaders != null)
+            _shaders.CurrentTimeMs = time;
 
         bool noWorldModel = (rdflags & RDF_NOWORLDMODEL) != 0;
         bool hasWorld = !noWorldModel && _bspWorld != null && _bspRenderer != null;
@@ -305,7 +310,7 @@ public sealed unsafe class SceneManager
         {
             fixed (float* vpPtr = vp)
             {
-                _bspRenderer!.Render(vpPtr, viewOrg[0], viewOrg[1], viewOrg[2], _shaders);
+                _bspRenderer!.Render(vpPtr, viewOrg[0], viewOrg[1], viewOrg[2], _shaders, time / 1000.0f);
             }
         }
 
@@ -344,6 +349,7 @@ public sealed unsafe class SceneManager
                         shaderHandle = surface.ShaderHandle;
                     }
                     uint texId = _shaders.GetTextureId(shaderHandle);
+                    bool envMap = _shaders.GetHasEnvMap(shaderHandle);
 
                     float r = ent.R > 0 ? ent.R : 1.0f;
                     float g = ent.G > 0 ? ent.G : 1.0f;
@@ -354,7 +360,8 @@ public sealed unsafe class SceneManager
                     fixed (float* modelPtr = modelMat)
                     {
                         _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
-                            mvpPtr, modelPtr, texId, r, g, b, a);
+                            mvpPtr, modelPtr, texId, r, g, b, a,
+                            envMap, viewOrg[0], viewOrg[1], viewOrg[2]);
                     }
                 }
             }

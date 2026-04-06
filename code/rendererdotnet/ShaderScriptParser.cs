@@ -142,6 +142,10 @@ public sealed unsafe class ShaderScriptParser
         bool allStagesEnvMap = true; // track if ALL stages use tcGen environment
         int stageCount = 0;
         int alphaFunc = 0; // 0=none, 1=GT0, 2=LT128, 3=GE128
+        int cullMode = 0;  // 0=front (default Q3), 1=back, 2=none/twosided
+        bool hasEnvMap = false; // any stage uses tcGen environment
+        string[]? animFrames = null;
+        float animFrequency = 0;
 
         // Per-stage tracking
         string? stageImage = null;
@@ -149,6 +153,14 @@ public sealed unsafe class ShaderScriptParser
         BlendMode stageBlend = BlendMode.Opaque;
         bool stageHasEnvMap = false;
         int stageAlphaFunc = 0;
+        string[]? stageAnimFrames = null;
+        float stageAnimFrequency = 0;
+        var stageTcMods = new List<TcMod>();
+        TcMod[]? tcMods = null;
+        int stageRgbGen = 0;
+        int stageAlphaGen = 0;
+        int rgbGen = 0;
+        int alphaGen = 0;
 
         while (depth > 0 && tokenizer.HasMore())
         {
@@ -166,6 +178,11 @@ public sealed unsafe class ShaderScriptParser
                     stageBlend = BlendMode.Opaque;
                     stageHasEnvMap = false;
                     stageAlphaFunc = 0;
+                    stageAnimFrames = null;
+                    stageAnimFrequency = 0;
+                    stageTcMods.Clear();
+                    stageRgbGen = 0;
+                    stageAlphaGen = 0;
                 }
                 continue;
             }
@@ -197,6 +214,20 @@ public sealed unsafe class ShaderScriptParser
                     // Capture alphaFunc from any stage (first one wins)
                     if (alphaFunc == 0 && stageAlphaFunc != 0)
                         alphaFunc = stageAlphaFunc;
+                    // Capture animMap frames from first animated stage
+                    if (animFrames == null && stageAnimFrames != null)
+                    {
+                        animFrames = stageAnimFrames;
+                        animFrequency = stageAnimFrequency;
+                    }
+                    // Capture tcMod from first usable stage
+                    if (tcMods == null && stageTcMods.Count > 0)
+                        tcMods = stageTcMods.ToArray();
+                    // Capture rgbGen/alphaGen from first usable stage
+                    if (rgbGen == 0 && stageRgbGen != 0)
+                        rgbGen = stageRgbGen;
+                    if (alphaGen == 0 && stageAlphaGen != 0)
+                        alphaGen = stageAlphaGen;
                 }
 
                 depth--;
@@ -226,6 +257,20 @@ public sealed unsafe class ShaderScriptParser
                     if (parm != null && string.Equals(parm, "trans", StringComparison.OrdinalIgnoreCase))
                         isTransparent = true;
                 }
+                else if (string.Equals(token, "cull", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? cullToken = tokenizer.NextToken();
+                    if (cullToken != null)
+                    {
+                        if (string.Equals(cullToken, "none", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(cullToken, "twosided", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(cullToken, "disable", StringComparison.OrdinalIgnoreCase))
+                            cullMode = 2;
+                        else if (string.Equals(cullToken, "back", StringComparison.OrdinalIgnoreCase) ||
+                                 string.Equals(cullToken, "backside", StringComparison.OrdinalIgnoreCase))
+                            cullMode = 1;
+                    }
+                }
             }
 
             // Parse directives inside stages (depth == 2)
@@ -248,10 +293,36 @@ public sealed unsafe class ShaderScriptParser
                 }
                 else if (string.Equals(token, "animMap", StringComparison.OrdinalIgnoreCase))
                 {
-                    tokenizer.NextToken(); // skip frequency
-                    string? firstFrame = tokenizer.NextToken();
-                    if (firstFrame != null && !IsSpecialMap(firstFrame) && stageImage == null)
-                        stageImage = firstFrame;
+                    string? freqToken = tokenizer.NextToken();
+                    float animFreq = 0;
+                    if (freqToken != null)
+                        float.TryParse(freqToken, System.Globalization.CultureInfo.InvariantCulture, out animFreq);
+
+                    // Collect all frame paths until end of line (next token that starts a new directive)
+                    var frames = new List<string>();
+                    while (true)
+                    {
+                        string? frameToken = tokenizer.NextToken();
+                        if (frameToken == null || frameToken == "{" || frameToken == "}")
+                            break;
+                        // If token looks like a directive keyword, we've gone too far
+                        if (IsStageDirective(frameToken))
+                        {
+                            // Push back by storing for next iteration — can't push back with tokenizer
+                            // so just stop collecting frames here
+                            break;
+                        }
+                        frames.Add(frameToken);
+                    }
+
+                    if (frames.Count > 0 && stageImage == null)
+                        stageImage = frames[0];
+
+                    if (frames.Count > 1 && stageAnimFrames == null)
+                    {
+                        stageAnimFrames = frames.ToArray();
+                        stageAnimFrequency = animFreq;
+                    }
                 }
                 else if (string.Equals(token, "blendFunc", StringComparison.OrdinalIgnoreCase))
                 {
@@ -261,7 +332,10 @@ public sealed unsafe class ShaderScriptParser
                 {
                     string? tcGenToken = tokenizer.NextToken();
                     if (tcGenToken != null && string.Equals(tcGenToken, "environment", StringComparison.OrdinalIgnoreCase))
+                    {
                         stageHasEnvMap = true;
+                        hasEnvMap = true;
+                    }
                 }
                 else if (string.Equals(token, "alphaFunc", StringComparison.OrdinalIgnoreCase))
                 {
@@ -274,6 +348,41 @@ public sealed unsafe class ShaderScriptParser
                             stageAlphaFunc = 2;
                         else if (string.Equals(funcToken, "GE128", StringComparison.OrdinalIgnoreCase))
                             stageAlphaFunc = 3;
+                    }
+                }
+                else if (string.Equals(token, "tcMod", StringComparison.OrdinalIgnoreCase))
+                {
+                    var tcMod = ParseTcMod(ref tokenizer);
+                    if (tcMod.HasValue)
+                        stageTcMods.Add(tcMod.Value);
+                }
+                else if (string.Equals(token, "rgbGen", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? rgbToken = tokenizer.NextToken();
+                    if (rgbToken != null)
+                    {
+                        if (string.Equals(rgbToken, "vertex", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(rgbToken, "exactVertex", StringComparison.OrdinalIgnoreCase))
+                            stageRgbGen = 1;
+                        else if (string.Equals(rgbToken, "entity", StringComparison.OrdinalIgnoreCase))
+                            stageRgbGen = 2;
+                        else if (string.Equals(rgbToken, "wave", StringComparison.OrdinalIgnoreCase))
+                            stageRgbGen = 3;
+                        else if (string.Equals(rgbToken, "identityLighting", StringComparison.OrdinalIgnoreCase))
+                            stageRgbGen = 4;
+                    }
+                }
+                else if (string.Equals(token, "alphaGen", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? alphaToken = tokenizer.NextToken();
+                    if (alphaToken != null)
+                    {
+                        if (string.Equals(alphaToken, "vertex", StringComparison.OrdinalIgnoreCase))
+                            stageAlphaGen = 1;
+                        else if (string.Equals(alphaToken, "entity", StringComparison.OrdinalIgnoreCase))
+                            stageAlphaGen = 2;
+                        else if (string.Equals(alphaToken, "wave", StringComparison.OrdinalIgnoreCase))
+                            stageAlphaGen = 3;
                     }
                 }
             }
@@ -300,7 +409,14 @@ public sealed unsafe class ShaderScriptParser
             Blend = blend,
             SkyBox = skyBox,
             IsTransparent = isTransparent,
-            AlphaFunc = alphaFunc
+            AlphaFunc = alphaFunc,
+            CullMode = cullMode,
+            HasEnvMap = hasEnvMap,
+            AnimFrames = animFrames,
+            AnimFrequency = animFrequency,
+            TcMods = tcMods,
+            RgbGen = rgbGen,
+            AlphaGen = alphaGen
         };
     }
 
@@ -354,6 +470,93 @@ public sealed unsafe class ShaderScriptParser
                string.Equals(token, "$lightmap", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(token, "$whiteimage", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(token, "$deluxemap", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsStageDirective(string token)
+    {
+        return string.Equals(token, "map", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "clampMap", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "animMap", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "blendFunc", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "alphaFunc", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "tcGen", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "tcMod", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "rgbGen", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "alphaGen", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "depthFunc", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "depthWrite", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TcMod? ParseTcMod(ref ShaderTokenizer tokenizer)
+    {
+        string? type = tokenizer.NextToken();
+        if (type == null) return null;
+
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+
+        if (string.Equals(type, "scroll", StringComparison.OrdinalIgnoreCase))
+        {
+            string? s = tokenizer.NextToken();
+            string? t = tokenizer.NextToken();
+            float sSpeed = 0, tSpeed = 0;
+            if (s != null) float.TryParse(s, ci, out sSpeed);
+            if (t != null) float.TryParse(t, ci, out tSpeed);
+            return new TcMod { Type = TcModType.Scroll, Param0 = sSpeed, Param1 = tSpeed };
+        }
+        else if (string.Equals(type, "scale", StringComparison.OrdinalIgnoreCase))
+        {
+            string? s = tokenizer.NextToken();
+            string? t = tokenizer.NextToken();
+            float sScale = 1, tScale = 1;
+            if (s != null) float.TryParse(s, ci, out sScale);
+            if (t != null) float.TryParse(t, ci, out tScale);
+            return new TcMod { Type = TcModType.Scale, Param0 = sScale, Param1 = tScale };
+        }
+        else if (string.Equals(type, "rotate", StringComparison.OrdinalIgnoreCase))
+        {
+            string? d = tokenizer.NextToken();
+            float deg = 0;
+            if (d != null) float.TryParse(d, ci, out deg);
+            return new TcMod { Type = TcModType.Rotate, Param0 = deg };
+        }
+        else if (string.Equals(type, "turb", StringComparison.OrdinalIgnoreCase))
+        {
+            string? b = tokenizer.NextToken();
+            string? a = tokenizer.NextToken();
+            string? p = tokenizer.NextToken();
+            string? f = tokenizer.NextToken();
+            float ba = 0, am = 0, ph = 0, fr = 0;
+            if (b != null) float.TryParse(b, ci, out ba);
+            if (a != null) float.TryParse(a, ci, out am);
+            if (p != null) float.TryParse(p, ci, out ph);
+            if (f != null) float.TryParse(f, ci, out fr);
+            return new TcMod { Type = TcModType.Turb, Param0 = ba, Param1 = am, Param2 = ph, Param3 = fr };
+        }
+        else if (string.Equals(type, "stretch", StringComparison.OrdinalIgnoreCase))
+        {
+            string? funcName = tokenizer.NextToken();
+            int waveFunc = 0; // 0=sin, 1=triangle, 2=square, 3=sawtooth, 4=inverseSawtooth
+            if (funcName != null)
+            {
+                if (string.Equals(funcName, "triangle", StringComparison.OrdinalIgnoreCase)) waveFunc = 1;
+                else if (string.Equals(funcName, "square", StringComparison.OrdinalIgnoreCase)) waveFunc = 2;
+                else if (string.Equals(funcName, "sawtooth", StringComparison.OrdinalIgnoreCase)) waveFunc = 3;
+                else if (string.Equals(funcName, "inverseSawtooth", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(funcName, "inversesawtooth", StringComparison.OrdinalIgnoreCase)) waveFunc = 4;
+            }
+            string? sb = tokenizer.NextToken();
+            string? sa = tokenizer.NextToken();
+            string? sp = tokenizer.NextToken();
+            string? sf = tokenizer.NextToken();
+            float ba2 = 0, am2 = 0, ph2 = 0, fr2 = 0;
+            if (sb != null) float.TryParse(sb, ci, out ba2);
+            if (sa != null) float.TryParse(sa, ci, out am2);
+            if (sp != null) float.TryParse(sp, ci, out ph2);
+            if (sf != null) float.TryParse(sf, ci, out fr2);
+            return new TcMod { Type = TcModType.Stretch, Param0 = waveFunc, Param1 = ba2, Param2 = am2, Param3 = ph2, Param4 = fr2 };
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -480,6 +683,45 @@ public sealed class ShaderDef
 
     /// <summary>Alpha test function: 0=none, 1=GT0 (alpha>0), 2=LT128 (alpha&lt;0.5), 3=GE128 (alpha>=0.5).</summary>
     public int AlphaFunc { get; init; }
+
+    /// <summary>Cull mode: 0=front (default Q3), 1=back, 2=none/twosided.</summary>
+    public int CullMode { get; init; }
+
+    /// <summary>Whether any stage uses tcGen environment (reflection mapping).</summary>
+    public bool HasEnvMap { get; init; }
+
+    /// <summary>Animation frame image paths (null if not animated).</summary>
+    public string[]? AnimFrames { get; init; }
+
+    /// <summary>Animation frequency in frames per second.</summary>
+    public float AnimFrequency { get; init; }
+
+    /// <summary>List of tcMod operations to apply in order (null if none).</summary>
+    public TcMod[]? TcMods { get; init; }
+
+    /// <summary>RGB generation mode: 0=identity (default), 1=vertex, 2=entity, 3=wave, 4=identityLighting.</summary>
+    public int RgbGen { get; init; }
+
+    /// <summary>Alpha generation mode: 0=identity (default), 1=vertex, 2=entity, 3=wave.</summary>
+    public int AlphaGen { get; init; }
+}
+
+/// <summary>
+/// Represents a single tcMod operation from a Q3 shader script.
+/// </summary>
+public struct TcMod
+{
+    public TcModType Type;
+    public float Param0, Param1, Param2, Param3, Param4, Param5;
+}
+
+public enum TcModType
+{
+    Scroll,   // Param0=sSpeed, Param1=tSpeed
+    Scale,    // Param0=sScale, Param1=tScale
+    Rotate,   // Param0=degreesPerSecond
+    Turb,     // Param0=base, Param1=amplitude, Param2=phase, Param3=frequency
+    Stretch,  // Param0=waveFunc, Param1=base, Param2=amplitude, Param3=phase, Param4=frequency
 }
 
 /// <summary>
