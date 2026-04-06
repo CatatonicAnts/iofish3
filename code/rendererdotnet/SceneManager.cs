@@ -15,12 +15,14 @@ public sealed unsafe class SceneManager
     private readonly List<SceneEntity> _entities = new(256);
     private ModelManager? _models;
     private ShaderManager? _shaders;
+    private SkinManager? _skins;
     private Renderer3D? _renderer3D;
 
-    public void Init(ModelManager models, ShaderManager shaders, Renderer3D renderer3D)
+    public void Init(ModelManager models, ShaderManager shaders, SkinManager skins, Renderer3D renderer3D)
     {
         _models = models;
         _shaders = shaders;
+        _skins = skins;
         _renderer3D = renderer3D;
     }
 
@@ -70,6 +72,7 @@ public sealed unsafe class SceneManager
             Frame = *(int*)(entityPtr + 80),
             OldFrame = *(int*)(entityPtr + 96),
             BackLerp = *(float*)(entityPtr + 100),
+            CustomSkin = *(int*)(entityPtr + 108),
             CustomShader = *(int*)(entityPtr + 112),
         };
 
@@ -153,8 +156,21 @@ public sealed unsafe class SceneManager
 
             foreach (var surface in model.Surfaces)
             {
-                // Determine texture
-                int shaderHandle = ent.CustomShader > 0 ? ent.CustomShader : surface.ShaderHandle;
+                // Determine texture: customShader > customSkin > surface default
+                int shaderHandle;
+                if (ent.CustomShader > 0)
+                {
+                    shaderHandle = ent.CustomShader;
+                }
+                else if (ent.CustomSkin > 0 && _skins != null)
+                {
+                    int skinSh = _skins.GetSurfaceShader(ent.CustomSkin, surface.Name);
+                    shaderHandle = skinSh > 0 ? skinSh : surface.ShaderHandle;
+                }
+                else
+                {
+                    shaderHandle = surface.ShaderHandle;
+                }
                 uint texId = _shaders.GetTextureId(shaderHandle);
 
                 float r = ent.R > 0 ? ent.R : 1.0f;
@@ -251,6 +267,7 @@ internal unsafe struct SceneEntity
     public int Frame;
     public int OldFrame;
     public float BackLerp;
+    public int CustomSkin;
     public int CustomShader;
 
     public float OriginX, OriginY, OriginZ;

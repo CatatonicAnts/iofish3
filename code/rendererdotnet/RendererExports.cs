@@ -37,6 +37,7 @@ public static unsafe class RendererExports
     private static Renderer2D? _renderer2D;
     private static Renderer3D? _renderer3D;
     private static ShaderManager? _shaders;
+    private static SkinManager? _skins;
     private static Models.ModelManager? _models;
     private static SceneManager? _scene;
 
@@ -59,16 +60,18 @@ public static unsafe class RendererExports
     {
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] Renderer shutdown\n");
 
+        // Always clean up subsystems
+        _scene = null;
+        _models = null;
+        _skins = null;
+        _renderer3D?.Dispose();
+        _renderer3D = null;
+        _renderer2D?.Dispose();
+        _renderer2D = null;
+        _shaders = null;
+
         if (destroyWindow != 0)
         {
-            _scene = null;
-            _models = null;
-            _renderer3D?.Dispose();
-            _renderer3D = null;
-            _renderer2D?.Dispose();
-            _renderer2D = null;
-            _shaders = null;
-
             _gl?.Dispose();
             _gl = null;
 
@@ -90,67 +93,79 @@ public static unsafe class RendererExports
     {
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] ----- R_Init (.NET Renderer) -----\n");
 
-        _sdl = Sdl.GetApi();
-        _sdl.Init(Sdl.InitVideo);
-
-        _sdl.GLSetAttribute(GLattr.ContextMajorVersion, 4);
-        _sdl.GLSetAttribute(GLattr.ContextMinorVersion, 5);
-        _sdl.GLSetAttribute(GLattr.ContextProfileMask, (int)GLprofile.Core);
-        _sdl.GLSetAttribute(GLattr.RedSize, 8);
-        _sdl.GLSetAttribute(GLattr.GreenSize, 8);
-        _sdl.GLSetAttribute(GLattr.BlueSize, 8);
-        _sdl.GLSetAttribute(GLattr.AlphaSize, 8);
-        _sdl.GLSetAttribute(GLattr.DepthSize, 24);
-        _sdl.GLSetAttribute(GLattr.StencilSize, 8);
-        _sdl.GLSetAttribute(GLattr.Doublebuffer, 1);
-
-        _window = _sdl.CreateWindow(
-            "ioquake3 (.NET Renderer)",
-            Sdl.WindowposCentered, Sdl.WindowposCentered,
-            WIDTH, HEIGHT,
-            (uint)(WindowFlags.Opengl | WindowFlags.Shown));
-
+        // Only create SDL window + GL context if we don't already have one
         if (_window == null)
         {
-            EngineImports.Printf(EngineImports.PRINT_ERROR,
-                "[.NET] SDL_CreateWindow failed\n");
-            return;
-        }
+            _sdl = Sdl.GetApi();
+            _sdl.Init(Sdl.InitVideo);
 
-        _glContext = _sdl.GLCreateContext(_window);
-        if (_glContext == null)
+            _sdl.GLSetAttribute(GLattr.ContextMajorVersion, 4);
+            _sdl.GLSetAttribute(GLattr.ContextMinorVersion, 5);
+            _sdl.GLSetAttribute(GLattr.ContextProfileMask, (int)GLprofile.Core);
+            _sdl.GLSetAttribute(GLattr.RedSize, 8);
+            _sdl.GLSetAttribute(GLattr.GreenSize, 8);
+            _sdl.GLSetAttribute(GLattr.BlueSize, 8);
+            _sdl.GLSetAttribute(GLattr.AlphaSize, 8);
+            _sdl.GLSetAttribute(GLattr.DepthSize, 24);
+            _sdl.GLSetAttribute(GLattr.StencilSize, 8);
+            _sdl.GLSetAttribute(GLattr.Doublebuffer, 1);
+
+            _window = _sdl.CreateWindow(
+                "ioquake3 (.NET Renderer)",
+                Sdl.WindowposCentered, Sdl.WindowposCentered,
+                WIDTH, HEIGHT,
+                (uint)(WindowFlags.Opengl | WindowFlags.Shown));
+
+            if (_window == null)
+            {
+                EngineImports.Printf(EngineImports.PRINT_ERROR,
+                    "[.NET] SDL_CreateWindow failed\n");
+                return;
+            }
+
+            _glContext = _sdl.GLCreateContext(_window);
+            if (_glContext == null)
+            {
+                EngineImports.Printf(EngineImports.PRINT_ERROR,
+                    "[.NET] SDL_GL_CreateContext failed\n");
+                _sdl.DestroyWindow(_window);
+                _window = null;
+                return;
+            }
+
+            _sdl.GLMakeCurrent(_window, _glContext);
+            _gl = GL.GetApi(new SdlGLContext(_sdl));
+
+            EngineImports.IN_Init((nint)_window);
+        }
+        else
         {
-            EngineImports.Printf(EngineImports.PRINT_ERROR,
-                "[.NET] SDL_GL_CreateContext failed\n");
-            _sdl.DestroyWindow(_window);
-            _window = null;
-            return;
+            EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] Reusing existing window\n");
+            _sdl!.GLMakeCurrent(_window, _glContext);
         }
 
-        _sdl.GLMakeCurrent(_window, _glContext);
-
-        _gl = GL.GetApi(new SdlGLContext(_sdl));
-
-        // Initialize 2D renderer and shader manager
+        // (Re)initialize subsystems — these are lightweight and safe to recreate
+        _renderer2D?.Dispose();
         _renderer2D = new Renderer2D();
-        _renderer2D.Init(_gl, WIDTH, HEIGHT);
+        _renderer2D.Init(_gl!, WIDTH, HEIGHT);
 
         _shaders = new ShaderManager();
         _shaders.WhiteTexture = _renderer2D.WhiteTexture;
         _shaders.SetRenderer(_renderer2D);
-
-        // Parse Q3 shader scripts so we can resolve shader names to image paths
         _shaders.LoadShaderScripts();
 
-        // Initialize 3D model renderer and managers
+        _skins = new SkinManager();
+        _skins.SetShaderManager(_shaders);
+
+        _renderer3D?.Dispose();
         _renderer3D = new Renderer3D();
-        _renderer3D.Init(_gl);
+        _renderer3D.Init(_gl!);
 
         _models = new Models.ModelManager();
         _models.SetShaderManager(_shaders);
 
         _scene = new SceneManager();
-        _scene.Init(_models, _shaders, _renderer3D);
+        _scene.Init(_models, _shaders, _skins, _renderer3D);
 
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
@@ -189,7 +204,10 @@ public static unsafe class RendererExports
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int RegisterSkin(byte* name) => 0;
+    public static int RegisterSkin(byte* name)
+    {
+        return _skins?.Register(name) ?? 0;
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int RegisterShader(byte* name)
