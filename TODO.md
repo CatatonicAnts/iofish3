@@ -96,8 +96,8 @@ The cgame DLL interface is:
 - [ ] **Local movement prediction** — Port CG_PredictPlayerState: client-side physics prediction using pmove, command replay for lag compensation. Critical for responsive movement. `CPX 5`
 - [x] **Event system** — Port CG_EntityEvent: sound triggers, visual effects, item pickups, deaths, jumppads, teleporters, footsteps, pain sounds, weapon switching. `CPX 4`
 - [x] **Console commands** — Port cgame console commands: say, tell, +scores, weapon selection, zoom, team overlay toggles, etc. `CPX 2`
-- [ ] **Marks / decals** — Port CG_ImpactMark: bullet holes, explosion scorch marks, blood splatters via MarkFragments API with fade-out timing. `CPX 3`
-- [ ] **Particle / local entity system** — Port CG_AddLocalEntities: brass casings, debris, blood trails, smoke puffs, sparks with physics simulation. `CPX 3`
+- [x] **Marks / decals** — Port CG_ImpactMark: bullet holes, explosion scorch marks, blood splatters via MarkFragments API with fade-out timing. `CPX 3`
+- [x] **Particle / local entity system** — Port CG_AddLocalEntities: brass casings, debris, blood trails, smoke puffs, sparks with physics simulation. `CPX 3`
 - [ ] **Sound integration** — Port CG_AddLoopingSound, entity sound triggers, positional audio, ambient sounds, announcer voice. `CPX 3`
 - [ ] **Default loading** — Modify engine to prefer `cgame_dotnet` DLL over QVM when `vm_cgame 0` is set. Add a cvar (e.g. `cl_cgame`) to select cgame implementation by name, similar to `cl_renderer` for renderers. `CPX 3`
 

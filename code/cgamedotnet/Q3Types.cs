@@ -501,3 +501,20 @@ public static class SoundChannel
     public const int CHAN_LOCAL_SOUND = 6;
     public const int CHAN_ANNOUNCER = 7;
 }
+
+// polyVert_t — 24 bytes (3 floats xyz + 2 floats st + 4 bytes modulate)
+[StructLayout(LayoutKind.Sequential)]
+public struct Q3PolyVert
+{
+    public float X, Y, Z;
+    public float S, T;
+    public byte R, G, B, A;
+}
+
+// markFragment_t — 8 bytes
+[StructLayout(LayoutKind.Sequential)]
+public struct Q3MarkFragment
+{
+    public int FirstPoint;
+    public int NumPoints;
+}

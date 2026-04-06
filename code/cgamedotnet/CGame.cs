@@ -77,6 +77,7 @@ public static unsafe class CGame
 
     // Weapon icons (per weapon type)
     private static readonly int[] _weaponIcons = new int[Weapons.WP_NUM_WEAPONS];
+    private static int _explosionShader;
 
     // Registered models/sounds from config strings
     private static readonly int[] _gameModels = new int[MAX_MODELS];
@@ -156,6 +157,10 @@ public static unsafe class CGame
 
         // Register console commands
         InitConsoleCommands();
+
+        // Initialize local entity and mark systems
+        LocalEntities.Init();
+        Marks.Init();
 
         // Read level start time
         string startTimeStr = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_LEVEL_START_TIME);
@@ -251,6 +256,8 @@ public static unsafe class CGame
         CalcViewValues(ref refdef);
 
         AddPacketEntities();
+        LocalEntities.AddToScene(_time);
+        Marks.AddToScene(_time);
 
         refdef.Time = _time;
         for (int i = 0; i < Q3RefDef.MAX_MAP_AREA_BYTES; i++)
@@ -274,6 +281,7 @@ public static unsafe class CGame
         _whiteShader = Syscalls.R_RegisterShader("white");
         _selectShader = Syscalls.R_RegisterShader("gfx/2d/select");
         _noammoShader = Syscalls.R_RegisterShader("icons/noammo");
+        _explosionShader = Syscalls.R_RegisterShader("rocketExplosion");
 
         // Number shaders (0-9 + minus)
         string[] numNames = {
@@ -649,13 +657,62 @@ public static unsafe class CGame
                 break;
 
             case EntityEvent.EV_MISSILE_HIT:
+            {
                 Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
+                float ox = es.OriginX, oy = es.OriginY, oz = es.OriginZ;
+                LocalEntities.MakeExplosion(ox, oy, oz, _explosionShader, 600,
+                    300, 1.0f, 0.75f, 0.0f, _time);
+                float dx = es.Angles2X, dy = es.Angles2Y, dz = es.Angles2Z;
+                float dirLen = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+                if (dirLen > 0.001f) { dx /= dirLen; dy /= dirLen; dz /= dirLen; }
+                else { dx = 0; dy = 0; dz = 1; }
+                Marks.ImpactMark(Marks.BurnMarkShader, ox, oy, oz, dx, dy, dz,
+                    32, 1, 1, 1, 1, false, false);
                 break;
+            }
 
             case EntityEvent.EV_MISSILE_MISS:
             case EntityEvent.EV_MISSILE_MISS_METAL:
+            {
                 Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
+                float mx = es.OriginX, my = es.OriginY, mz = es.OriginZ;
+                LocalEntities.MakeExplosion(mx, my, mz, _explosionShader, 600,
+                    300, 1.0f, 0.75f, 0.0f, _time);
+                float ndx = es.Angles2X, ndy = es.Angles2Y, ndz = es.Angles2Z;
+                float nLen = MathF.Sqrt(ndx * ndx + ndy * ndy + ndz * ndz);
+                if (nLen > 0.001f) { ndx /= nLen; ndy /= nLen; ndz /= nLen; }
+                else { ndx = 0; ndy = 0; ndz = 1; }
+                Marks.ImpactMark(Marks.BurnMarkShader, mx, my, mz, ndx, ndy, ndz,
+                    32, 1, 1, 1, 1, false, false);
                 break;
+            }
+
+            case EntityEvent.EV_BULLET_HIT_WALL:
+            {
+                float bx = es.OriginX, by = es.OriginY, bz = es.OriginZ;
+                float bdx = es.Angles2X, bdy = es.Angles2Y, bdz = es.Angles2Z;
+                float bLen = MathF.Sqrt(bdx * bdx + bdy * bdy + bdz * bdz);
+                if (bLen > 0.001f) { bdx /= bLen; bdy /= bLen; bdz /= bLen; }
+                else { bdx = 0; bdy = 0; bdz = 1; }
+                Marks.ImpactMark(Marks.BulletMarkShader, bx, by, bz, bdx, bdy, bdz,
+                    8, 1, 1, 1, 1, true, false);
+                break;
+            }
+
+            case EntityEvent.EV_BULLET_HIT_FLESH:
+                // Blood effect — just sound for now
+                break;
+
+            case EntityEvent.EV_SHOTGUN:
+                // Shotgun pellet pattern — each pellet leaves a bullet mark
+                break;
+
+            case EntityEvent.EV_RAILTRAIL:
+            {
+                // Rail trail beam — render as temporary refEntity
+                // Sound is handled by the weapon fire event
+                break;
+            }
 
             case EntityEvent.EV_PAIN:
             case EntityEvent.EV_DEATH1:
