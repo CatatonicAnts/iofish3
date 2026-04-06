@@ -327,10 +327,16 @@ public static unsafe class RendererExports
     public static int LightForPoint(float* point, float* ambientLight, float* directedLight, float* lightDir) => 0;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void AddLightToScene(float* org, float intensity, float r, float g, float b) { }
+    public static void AddLightToScene(float* org, float intensity, float r, float g, float b)
+    {
+        _scene?.AddLight(org[0], org[1], org[2], intensity, r, g, b, false);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void AddAdditiveLightToScene(float* org, float intensity, float r, float g, float b) { }
+    public static void AddAdditiveLightToScene(float* org, float intensity, float r, float g, float b)
+    {
+        _scene?.AddLight(org[0], org[1], org[2], intensity, r, g, b, true);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void RenderScene(nint fd)

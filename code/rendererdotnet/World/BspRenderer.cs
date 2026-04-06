@@ -59,6 +59,63 @@ public sealed unsafe class BspRenderer : IDisposable
     // Frustum planes for culling (6 planes, each: nx, ny, nz, d)
     private readonly float[] _frustum = new float[24]; // 6 * 4
 
+    // Dynamic lighting
+    private uint _dlightProgram;
+    private int _dlMvpLoc;
+    private int _dlLightOriginLoc;
+    private int _dlLightColorLoc;
+    private int _dlLightRadiusLoc;
+    private uint _dlightTexture; // radial falloff texture
+
+    // Surfaces drawn this frame (for dlight reuse)
+    private readonly List<int> _visibleSurfaceIndices = new(4096);
+
+    private const string DlightVertSrc = """
+        #version 450 core
+        layout(location = 0) in vec3 aPos;
+        layout(location = 1) in vec3 aNormal;
+
+        uniform mat4 uMVP;
+        uniform vec3 uLightOrigin;
+        uniform float uLightRadius;
+
+        out vec2 vDlightUV;
+        out float vDlightMod;
+
+        void main() {
+            gl_Position = uMVP * vec4(aPos, 1.0);
+
+            // Project light onto surface
+            vec3 dist = uLightOrigin - aPos;
+            float scale = 1.0 / uLightRadius;
+
+            // UV coords from XY distance (projected texture)
+            vDlightUV = dist.xy * scale * 0.5 + vec2(0.5);
+
+            // Modulate by surface normal facing and Z distance
+            float ndl = step(0.0, dot(normalize(dist), normalize(aNormal)));
+            float zFade = clamp(2.0 * (1.0 - abs(dist.z) * scale), 0.0, 1.0);
+            vDlightMod = ndl * zFade;
+        }
+        """;
+
+    private const string DlightFragSrc = """
+        #version 450 core
+        in vec2 vDlightUV;
+        in float vDlightMod;
+
+        uniform sampler2D uDlightTex;
+        uniform vec3 uLightColor;
+
+        out vec4 oColor;
+
+        void main() {
+            if (vDlightMod <= 0.0) discard;
+            vec4 dlTex = texture(uDlightTex, vDlightUV);
+            oColor = vec4(uLightColor * dlTex.r * vDlightMod, 1.0);
+        }
+        """;
+
     private const string VertSrc = """
         #version 450 core
         layout(location = 0) in vec3 aPos;
@@ -241,6 +298,20 @@ public sealed unsafe class BspRenderer : IDisposable
         _overbrightScaleLoc = _gl.GetUniformLocation(_program, "uOverbrightScale");
         _useLmUVLoc = _gl.GetUniformLocation(_program, "uUseLmUV");
 
+        // Dlight shader program
+        _dlightProgram = CreateDlightProgram();
+        _dlMvpLoc = _gl.GetUniformLocation(_dlightProgram, "uMVP");
+        _dlLightOriginLoc = _gl.GetUniformLocation(_dlightProgram, "uLightOrigin");
+        _dlLightColorLoc = _gl.GetUniformLocation(_dlightProgram, "uLightColor");
+        _dlLightRadiusLoc = _gl.GetUniformLocation(_dlightProgram, "uLightRadius");
+        int dlTexLoc = _gl.GetUniformLocation(_dlightProgram, "uDlightTex");
+        _gl.UseProgram(_dlightProgram);
+        _gl.Uniform1(dlTexLoc, 0);
+        _gl.UseProgram(0);
+
+        // Generate radial falloff texture for dlight projection
+        _dlightTexture = GenerateDlightTexture();
+
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
         _ebo = _gl.GenBuffer();
@@ -341,12 +412,14 @@ public sealed unsafe class BspRenderer : IDisposable
     /// Renders opaque surfaces first, then transparent surfaces in a second pass.
     /// </summary>
     public void Render(float* mvp, float viewX, float viewY, float viewZ,
-                       ShaderManager shaders, float timeSec)
+                       ShaderManager shaders, float timeSec,
+                       List<DLight>? dlights = null)
     {
         if (_world == null) return;
 
         _frameCount++;
         _transparentSurfaces.Clear();
+        _visibleSurfaceIndices.Clear();
         _viewX = viewX;
         _viewY = viewY;
         _viewZ = viewZ;
@@ -404,6 +477,12 @@ public sealed unsafe class BspRenderer : IDisposable
 
             _gl.DepthMask(true);
             _gl.Disable(EnableCap.Blend);
+        }
+
+        // Dynamic lighting pass: redraw visible surfaces with additive light
+        if (dlights != null && dlights.Count > 0 && _visibleSurfaceIndices.Count > 0)
+        {
+            RenderDlights(mvp, dlights);
         }
 
         _gl.BindVertexArray(0);
@@ -608,6 +687,7 @@ public sealed unsafe class BspRenderer : IDisposable
         }
 
         DrawSurfaceGeometry(ref surf, shaders, 0);
+        _visibleSurfaceIndices.Add(surfIdx);
     }
 
     private const int CONTENTS_TRANSLUCENT = 0x20000000;
@@ -1033,12 +1113,144 @@ public sealed unsafe class BspRenderer : IDisposable
         return s;
     }
 
+    /// <summary>
+    /// Create the shader program for dynamic light projection.
+    /// </summary>
+    private uint CreateDlightProgram()
+    {
+        uint vs = Compile(ShaderType.VertexShader, DlightVertSrc);
+        uint fs = Compile(ShaderType.FragmentShader, DlightFragSrc);
+
+        uint prog = _gl.CreateProgram();
+        _gl.AttachShader(prog, vs);
+        _gl.AttachShader(prog, fs);
+        _gl.LinkProgram(prog);
+
+        _gl.GetProgram(prog, ProgramPropertyARB.LinkStatus, out int ok);
+        if (ok == 0)
+        {
+            string log = _gl.GetProgramInfoLog(prog);
+            EngineImports.Printf(EngineImports.PRINT_ERROR,
+                $"[.NET] Dlight shader link error: {log}\n");
+        }
+
+        _gl.DeleteShader(vs);
+        _gl.DeleteShader(fs);
+        return prog;
+    }
+
+    /// <summary>
+    /// Generate a 64x64 radial falloff texture for dlight projection.
+    /// Intensity = max(0, 1 - dist²) where dist is distance from center (0..1).
+    /// </summary>
+    private uint GenerateDlightTexture()
+    {
+        const int size = 64;
+        byte[] pixels = new byte[size * size];
+
+        float halfSize = size * 0.5f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x + 0.5f - halfSize) / halfSize;
+                float dy = (y + 0.5f - halfSize) / halfSize;
+                float distSq = dx * dx + dy * dy;
+                float intensity = MathF.Max(0f, 1f - distSq);
+                pixels[y * size + x] = (byte)(intensity * 255f);
+            }
+        }
+
+        uint tex = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, tex);
+        fixed (byte* ptr = pixels)
+        {
+            _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.R8, size, size,
+                0, PixelFormat.Red, PixelType.UnsignedByte, ptr);
+        }
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+        _gl.BindTexture(TextureTarget.Texture2D, 0);
+
+        return tex;
+    }
+
+    /// <summary>
+    /// Render dynamic lights by redrawing visible opaque surfaces with additive blending.
+    /// Each light projects a radial falloff texture onto nearby surfaces.
+    /// </summary>
+    private void RenderDlights(float* mvp, List<DLight> dlights)
+    {
+        if (_world == null) return;
+
+        _gl.UseProgram(_dlightProgram);
+        _gl.UniformMatrix4(_dlMvpLoc, 1, false, mvp);
+
+        // Additive blending, depth test equal, no depth writes
+        _gl.Enable(EnableCap.Blend);
+        _gl.DepthMask(false);
+        _gl.DepthFunc(DepthFunction.Lequal);
+
+        // Bind dlight falloff texture
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _dlightTexture);
+
+        foreach (var dlight in dlights)
+        {
+            // Set blend mode: additive for additive lights, modulative otherwise
+            if (dlight.Additive)
+                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+            else
+                _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.One);
+
+            // Set per-light uniforms
+            _gl.Uniform3(_dlLightOriginLoc, dlight.OriginX, dlight.OriginY, dlight.OriginZ);
+            _gl.Uniform3(_dlLightColorLoc, dlight.R, dlight.G, dlight.B);
+            _gl.Uniform1(_dlLightRadiusLoc, dlight.Radius);
+
+            float radiusSq = dlight.Radius * dlight.Radius;
+
+            // Draw each visible surface that is within this light's radius
+            foreach (int surfIdx in _visibleSurfaceIndices)
+            {
+                ref var surf = ref _world.Surfaces[surfIdx];
+                if (surf.NumIndices == 0) continue;
+
+                // Quick bounds check: test first vertex of surface against light radius
+                if (surf.FirstVertex < _world.Vertices.Length)
+                {
+                    ref var v = ref _world.Vertices[surf.FirstVertex];
+                    float dx = v.X - dlight.OriginX;
+                    float dy = v.Y - dlight.OriginY;
+                    float dz = v.Z - dlight.OriginZ;
+                    if (dx * dx + dy * dy + dz * dz > radiusSq * 4f) // generous radius
+                        continue;
+                }
+
+                _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
+                    (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
+                    (void*)(surf.FirstIndex * sizeof(int)),
+                    surf.FirstVertex);
+            }
+        }
+
+        // Restore state
+        _gl.DepthMask(true);
+        _gl.DepthFunc(DepthFunction.Lequal);
+        _gl.Disable(EnableCap.Blend);
+        _gl.UseProgram(_program); // switch back to main program
+    }
+
     public void Dispose()
     {
         foreach (uint tex in _lightmapTextures)
             if (tex != 0) _gl.DeleteTexture(tex);
         _lightmapTextures = [];
 
+        if (_dlightTexture != 0) { _gl.DeleteTexture(_dlightTexture); _dlightTexture = 0; }
+        if (_dlightProgram != 0) { _gl.DeleteProgram(_dlightProgram); _dlightProgram = 0; }
         if (_ebo != 0) { _gl.DeleteBuffer(_ebo); _ebo = 0; }
         if (_vbo != 0) { _gl.DeleteBuffer(_vbo); _vbo = 0; }
         if (_vao != 0) { _gl.DeleteVertexArray(_vao); _vao = 0; }

@@ -14,6 +14,7 @@ public sealed unsafe class SceneManager
 {
     private readonly List<SceneEntity> _entities = new(256);
     private readonly List<ScenePoly> _polys = new(512);
+    private readonly List<DLight> _dlights = new(32);
     private ModelManager? _models;
     private ShaderManager? _shaders;
     private SkinManager? _skins;
@@ -73,6 +74,21 @@ public sealed unsafe class SceneManager
     {
         _entities.Clear();
         _polys.Clear();
+        _dlights.Clear();
+    }
+
+    private const int MAX_DLIGHTS = 32;
+
+    public void AddLight(float x, float y, float z, float radius, float r, float g, float b, bool additive)
+    {
+        if (_dlights.Count >= MAX_DLIGHTS || radius <= 0) return;
+        _dlights.Add(new DLight
+        {
+            OriginX = x, OriginY = y, OriginZ = z,
+            R = r, G = g, B = b,
+            Radius = radius,
+            Additive = additive
+        });
     }
 
     /// <summary>
@@ -354,7 +370,8 @@ public sealed unsafe class SceneManager
         {
             fixed (float* vpPtr = vp)
             {
-                _bspRenderer!.Render(vpPtr, viewOrg[0], viewOrg[1], viewOrg[2], _shaders, time / 1000.0f);
+                _bspRenderer!.Render(vpPtr, viewOrg[0], viewOrg[1], viewOrg[2], _shaders, time / 1000.0f,
+                    _dlights);
             }
         }
 
@@ -889,4 +906,15 @@ internal struct ScenePoly
 {
     public int ShaderHandle;
     public PolyVert[] Verts;
+}
+
+/// <summary>
+/// Dynamic light for per-frame illumination (rockets, plasma, etc.)
+/// </summary>
+public struct DLight
+{
+    public float OriginX, OriginY, OriginZ;
+    public float R, G, B;
+    public float Radius;
+    public bool Additive;
 }
