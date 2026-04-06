@@ -84,8 +84,8 @@ The cgame DLL interface is:
 
 ### Implementation Plan
 
-- [ ] **Project scaffolding** — Create `code/cgamedotnet/` with .csproj targeting net9.0 NativeAOT (same pattern as rendererdotnet). Export `dllEntry` and `vmMain` via `[UnmanagedCallersOnly]`. Publish to game directory as `cgamex86_64.dll`. `CPX 3`
-- [ ] **Engine syscall interop** — Marshal all ~90 `cgameImport_t` syscalls (CG_PRINT through CG_R_INPVS). Wrap engine calls (cvars, filesystem, renderer, sound, collision, input, snapshots) in type-safe C# classes. `CPX 4`
+- [x] **Project scaffolding** — Create `code/cgamedotnet/` with .csproj targeting net9.0 NativeAOT (same pattern as rendererdotnet). Export `dllEntry` and `vmMain` via `[UnmanagedCallersOnly]`. Publish to game directory as `cgamex86_64.dll`. `CPX 3`
+- [x] **Engine syscall interop** — Marshal all ~90 `cgameImport_t` syscalls (CG_PRINT through CG_R_INPVS). Wrap engine calls (cvars, filesystem, renderer, sound, collision, input, snapshots) in type-safe C# classes. `CPX 4`
 - [ ] **Core game state** — Port `cg_t`, `cgs_t`, `centity_t`, `cg_weapons_t` structs and CG_Init/CG_Shutdown lifecycle. Handle gamestate parsing, server info, map loading, media registration. `CPX 4`
 - [ ] **Snapshot processing** — Port CG_ProcessSnapshots: snapshot interpolation, entity state transitions (enter/leave PVS), player state prediction, event processing. `CPX 4`
 - [ ] **Entity rendering** — Port CG_AddCEntity: per-entity-type rendering (players, items, missiles, movers, portals), model attachment via tags, animation state machines, shell/powerup effects. `CPX 5`
@@ -108,6 +108,7 @@ The cgame DLL interface is:
 - The original cgame source is ~15,000 lines across ~30 files. Full port is a large effort but each subsystem can be implemented incrementally (start with init + basic HUD, add entity rendering, then prediction).
 - `code/cgame/cg_public.h` defines the complete import/export interface — this is the contract between engine and cgame.
 - Player prediction (`pmove`) shares code with server-side physics (`code/game/bg_pmove.c`, `bg_slidemove.c`). This shared code must also be ported to C#.
+- We are using VisualStudio for development, make sure the .sln is kept up to date
 
 ---
 
@@ -185,7 +186,9 @@ The cgame DLL interface is:
 - Game installation: `E:\Games\Quake3`
 - **Primary build environment: Visual Studio 2022** — open `msvc\ioq3.sln`, all projects output directly to the game directory. CMake is considered deprecated; only use it to regenerate the solution if needed (`cmake -B msvc -G "Visual Studio 17 2022" -DGAME_DIR="E:/Games/Quake3"`).
 - .NET renderer: `cd code\rendererdotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
+- .NET cgame: `cd code\cgamedotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
 - Test .NET renderer: launch with `+set cl_renderer dotnet`
+- Test .NET cgame: launch with `+set vm_cgame 0` (loads cgamex86_64.dll from baseq3)
 - Project uses internal/bundled libraries by default (`USE_INTERNAL_LIBS=ON`)
 - Most FIXME comments are concentrated in GL2 renderer (~77) and bot AI (~44)
 

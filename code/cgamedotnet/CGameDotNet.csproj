@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>cgamex86_64</AssemblyName>
+    <RootNamespace>CGameDotNet</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- NativeAOT: compile to a native shared library (.dll) -->
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+
+    <!-- Strip unused code for smaller binary -->
+    <IlcTrimMetadata>true</IlcTrimMetadata>
+
+    <!-- Output directly to game directory on publish -->
+    <PublishDir>E:\Games\Quake3\baseq3\</PublishDir>
+  </PropertyGroup>
+
+</Project>
