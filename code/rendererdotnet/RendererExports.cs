@@ -35,7 +35,10 @@ public static unsafe class RendererExports
     private static void* _glContext;
 
     private static Renderer2D? _renderer2D;
+    private static Renderer3D? _renderer3D;
     private static ShaderManager? _shaders;
+    private static Models.ModelManager? _models;
+    private static SceneManager? _scene;
 
     private const int WIDTH = 1280;
     private const int HEIGHT = 720;
@@ -58,6 +61,10 @@ public static unsafe class RendererExports
 
         if (destroyWindow != 0)
         {
+            _scene = null;
+            _models = null;
+            _renderer3D?.Dispose();
+            _renderer3D = null;
             _renderer2D?.Dispose();
             _renderer2D = null;
             _shaders = null;
@@ -135,6 +142,16 @@ public static unsafe class RendererExports
         // Parse Q3 shader scripts so we can resolve shader names to image paths
         _shaders.LoadShaderScripts();
 
+        // Initialize 3D model renderer and managers
+        _renderer3D = new Renderer3D();
+        _renderer3D.Init(_gl);
+
+        _models = new Models.ModelManager();
+        _models.SetShaderManager(_shaders);
+
+        _scene = new SceneManager();
+        _scene.Init(_models, _shaders, _renderer3D);
+
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
         NativeMemory.Clear(cfg, GLCONFIG_SIZE);
@@ -166,7 +183,10 @@ public static unsafe class RendererExports
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int RegisterModel(byte* name) => 0;
+    public static int RegisterModel(byte* name)
+    {
+        return _models?.Register(name) ?? 0;
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int RegisterSkin(byte* name) => 0;
@@ -193,10 +213,16 @@ public static unsafe class RendererExports
     public static void EndRegistration() { }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void ClearScene() { }
+    public static void ClearScene()
+    {
+        _scene?.ClearScene();
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void AddRefEntityToScene(nint re) { }
+    public static void AddRefEntityToScene(nint re)
+    {
+        _scene?.AddRefEntity((byte*)re);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void AddPolyToScene(int hShader, int numVerts, nint verts, int num) { }
@@ -211,7 +237,10 @@ public static unsafe class RendererExports
     public static void AddAdditiveLightToScene(float* org, float intensity, float r, float g, float b) { }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void RenderScene(nint fd) { }
+    public static void RenderScene(nint fd)
+    {
+        _scene?.RenderScene((byte*)fd);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void SetColor(float* rgba)
@@ -271,10 +300,16 @@ public static unsafe class RendererExports
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int LerpTag(nint tag, int model, int startFrame, int endFrame,
-        float frac, byte* tagName) => 0;
+        float frac, byte* tagName)
+    {
+        return _models?.LerpTag(tag, model, startFrame, endFrame, frac, tagName) ?? 0;
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void ModelBounds(int model, float* mins, float* maxs) { }
+    public static void ModelBounds(int model, float* mins, float* maxs)
+    {
+        _models?.GetBounds(model, mins, maxs);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void RegisterFont(byte* fontName, int pointSize, nint font)
