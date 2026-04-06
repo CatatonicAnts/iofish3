@@ -62,6 +62,14 @@ public sealed unsafe class BspRenderer : IDisposable
     // Transparent surfaces deferred to second pass
     private readonly List<(int SurfIdx, BlendMode Blend, int SortKey)> _transparentSurfaces = new(256);
 
+    // Deferred opaque surfaces for shader-sorted batching
+    private readonly List<(int SurfIdx, int ShaderHandle, int LmIdx, int AlphaFunc)> _deferredOpaque = new(4096);
+
+    // Multi-draw batch buffers (reused per frame)
+    private int[] _batchCounts = new int[512];
+    private nint[] _batchOffsets = new nint[512];
+    private int[] _batchBaseVerts = new int[512];
+
     // Current frame time for multi-stage animation
     private float _currentTimeSec;
 
@@ -782,9 +790,16 @@ public sealed unsafe class BspRenderer : IDisposable
         if (leafIdx >= 0 && leafIdx < _world.Leafs.Length)
             cameraCluster = _world.Leafs[leafIdx].Cluster;
 
-        // Walk BSP tree and draw visible opaque surfaces,
-        // collect transparent ones for second pass
+        // Walk BSP tree and collect visible surfaces
+        // (opaque surfaces are deferred for shader-sorted batching)
+        _deferredOpaque.Clear();
         WalkBspTree(0, cameraCluster, shaders);
+
+        // Batch-draw opaque surfaces sorted by shader to minimize state changes
+        if (_deferredOpaque.Count > 0)
+        {
+            DrawDeferredOpaque(shaders);
+        }
 
         // Second pass: draw transparent surfaces with blending enabled
         if (_transparentSurfaces.Count > 0)
@@ -1006,12 +1021,12 @@ public sealed unsafe class BspRenderer : IDisposable
                 return;
             }
 
-            // Surfaces with alphaFunc (alpha testing) render in the opaque pass
-            // with depth writes, discarding pixels based on alpha test
+            // Surfaces with alphaFunc (alpha testing) need unique state, draw immediately
             int alphaFunc = shaders.GetAlphaFunc(surf.ShaderHandle);
             if (alphaFunc != 0)
             {
-                DrawSurfaceGeometry(ref surf, shaders, alphaFunc);
+                _deferredOpaque.Add((surfIdx, surf.ShaderHandle, surf.LightmapIndex, alphaFunc));
+                _visibleSurfaceIndices.Add(surfIdx);
                 return;
             }
 
@@ -1036,11 +1051,154 @@ public sealed unsafe class BspRenderer : IDisposable
             }
         }
 
-        DrawSurfaceGeometry(ref surf, shaders, 0);
+        // Defer regular opaque surface for batched rendering
+        _deferredOpaque.Add((surfIdx, surf.ShaderHandle, surf.LightmapIndex, 0));
         _visibleSurfaceIndices.Add(surfIdx);
     }
 
     private const int CONTENTS_TRANSLUCENT = 0x20000000;
+
+    /// <summary>
+    /// Sort deferred opaque surfaces by shader+lightmap and draw in batches.
+    /// Surfaces with the same shader and lightmap share state, so we bind once
+    /// and issue multiple draws without rebinding. Multi-stage shaders or surfaces
+    /// with special state (deforms, polygon offset) draw individually.
+    /// </summary>
+    private void DrawDeferredOpaque(ShaderManager shaders)
+    {
+        if (_world == null) return;
+
+        // Sort by shader handle, then by lightmap index for maximum batching
+        _deferredOpaque.Sort((a, b) =>
+        {
+            int cmp = a.ShaderHandle.CompareTo(b.ShaderHandle);
+            if (cmp != 0) return cmp;
+            cmp = a.LmIdx.CompareTo(b.LmIdx);
+            if (cmp != 0) return cmp;
+            return a.AlphaFunc.CompareTo(b.AlphaFunc);
+        });
+
+        int lastShader = -1;
+        int lastLm = -2;
+        int lastAlpha = -1;
+        bool lastMultiStage = false;
+
+        for (int i = 0; i < _deferredOpaque.Count; i++)
+        {
+            var (surfIdx, shaderHandle, lmIdx, alphaFunc) = _deferredOpaque[i];
+            ref var surf = ref _world.Surfaces[surfIdx];
+
+            // Check if this surface needs multi-stage rendering
+            var stages = shaders.GetStages(shaderHandle);
+            bool isMultiStage = stages != null && stages.Length > 1;
+
+            // Multi-stage surfaces always draw individually (complex state per stage)
+            if (isMultiStage)
+            {
+                DrawSurfaceMultiStage(ref surf, shaders, stages!, alphaFunc, false);
+                lastShader = -1; // force rebind on next surface
+                continue;
+            }
+
+            // Check if we can skip rebinding state (same shader + lightmap + alphaFunc)
+            bool sameState = (shaderHandle == lastShader && lmIdx == lastLm
+                              && alphaFunc == lastAlpha && !lastMultiStage);
+
+            if (!sameState)
+            {
+                // Bind new shader state
+                BindSingleStageState(ref surf, shaders, alphaFunc);
+                lastShader = shaderHandle;
+                lastLm = lmIdx;
+                lastAlpha = alphaFunc;
+                lastMultiStage = false;
+            }
+
+            // Issue draw (geometry-only since state is already bound)
+            _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
+                (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
+                (void*)(surf.FirstIndex * sizeof(int)),
+                surf.FirstVertex);
+        }
+
+        // Restore default state after batch
+        _gl.DepthFunc(DepthFunction.Lequal);
+        _gl.Disable(EnableCap.PolygonOffsetFill);
+        _gl.Enable(EnableCap.CullFace);
+        _gl.CullFace(TriangleFace.Front);
+        _gl.Uniform1(_deformTypeLoc, -1);
+    }
+
+    /// <summary>
+    /// Bind all GL state for a single-stage surface (textures, uniforms, cull, etc.)
+    /// without issuing a draw call. Used by the batching system.
+    /// </summary>
+    private void BindSingleStageState(ref BspSurface surf, ShaderManager shaders, int alphaFunc)
+    {
+        uint texId = shaders.GetTextureId(surf.ShaderHandle);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, texId);
+
+        bool hasLightmap = surf.LightmapIndex >= 0 && surf.LightmapIndex < _lightmapTextures.Length;
+        _gl.Uniform1(_useLightmapLoc, hasLightmap ? 1 : 0);
+        if (hasLightmap)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture1);
+            _gl.BindTexture(TextureTarget.Texture2D, _lightmapTextures[surf.LightmapIndex]);
+
+            if (_hasDeluxeMapping && surf.LightmapIndex < _deluxeMapTextures.Length)
+            {
+                _gl.ActiveTexture(TextureUnit.Texture4);
+                _gl.BindTexture(TextureTarget.Texture2D, _deluxeMapTextures[surf.LightmapIndex]);
+            }
+        }
+
+        uint normalTexId = shaders.GetNormalMapTexId(surf.ShaderHandle);
+        _gl.Uniform1(_useNormalMapLoc, normalTexId != 0 ? 1 : 0);
+        if (normalTexId != 0)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture2);
+            _gl.BindTexture(TextureTarget.Texture2D, normalTexId);
+        }
+
+        uint specTexId = shaders.GetSpecularMapTexId(surf.ShaderHandle);
+        _gl.Uniform1(_useSpecularMapLoc, specTexId != 0 ? 1 : 0);
+        if (specTexId != 0)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture3);
+            _gl.BindTexture(TextureTarget.Texture2D, specTexId);
+        }
+
+        _gl.Uniform1(_alphaFuncLoc, alphaFunc);
+
+        int rgbGen = shaders.GetRgbGen(surf.ShaderHandle);
+        if (rgbGen == 0) rgbGen = 5;
+        _gl.Uniform1(_rgbGenLoc, rgbGen);
+
+        bool envMap = shaders.GetHasEnvMap(surf.ShaderHandle);
+        _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
+
+        SetTcModUniforms(shaders.GetTcMods(surf.ShaderHandle));
+
+        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+        ApplyCullMode(cullMode);
+
+        bool polyOffset = shaders.GetPolygonOffset(surf.ShaderHandle);
+        if (polyOffset)
+        {
+            _gl.Enable(EnableCap.PolygonOffsetFill);
+            _gl.PolygonOffset(-1f, -1f);
+        }
+        else
+        {
+            _gl.Disable(EnableCap.PolygonOffsetFill);
+        }
+
+        int depthFuncVal = shaders.GetDepthFunc(surf.ShaderHandle);
+        _gl.DepthFunc(depthFuncVal == 1 ? DepthFunction.Equal : DepthFunction.Lequal);
+
+        ApplyDeforms(shaders.GetDeforms(surf.ShaderHandle));
+    }
 
     /// <summary>
     /// Render a portal/mirror surface with environment mapping as an approximation.

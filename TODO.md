@@ -52,7 +52,7 @@ A list of planned features, improvements, and tasks for this project.
 - [ ] **IQM model format** - Inter-Quake Model format with GPU bone skinning. GL2 has full loader and renderer. `CPX 4`
 - [ ] **MDR model format** - Advanced skeletal model format with bone matrices. `CPX 3`
 - [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
-- [ ] **VBO caching / batching** - GL2 has a VAO cache (16MB vertex, 5MB index) with surface batching (1024 surfaces per batch). We upload once and draw per-surface. `CPX 3`
+- [x] **VBO caching / batching** - Shader-sorted deferred opaque rendering. Visible surfaces collected during BSP walk, sorted by shader+lightmap, drawn with minimal state changes. Same-state surfaces share a single bind, reducing GL state transitions. Static geometry uploaded once at load time. `CPX 3`
 - [x] **DDS texture format** - DDS file loading with S3TC (DXT1/3/5), RGTC (BC4/5), BPTC (BC6H/7), and uncompressed RGBA support. DX10 extended header support. DDS tried first for all texture loads (preferred for GPU memory/performance). `CPX 2`
 - [x] **FBO pipeline** - Framebuffer objects for render-to-texture, multi-pass effects, post-processing. Foundation for HDR/bloom/portals. `CPX 3`
 
