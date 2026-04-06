@@ -510,6 +510,10 @@ public static unsafe class CGame
     private static int _sfxRocketExplosion;
     private static int _sfxPlasmaExplosion;
 
+    // Weapon fire sounds (up to 4 per weapon for variety)
+    private const int MAX_WEAPON_SOUNDS = 4;
+    private static readonly int[,] _weaponFireSounds = new int[Weapons.WP_NUM_WEAPONS, MAX_WEAPON_SOUNDS];
+
     private static void RegisterEventSounds()
     {
         _sfxLandSound = Syscalls.S_RegisterSound("sound/player/land1.wav", 0);
@@ -522,6 +526,21 @@ public static unsafe class CGame
         _sfxGrenBounce2 = Syscalls.S_RegisterSound("sound/weapons/grenade/hgrenb2a.wav", 0);
         _sfxRocketExplosion = Syscalls.S_RegisterSound("sound/weapons/rocket/rocklx1a.wav", 0);
         _sfxPlasmaExplosion = Syscalls.S_RegisterSound("sound/weapons/plasma/plasmx1a.wav", 0);
+
+        // Weapon fire sounds
+        _weaponFireSounds[Weapons.WP_GAUNTLET, 0] = Syscalls.S_RegisterSound("sound/weapons/melee/fstatck.wav", 0);
+        _weaponFireSounds[Weapons.WP_MACHINEGUN, 0] = Syscalls.S_RegisterSound("sound/weapons/machinegun/machgf1b.wav", 0);
+        _weaponFireSounds[Weapons.WP_MACHINEGUN, 1] = Syscalls.S_RegisterSound("sound/weapons/machinegun/machgf2b.wav", 0);
+        _weaponFireSounds[Weapons.WP_MACHINEGUN, 2] = Syscalls.S_RegisterSound("sound/weapons/machinegun/machgf3b.wav", 0);
+        _weaponFireSounds[Weapons.WP_MACHINEGUN, 3] = Syscalls.S_RegisterSound("sound/weapons/machinegun/machgf4b.wav", 0);
+        _weaponFireSounds[Weapons.WP_SHOTGUN, 0] = Syscalls.S_RegisterSound("sound/weapons/shotgun/sshotf1b.wav", 0);
+        _weaponFireSounds[Weapons.WP_GRENADE_LAUNCHER, 0] = Syscalls.S_RegisterSound("sound/weapons/grenade/grenlf1a.wav", 0);
+        _weaponFireSounds[Weapons.WP_ROCKET_LAUNCHER, 0] = Syscalls.S_RegisterSound("sound/weapons/rocket/rocklf1a.wav", 0);
+        _weaponFireSounds[Weapons.WP_LIGHTNING, 0] = Syscalls.S_RegisterSound("sound/weapons/lightning/lg_fire.wav", 0);
+        _weaponFireSounds[Weapons.WP_RAILGUN, 0] = Syscalls.S_RegisterSound("sound/weapons/railgun/railgf1a.wav", 0);
+        _weaponFireSounds[Weapons.WP_PLASMAGUN, 0] = Syscalls.S_RegisterSound("sound/weapons/plasma/hyprbf1a.wav", 0);
+        _weaponFireSounds[Weapons.WP_BFG, 0] = Syscalls.S_RegisterSound("sound/weapons/bfg/bfg_fire.wav", 0);
+
         Syscalls.Print("[.NET cgame] Registered event sounds\n");
     }
 
@@ -596,7 +615,7 @@ public static unsafe class CGame
                 break;
 
             case EntityEvent.EV_FIRE_WEAPON:
-                // Weapon fire sounds handled elsewhere (weapon effects system)
+                FireWeapon(ref cent);
                 break;
 
             case EntityEvent.EV_ITEM_RESPAWN:
@@ -644,6 +663,26 @@ public static unsafe class CGame
             case EntityEvent.EV_DEATH3:
                 // Pain/death sounds — would need player-specific sounds
                 break;
+        }
+    }
+
+    private static void FireWeapon(ref CEntity cent)
+    {
+        ref var es = ref cent.CurrentState;
+        int weapon = es.Weapon;
+        if (weapon <= 0 || weapon >= Weapons.WP_NUM_WEAPONS) return;
+
+        // Count available fire sound variants
+        int count = 0;
+        for (int i = 0; i < MAX_WEAPON_SOUNDS; i++)
+        {
+            if (_weaponFireSounds[weapon, i] == 0) break;
+            count++;
+        }
+        if (count > 0)
+        {
+            int idx = Random.Shared.Next(count);
+            Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_WEAPON, _weaponFireSounds[weapon, idx]);
         }
     }
 
@@ -840,6 +879,12 @@ public static unsafe class CGame
                 case EntityType.ET_MOVER:
                     AddMover(ref cent);
                     break;
+                case EntityType.ET_BEAM:
+                    AddBeam(ref cent);
+                    break;
+                case EntityType.ET_SPEAKER:
+                    // Speakers handled via looping sounds
+                    break;
             }
         }
     }
@@ -953,6 +998,27 @@ public static unsafe class CGame
             rent.HModel = _gameModels[s1.ModelIndex2];
             Syscalls.R_AddRefEntityToScene(&rent);
         }
+    }
+
+    private static void AddBeam(ref CEntity cent)
+    {
+        ref var s1 = ref cent.CurrentState;
+
+        Q3RefEntity rent = default;
+        rent.ReType = Q3RefEntity.RT_BEAM;
+        // Beam: origin = start, oldorigin = end
+        rent.OriginX = s1.Pos.TrBaseX;
+        rent.OriginY = s1.Pos.TrBaseY;
+        rent.OriginZ = s1.Pos.TrBaseZ;
+        rent.OldOriginX = s1.Origin2X;
+        rent.OldOriginY = s1.Origin2Y;
+        rent.OldOriginZ = s1.Origin2Z;
+        // Identity axis
+        rent.Axis0X = 1; rent.Axis0Y = 0; rent.Axis0Z = 0;
+        rent.Axis1X = 0; rent.Axis1Y = 1; rent.Axis1Z = 0;
+        rent.Axis2X = 0; rent.Axis2Y = 0; rent.Axis2Z = 1;
+        rent.RenderFx = Q3RefEntity.RF_NOSHADOW;
+        Syscalls.R_AddRefEntityToScene(&rent);
     }
 
     // ── Entity Helpers ──
