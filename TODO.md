@@ -89,7 +89,7 @@ The cgame DLL interface is:
 - [x] **Core game state** — Port `cg_t`, `cgs_t`, `centity_t`, `cg_weapons_t` structs and CG_Init/CG_Shutdown lifecycle. Handle gamestate parsing, server info, map loading, media registration. `CPX 4`
 - [x] **Snapshot processing** — Port CG_ProcessSnapshots: snapshot interpolation, entity state transitions (enter/leave PVS), player state prediction, event processing. `CPX 4`
 - [x] **Entity rendering** — Port CG_AddCEntity: per-entity-type rendering (players, items, missiles, movers, portals), model attachment via tags, animation state machines, shell/powerup effects. `CPX 5`
-- [ ] **Player rendering** — Port CG_Player: multi-part player model (head/torso/legs), team skins, animation blending, weapon attachment, first-person weapon rendering. `CPX 5`
+- [x] **Player rendering** — Port CG_Player: multi-part player model (head/torso/legs), team skins, animation blending, weapon attachment, first-person weapon rendering. `CPX 5`
 - [x] **Weapon effects** — Port CG_AddPlayerWeapon, CG_RegisterWeapon, weapon fire effects (muzzle flash, trails, projectiles, impacts, explosions). All weapon-specific rendering (railgun beam, lightning, BFG, etc.). `CPX 4`
 - [x] **HUD / 2D drawing** — Port CG_Draw2D: health/armor/ammo bars, crosshair, pickup notifications, timer, scores, obituaries, chat overlay, lagometer, speed display. `CPX 4`
 - [x] **Scoreboard** — Port CG_DrawScoreboard: player list with scores, ping, time, spectator info, team scores. `CPX 3`
@@ -99,7 +99,7 @@ The cgame DLL interface is:
 - [x] **Marks / decals** — Port CG_ImpactMark: bullet holes, explosion scorch marks, blood splatters via MarkFragments API with fade-out timing. `CPX 3`
 - [x] **Particle / local entity system** — Port CG_AddLocalEntities: brass casings, debris, blood trails, smoke puffs, sparks with physics simulation. `CPX 3`
 - [x] **Sound integration** — Port CG_AddLoopingSound, entity sound triggers, positional audio, ambient sounds, announcer voice. `CPX 3`
-- [ ] **Default loading** — Modify engine to prefer `cgame_dotnet` DLL over QVM when `vm_cgame 0` is set. Add a cvar (e.g. `cl_cgame`) to select cgame implementation by name, similar to `cl_renderer` for renderers. `CPX 3`
+- [x] **Default loading** — Modify engine to prefer `cgame_dotnet` DLL over QVM when `vm_cgame 0` is set. Add a cvar (e.g. `cl_cgame`) to select cgame implementation by name, similar to `cl_renderer` for renderers. `CPX 3`
 
 ### Notes
 

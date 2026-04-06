@@ -713,6 +713,7 @@ void CL_InitCGame( void ) {
 	const char			*mapname;
 	int					t1, t2;
 	vmInterpret_t		interpret;
+	char				moduleName[MAX_OSPATH];
 
 	t1 = Sys_Milliseconds();
 
@@ -724,16 +725,26 @@ void CL_InitCGame( void ) {
 	mapname = Info_ValueForKey( info, "mapname" );
 	Com_sprintf( cl.mapname, sizeof( cl.mapname ), "maps/%s.bsp", mapname );
 
-	// load the dll or bytecode
-	interpret = Cvar_VariableValue("vm_cgame");
-	if(cl_connectedToPureServer)
-	{
-		// if sv_pure is set we only allow qvms to be loaded
-		if(interpret != VMI_COMPILED && interpret != VMI_BYTECODE)
-			interpret = VMI_COMPILED;
+	// Build cgame module name from cl_cgame cvar
+	// e.g. cl_cgame "dotnet" → "cgame_dotnet", cl_cgame "" → "cgame"
+	if (cl_cgame && cl_cgame->string[0]) {
+		Com_sprintf(moduleName, sizeof(moduleName), "cgame_%s", cl_cgame->string);
+		// Non-default cgame implementations are always native DLLs
+		interpret = VMI_NATIVE;
+		Com_Printf("Using cgame module: %s\n", moduleName);
+	} else {
+		Q_strncpyz(moduleName, "cgame", sizeof(moduleName));
+		// load the dll or bytecode
+		interpret = Cvar_VariableValue("vm_cgame");
+		if(cl_connectedToPureServer)
+		{
+			// if sv_pure is set we only allow qvms to be loaded
+			if(interpret != VMI_COMPILED && interpret != VMI_BYTECODE)
+				interpret = VMI_COMPILED;
+		}
 	}
 
-	cgvm = VM_Create( "cgame", CL_CgameSystemCalls, interpret );
+	cgvm = VM_Create( moduleName, CL_CgameSystemCalls, interpret );
 	if ( !cgvm ) {
 		Com_Error( ERR_DROP, "VM_Create on cgame failed" );
 	}

@@ -52,6 +52,8 @@ cvar_t	*cl_voip;
 cvar_t	*cl_renderer;
 #endif
 
+cvar_t	*cl_cgame;
+
 cvar_t	*cl_nodelta;
 cvar_t	*cl_debugMove;
 
@@ -3558,6 +3560,7 @@ void CL_Init( void ) {
 	// register our variables
 	//
 	cl_noprint = Cvar_Get( "cl_noprint", "0", 0 );
+	cl_cgame = Cvar_Get( "cl_cgame", "", CVAR_ARCHIVE | CVAR_LATCH );
 #ifdef UPDATE_SERVER_NAME
 	cl_motd = Cvar_Get ("cl_motd", "1", 0);
 #endif
