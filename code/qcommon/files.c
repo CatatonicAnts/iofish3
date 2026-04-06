@@ -1422,13 +1422,12 @@ int FS_FindVM(void **startSearch, char *found, int foundlen, const char *name, i
 
 			if(enableDll)
 			{
-				// The original Q3 put the architecture in the library name; in case
-				// we're loading an old binary only mod, fallback on this format if
-				// the architecture-less library doesn't exist
+				// Try the architecture-specific name first (e.g. cgamex86_64.dll)
+				// then fall back to the plain name (e.g. cgame.dll)
 				const char *dllNameFormats[] =
 				{
-					"%s" DLL_EXT,
-					"%s" ARCH_STRING DLL_EXT
+					"%s" ARCH_STRING DLL_EXT,
+					"%s" DLL_EXT
 				};
 
 				for(int i = 0; i < ARRAY_LEN(dllNameFormats); i++)
