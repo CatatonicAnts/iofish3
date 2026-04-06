@@ -268,6 +268,7 @@ public static unsafe class RendererExports
 
         _bspRenderer.LoadWorld(_bspWorld);
         _scene?.SetWorld(_bspWorld);
+        _models?.SetBspWorld(_bspWorld);
 
         // Load skybox textures from shader scripts
         if (_skyboxRenderer != null && _renderer2D != null)

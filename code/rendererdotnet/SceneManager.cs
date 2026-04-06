@@ -339,6 +339,19 @@ public sealed unsafe class SceneManager
 
             if (ent.ReType == RT_MODEL)
             {
+                // Check if this is an inline BSP model (doors, platforms, etc.)
+                if (_models.IsBspModel(ent.ModelHandle) && _bspRenderer != null)
+                {
+                    int bspIdx = _models.GetBspModelIndex(ent.ModelHandle);
+                    BuildModelMatrix(ent, modelMat);
+                    MatMul(vp, modelMat, mvp);
+                    fixed (float* mvpPtr = mvp)
+                    {
+                        _bspRenderer.RenderSubmodel(bspIdx, mvpPtr, _shaders, time / 1000.0f);
+                    }
+                    continue;
+                }
+
                 var model = _models.GetModel(ent.ModelHandle);
                 if (model == null) continue;
 
@@ -363,6 +376,7 @@ public sealed unsafe class SceneManager
                     }
                     uint texId = _shaders.GetTextureId(shaderHandle);
                     bool envMap = _shaders.GetHasEnvMap(shaderHandle);
+                    BlendMode blend = _shaders.GetBlendMode(shaderHandle);
 
                     float r = ent.R;
                     float g = ent.G;
@@ -374,7 +388,7 @@ public sealed unsafe class SceneManager
                     {
                         _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
                             mvpPtr, modelPtr, texId, r, g, b, a,
-                            envMap, viewOrg[0], viewOrg[1], viewOrg[2]);
+                            envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend);
                     }
                 }
             }

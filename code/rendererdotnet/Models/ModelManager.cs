@@ -13,6 +13,7 @@ public sealed class ModelManager
     private readonly List<ModelEntry> _models = [];
     private readonly Dictionary<string, int> _nameToHandle = new(System.StringComparer.OrdinalIgnoreCase);
     private ShaderManager? _shaders;
+    private World.BspWorld? _bspWorld;
 
     public ModelManager()
     {
@@ -23,6 +24,11 @@ public sealed class ModelManager
     public void SetShaderManager(ShaderManager shaders)
     {
         _shaders = shaders;
+    }
+
+    public void SetBspWorld(World.BspWorld? world)
+    {
+        _bspWorld = world;
     }
 
     /// <summary>
@@ -44,13 +50,24 @@ public sealed class ModelManager
         if (_nameToHandle.TryGetValue(name, out int existing))
         {
             var cached = _models[existing];
-            return cached.Model != null ? existing : 0;
+            return (cached.Model != null || cached.BspModelIndex >= 0) ? existing : 0;
         }
 
         int handle = _models.Count;
         var entry = new ModelEntry { Name = name };
         _models.Add(entry);
         _nameToHandle[name] = handle;
+
+        // Inline BSP models: "*N" references a submodel in the loaded BSP
+        if (name.StartsWith('*'))
+        {
+            if (int.TryParse(name.AsSpan(1), out int bspIndex) && bspIndex >= 0)
+            {
+                entry.BspModelIndex = bspIndex;
+                return handle;
+            }
+            return 0;
+        }
 
         // Try to load the model
         entry.Model = LoadModel(name);
@@ -79,13 +96,33 @@ public sealed class ModelManager
     }
 
     /// <summary>
-    /// Get the model data for a handle. Returns null for invalid handles.
+    /// Get the model data for a handle. Returns null for invalid handles or BSP models.
     /// </summary>
     public Md3Model? GetModel(int handle)
     {
         if (handle <= 0 || handle >= _models.Count)
             return null;
         return _models[handle].Model;
+    }
+
+    /// <summary>
+    /// Check if the given handle is an inline BSP model (e.g. doors, platforms).
+    /// </summary>
+    public bool IsBspModel(int handle)
+    {
+        if (handle <= 0 || handle >= _models.Count)
+            return false;
+        return _models[handle].BspModelIndex >= 0;
+    }
+
+    /// <summary>
+    /// Get the BSP submodel index for an inline model handle. Returns -1 if not a BSP model.
+    /// </summary>
+    public int GetBspModelIndex(int handle)
+    {
+        if (handle <= 0 || handle >= _models.Count)
+            return -1;
+        return _models[handle].BspModelIndex;
     }
 
     /// <summary>
@@ -113,6 +150,17 @@ public sealed class ModelManager
                           out float maxX, out float maxY, out float maxZ)
     {
         minX = minY = minZ = maxX = maxY = maxZ = 0;
+
+        // Check for BSP inline model
+        int bspIdx = GetBspModelIndex(handle);
+        if (bspIdx >= 0 && _bspWorld != null && bspIdx < _bspWorld.Models.Length)
+        {
+            ref var bmodel = ref _bspWorld.Models[bspIdx];
+            minX = bmodel.MinX; minY = bmodel.MinY; minZ = bmodel.MinZ;
+            maxX = bmodel.MaxX; maxY = bmodel.MaxY; maxZ = bmodel.MaxZ;
+            return true;
+        }
+
         var model = GetModel(handle);
         if (model == null || model.Frames.Length == 0)
             return false;
@@ -238,5 +286,6 @@ public sealed class ModelManager
     {
         public string Name { get; set; } = "";
         public Md3Model? Model { get; set; }
+        public int BspModelIndex { get; set; } = -1;
     }
 }

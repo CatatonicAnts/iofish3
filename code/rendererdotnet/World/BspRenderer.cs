@@ -397,6 +397,93 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.BindVertexArray(0);
     }
 
+    /// <summary>
+    /// Render an inline BSP submodel (doors, platforms, etc.) with the given MVP.
+    /// The MVP should include the entity's model transform.
+    /// </summary>
+    public void RenderSubmodel(int submodelIndex, float* mvp, ShaderManager shaders, float timeSec)
+    {
+        if (_world == null) return;
+        if (submodelIndex < 0 || submodelIndex >= _world.Models.Length) return;
+
+        ref var bmodel = ref _world.Models[submodelIndex];
+
+        _gl.UseProgram(_program);
+        _gl.UniformMatrix4(_mvpLoc, 1, false, mvp);
+        _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);
+        _gl.Uniform3(_lightDirLoc, 0.57735f, 0.57735f, 0.57735f);
+        _gl.Uniform1(_texDiffuseLoc, 0);
+        _gl.Uniform1(_texLightmapLoc, 1);
+        _gl.Uniform1(_envMapLoc, 0);
+        _gl.Uniform3(_viewPosLoc, _viewX, _viewY, _viewZ);
+        _gl.Uniform1(_timeLoc, timeSec);
+        _gl.Uniform1(_tcModCountLoc, 0);
+        _gl.Uniform1(_deformTypeLoc, -1);
+        _gl.Uniform1(_overbrightScaleLoc, 2.0f);
+
+        _gl.BindVertexArray(_vao);
+        _gl.Enable(EnableCap.DepthTest);
+        _gl.DepthFunc(DepthFunction.Lequal);
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
+        _gl.Enable(EnableCap.CullFace);
+        _gl.CullFace(TriangleFace.Front);
+
+        // Draw all surfaces in this submodel
+        var transparentSubmodelSurfaces = new List<(int SurfIdx, BlendMode Blend)>();
+
+        for (int i = 0; i < bmodel.NumSurfaces; i++)
+        {
+            int surfIdx = bmodel.FirstSurface + i;
+            if (surfIdx < 0 || surfIdx >= _world.Surfaces.Length) continue;
+
+            ref var surf = ref _world.Surfaces[surfIdx];
+            if (surf.SurfaceType != SurfaceTypes.MST_PLANAR &&
+                surf.SurfaceType != SurfaceTypes.MST_TRIANGLE_SOUP &&
+                surf.SurfaceType != SurfaceTypes.MST_PATCH)
+                continue;
+            if (surf.NumIndices == 0 || surf.NumVertices == 0) continue;
+
+            // Check surface flags
+            if (surf.ShaderIndex >= 0 && surf.ShaderIndex < _world.Shaders.Length)
+            {
+                int sFlags = _world.Shaders[surf.ShaderIndex].SurfaceFlags;
+                if ((sFlags & SurfaceFlags.SURF_NODRAW) != 0) continue;
+                if ((sFlags & SurfaceFlags.SURF_SKY) != 0) continue;
+            }
+
+            // Check blend mode — defer transparent surfaces
+            BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
+            if (blend.NeedsBlending)
+            {
+                transparentSubmodelSurfaces.Add((surfIdx, blend));
+                continue;
+            }
+
+            int alphaFunc = shaders.GetAlphaFunc(surf.ShaderHandle);
+            DrawSurfaceGeometry(ref surf, shaders, alphaFunc);
+        }
+
+        // Draw transparent submodel surfaces
+        if (transparentSubmodelSurfaces.Count > 0)
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.DepthMask(false);
+
+            foreach (var (surfIdx, blend) in transparentSubmodelSurfaces)
+            {
+                ref var surf = ref _world.Surfaces[surfIdx];
+                _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
+                DrawSurfaceGeometry(ref surf, shaders, 0);
+            }
+
+            _gl.DepthMask(true);
+            _gl.Disable(EnableCap.Blend);
+        }
+
+        _gl.BindVertexArray(0);
+    }
+
     private void WalkBspTree(int nodeIdx, int cameraCluster, ShaderManager shaders)
     {
         if (_world == null) return;
@@ -476,20 +563,21 @@ public sealed unsafe class BspRenderer : IDisposable
                 return;
             }
 
-            // Only defer surfaces that are ACTUALLY transparent
+            // Defer surfaces that need blending to the transparent pass.
+            // Check content flags, surfaceparm trans, AND shader blend mode.
             int cFlags = _world.Shaders[surf.ShaderIndex].ContentFlags;
             bool isTrans = (cFlags & CONTENTS_TRANSLUCENT) != 0;
 
             if (!isTrans)
                 isTrans = shaders.IsTransparent(surf.ShaderHandle);
 
-            if (isTrans)
+            BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
+            if (isTrans || blend.NeedsBlending)
             {
-                BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
                 if (blend.NeedsBlending)
                 {
                     int sortKey = shaders.GetSortKey(surf.ShaderHandle);
-                    if (sortKey == 0) sortKey = 8; // default transparent sort
+                    if (sortKey == 0) sortKey = isTrans ? 8 : 5; // trans=blend, non-trans=seeThrough
                     _transparentSurfaces.Add((surfIdx, blend, sortKey));
                     return;
                 }

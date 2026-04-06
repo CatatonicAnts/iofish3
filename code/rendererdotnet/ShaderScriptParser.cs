@@ -344,12 +344,15 @@ public sealed unsafe class ShaderScriptParser
                     {
                         string? frameToken = tokenizer.NextToken();
                         if (frameToken == null || frameToken == "{" || frameToken == "}")
+                        {
+                            if (frameToken != null)
+                                tokenizer.PushBack(frameToken);
                             break;
+                        }
                         // If token looks like a directive keyword, we've gone too far
                         if (IsStageDirective(frameToken))
                         {
-                            // Push back by storing for next iteration — can't push back with tokenizer
-                            // so just stop collecting frames here
+                            tokenizer.PushBack(frameToken);
                             break;
                         }
                         frames.Add(frameToken);
@@ -736,21 +739,33 @@ public sealed unsafe class ShaderScriptParser
     {
         private ReadOnlySpan<char> _text;
         private int _pos;
+        private string? _pending;
 
         public ShaderTokenizer(string text)
         {
             _text = text.AsSpan();
             _pos = 0;
+            _pending = null;
         }
+
+        public void PushBack(string token) => _pending = token;
 
         public bool HasMore()
         {
+            if (_pending != null) return true;
             SkipWhitespaceAndComments();
             return _pos < _text.Length;
         }
 
         public string? NextToken()
         {
+            if (_pending != null)
+            {
+                var t = _pending;
+                _pending = null;
+                return t;
+            }
+
             SkipWhitespaceAndComments();
             if (_pos >= _text.Length)
                 return null;

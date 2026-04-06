@@ -19,6 +19,7 @@ public sealed unsafe class Renderer3D : IDisposable
     private int _lightDirLoc;
     private int _envMapLoc;
     private int _viewPosLoc;
+    private int _fullbrightLoc;
 
     // Reusable buffers for interpolated vertex data
     private uint _vao;
@@ -70,14 +71,19 @@ public sealed unsafe class Renderer3D : IDisposable
         uniform sampler2D uTex;
         uniform vec4 uColor;
         uniform vec3 uLightDir;
+        uniform int uFullbright;
 
         out vec4 oColor;
 
         void main() {
             vec4 texColor = texture(uTex, vUV);
-            float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
-            float light = 0.3 + 0.7 * ndl;
-            oColor = texColor * uColor * vec4(vec3(light), 1.0);
+            if (uFullbright != 0) {
+                oColor = texColor * uColor;
+            } else {
+                float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
+                float light = 0.3 + 0.7 * ndl;
+                oColor = texColor * uColor * vec4(vec3(light), 1.0);
+            }
         }
         """;
 
@@ -91,6 +97,7 @@ public sealed unsafe class Renderer3D : IDisposable
         _lightDirLoc = _gl.GetUniformLocation(_program, "uLightDir");
         _envMapLoc = _gl.GetUniformLocation(_program, "uEnvMap");
         _viewPosLoc = _gl.GetUniformLocation(_program, "uViewPos");
+        _fullbrightLoc = _gl.GetUniformLocation(_program, "uFullbright");
 
         _vao = _gl.GenVertexArray();
         _gl.BindVertexArray(_vao);
@@ -121,7 +128,8 @@ public sealed unsafe class Renderer3D : IDisposable
     public void DrawSurface(Md3Surface surface, int frame, int oldFrame, float backlerp,
                             float* mvp, float* modelMatrix, uint textureId,
                             float r, float g, float b, float a,
-                            bool envMap = false, float viewX = 0, float viewY = 0, float viewZ = 0)
+                            bool envMap = false, float viewX = 0, float viewY = 0, float viewZ = 0,
+                            BlendMode blend = default)
     {
         int numVerts = surface.NumVerts;
         int numTris = surface.NumTriangles;
@@ -181,6 +189,10 @@ public sealed unsafe class Renderer3D : IDisposable
         _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
         _gl.Uniform3(_viewPosLoc, viewX, viewY, viewZ);
 
+        // Use fullbright (no NDL lighting) for non-opaque blend modes (additive, alpha, etc.)
+        bool useBlend = blend.NeedsBlending || a < 0.999f;
+        _gl.Uniform1(_fullbrightLoc, useBlend ? 1 : 0);
+
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, textureId);
 
@@ -202,8 +214,14 @@ public sealed unsafe class Renderer3D : IDisposable
         _gl.Enable(EnableCap.CullFace);
         _gl.CullFace(TriangleFace.Front); // Q3 uses clockwise winding
 
-        // Enable blending if entity has translucent alpha
-        if (a < 0.999f)
+        // Enable blending from shader blend mode or entity alpha
+        if (blend.NeedsBlending)
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
+            _gl.DepthMask(false);
+        }
+        else if (a < 0.999f)
         {
             _gl.Enable(EnableCap.Blend);
             _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
@@ -219,7 +237,7 @@ public sealed unsafe class Renderer3D : IDisposable
             (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
 
         // Restore state
-        if (a < 0.999f)
+        if (blend.NeedsBlending || a < 0.999f)
         {
             _gl.DepthMask(true);
             _gl.Disable(EnableCap.Blend);
