@@ -65,8 +65,9 @@ public static unsafe class EngineImports
     /// <summary>
     /// Read a file from the engine's virtual filesystem (pk3 archives + loose files).
     /// Returns file length, or -1 if not found. Caller must free with FS_FreeFile.
+    /// Note: C "long" is 4 bytes on Windows MSVC x64, matching C# "int".
     /// </summary>
-    public static long FS_ReadFile(string path, out byte* buffer)
+    public static int FS_ReadFile(string path, out byte* buffer)
     {
         buffer = null;
         if (!_initialized || _ri.FS_ReadFile == 0)
@@ -76,7 +77,7 @@ public static unsafe class EngineImports
         fixed (byte* pathPtr = pathBytes)
         {
             byte* buf = null;
-            long len = ((delegate* unmanaged[Cdecl]<byte*, byte**, long>)_ri.FS_ReadFile)(pathPtr, &buf);
+            int len = ((delegate* unmanaged[Cdecl]<byte*, byte**, int>)_ri.FS_ReadFile)(pathPtr, &buf);
             buffer = buf;
             return len;
         }
@@ -90,5 +91,39 @@ public static unsafe class EngineImports
         if (!_initialized || _ri.FS_FreeFile == 0 || buffer == null)
             return;
         ((delegate* unmanaged[Cdecl]<byte*, void>)_ri.FS_FreeFile)(buffer);
+    }
+
+    /// <summary>
+    /// List files in a directory matching an extension.
+    /// Returns a native array of C strings; caller must free with FS_FreeFileList.
+    /// </summary>
+    public static byte** FS_ListFiles(string directory, string extension, out int numFiles)
+    {
+        numFiles = 0;
+        if (!_initialized || _ri.FS_ListFiles == 0)
+            return null;
+
+        byte[] dirBytes = Encoding.UTF8.GetBytes(directory + "\0");
+        byte[] extBytes = Encoding.UTF8.GetBytes(extension + "\0");
+        int count = 0;
+
+        fixed (byte* dirPtr = dirBytes)
+        fixed (byte* extPtr = extBytes)
+        {
+            byte** result = ((delegate* unmanaged[Cdecl]<byte*, byte*, int*, byte**>)_ri.FS_ListFiles)(
+                dirPtr, extPtr, &count);
+            numFiles = count;
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Free a file list returned by FS_ListFiles.
+    /// </summary>
+    public static void FS_FreeFileList(byte** fileList)
+    {
+        if (!_initialized || _ri.FS_FreeFileList == 0 || fileList == null)
+            return;
+        ((delegate* unmanaged[Cdecl]<byte**, void>)_ri.FS_FreeFileList)(fileList);
     }
 }

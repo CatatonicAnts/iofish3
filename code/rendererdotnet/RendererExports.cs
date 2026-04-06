@@ -132,6 +132,9 @@ public static unsafe class RendererExports
         _shaders.WhiteTexture = _renderer2D.WhiteTexture;
         _shaders.SetRenderer(_renderer2D);
 
+        // Parse Q3 shader scripts so we can resolve shader names to image paths
+        _shaders.LoadShaderScripts();
+
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
         NativeMemory.Clear(cfg, GLCONFIG_SIZE);
@@ -283,7 +286,7 @@ public static unsafe class RendererExports
         string datFile = $"fonts/fontImage_{pointSize}.dat";
         const int FONT_INFO_SIZE = 20548; // sizeof(fontInfo_t)
 
-        long len = EngineImports.FS_ReadFile(datFile, out byte* data);
+        int len = EngineImports.FS_ReadFile(datFile, out byte* data);
         if (len != FONT_INFO_SIZE || data == null)
         {
             if (data != null) EngineImports.FS_FreeFile(data);

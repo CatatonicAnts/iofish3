@@ -28,12 +28,11 @@ public static unsafe class ImageLoader
         foreach (var ext in extensions)
         {
             string path = baseName + ext;
-            long len = EngineImports.FS_ReadFile(path, out byte* buf);
+            int len = EngineImports.FS_ReadFile(path, out byte* buf);
             if (len > 0 && buf != null)
             {
                 try
                 {
-                    var span = new ReadOnlySpan<byte>(buf, (int)len);
                     using var stream = new UnmanagedMemoryStream(buf, len);
                     var result = ImageResult.FromStream(stream, ColorComponents.RedGreenBlueAlpha);
                     return result;
@@ -52,7 +51,7 @@ public static unsafe class ImageLoader
         // Also try the exact name as-is (might already have extension)
         if (dotIdx >= 0)
         {
-            long len = EngineImports.FS_ReadFile(name, out byte* buf);
+            int len = EngineImports.FS_ReadFile(name, out byte* buf);
             if (len > 0 && buf != null)
             {
                 try

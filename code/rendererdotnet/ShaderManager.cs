@@ -6,12 +6,17 @@ namespace RendererDotNet;
 /// Maps engine shader handles (int) to GL texture IDs (uint).
 /// Handle 0 is reserved (invalid), handle 1+ are valid.
 /// Lazily loads textures from the engine filesystem on first use.
+///
+/// When a direct image file lookup fails, falls back to the shader script
+/// parser to resolve shader names to their actual image paths (as defined
+/// in scripts/*.shader files).
 /// </summary>
 public unsafe class ShaderManager
 {
     private readonly List<ShaderEntry> _shaders = [];
     private readonly Dictionary<string, int> _nameToHandle = new(System.StringComparer.OrdinalIgnoreCase);
     private Renderer2D? _renderer;
+    private ShaderScriptParser? _scriptParser;
 
     public uint WhiteTexture { get; set; }
 
@@ -24,6 +29,16 @@ public unsafe class ShaderManager
     public void SetRenderer(Renderer2D renderer)
     {
         _renderer = renderer;
+    }
+
+    /// <summary>
+    /// Load and parse all Q3 shader script files. Must be called after
+    /// the engine filesystem is initialized (after BeginRegistration).
+    /// </summary>
+    public void LoadShaderScripts()
+    {
+        _scriptParser = new ShaderScriptParser();
+        _scriptParser.LoadAllShaders();
     }
 
     public int Register(byte* namePtr)
@@ -69,12 +84,32 @@ public unsafe class ShaderManager
     {
         if (_renderer == null) return;
 
+        // First: try loading the image directly by shader name
         var image = ImageLoader.LoadFromEngineFS(entry.Name);
-        if (image == null) return;
+
+        // Fallback: look up the shader script to find the actual image path
+        if (image == null && _scriptParser != null)
+        {
+            var def = _scriptParser.GetShaderDef(entry.Name);
+            if (def?.ImagePath != null && !def.ImagePath.StartsWith('*'))
+            {
+                image = ImageLoader.LoadFromEngineFS(def.ImagePath);
+                if (image != null)
+                    entry.Clamp = def.Clamp;
+            }
+        }
+
+        if (image == null)
+        {
+            Interop.EngineImports.Printf(Interop.EngineImports.PRINT_DEVELOPER,
+                $"[.NET] Could not load texture: {entry.Name}\n");
+            return;
+        }
 
         fixed (byte* data = image.Data)
         {
-            entry.TextureId = _renderer.CreateTexture(image.Width, image.Height, data, clamp: true);
+            entry.TextureId = _renderer.CreateTexture(
+                image.Width, image.Height, data, clamp: entry.Clamp);
         }
 
         Interop.EngineImports.Printf(Interop.EngineImports.PRINT_DEVELOPER,
@@ -102,5 +137,6 @@ public unsafe class ShaderManager
         public string Name { get; set; } = "";
         public uint TextureId { get; set; }
         public bool Loaded { get; set; }
+        public bool Clamp { get; set; }
     }
 }
