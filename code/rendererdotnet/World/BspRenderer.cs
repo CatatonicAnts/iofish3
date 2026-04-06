@@ -33,6 +33,10 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _overbrightScaleLoc;
     private int _useLmUVLoc;
     private int _greyscaleLoc;
+    private int _texNormalMapLoc;
+    private int _texSpecularMapLoc;
+    private int _useNormalMapLoc;
+    private int _useSpecularMapLoc;
     private float _greyscaleValue; // 0.0=color, 1.0=fully greyscale
 
     private uint _vao;
@@ -42,8 +46,8 @@ public sealed unsafe class BspRenderer : IDisposable
     private BspWorld? _world;
     private uint[] _lightmapTextures = [];
 
-    // Per-vertex: x,y,z, nx,ny,nz, u,v, lmU,lmV, r,g,b,a = 14 floats
-    private const int FLOATS_PER_VERT = 14;
+    // Per-vertex: x,y,z, nx,ny,nz, u,v, lmU,lmV, r,g,b,a, tx,ty,tz,ts = 18 floats
+    private const int FLOATS_PER_VERT = 18;
 
     // Visibility tracking to avoid drawing same surface twice per frame
     private int[] _surfaceDrawnFrame = [];
@@ -216,6 +220,7 @@ public sealed unsafe class BspRenderer : IDisposable
         layout(location = 2) in vec2 aUV;
         layout(location = 3) in vec2 aLmUV;
         layout(location = 4) in vec4 aColor;
+        layout(location = 5) in vec4 aTangent;
 
         uniform mat4 uMVP;
         uniform int uEnvMap;
@@ -228,11 +233,14 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uDeformType; // -1=none, 0=wave, 1=move
         uniform vec4 uDeformParams0; // wave: div,func,base,amp  move: x,y,z,func
         uniform vec4 uDeformParams1; // wave: phase,freq,0,0     move: base,amp,phase,freq
+        uniform int uUseNormalMap;
 
         out vec2 vUV;
         out vec2 vLmUV;
         out vec3 vNormal;
         out vec4 vColor;
+        out vec3 vWorldPos;
+        out mat3 vTBN;
 
         float evalWaveFunc(int func, float phase) {
             if (func == 0) return sin(phase * 6.283185);       // sin
@@ -276,6 +284,18 @@ public sealed unsafe class BspRenderer : IDisposable
             vLmUV = aLmUV;
             vNormal = aNormal;
             vColor = aColor;
+            vWorldPos = pos;
+
+            // Compute TBN matrix for normal mapping
+            if (uUseNormalMap != 0) {
+                vec3 N = normalize(aNormal);
+                vec3 T = normalize(aTangent.xyz);
+                T = normalize(T - dot(T, N) * N); // re-orthogonalize
+                vec3 B = cross(N, T) * aTangent.w;
+                vTBN = mat3(T, B, N);
+            } else {
+                vTBN = mat3(1.0);
+            }
 
             if (uEnvMap != 0) {
                 vec3 viewDir = normalize(pos - uViewPos);
@@ -321,17 +341,24 @@ public sealed unsafe class BspRenderer : IDisposable
         in vec2 vLmUV;
         in vec3 vNormal;
         in vec4 vColor;
+        in vec3 vWorldPos;
+        in mat3 vTBN;
 
         uniform sampler2D uTexDiffuse;
         uniform sampler2D uTexLightmap;
+        uniform sampler2D uTexNormalMap;
+        uniform sampler2D uTexSpecularMap;
         uniform vec4 uColor;
         uniform vec3 uLightDir;
+        uniform vec3 uViewPos;
         uniform int uUseLightmap;
         uniform float uOverbrightScale;
         uniform int uAlphaFunc; // 0=none, 1=GT0, 2=LT128, 3=GE128
         uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 4=identityLighting, 5=NDL fallback
         uniform int uUseLmUV;   // 1=sample diffuse with lightmap UVs (for multi-stage lightmap)
         uniform float uGreyscale; // 0.0=color, 1.0=fully greyscale
+        uniform int uUseNormalMap;
+        uniform int uUseSpecularMap;
 
         out vec4 oColor;
 
@@ -343,6 +370,17 @@ public sealed unsafe class BspRenderer : IDisposable
             if (uAlphaFunc == 1 && texColor.a <= 0.0) discard;       // GT0
             else if (uAlphaFunc == 2 && texColor.a >= 0.5) discard;  // LT128
             else if (uAlphaFunc == 3 && texColor.a < 0.5) discard;   // GE128
+
+            // Compute shading normal (from normal map or interpolated)
+            vec3 N = normalize(vNormal);
+            if (uUseNormalMap != 0) {
+                vec3 mapN = texture(uTexNormalMap, vUV).rgb * 2.0 - 1.0;
+                // Reconstruct Z if stored as two-component
+                if (abs(mapN.z) < 0.01) {
+                    mapN.z = sqrt(max(0.0, 1.0 - mapN.x*mapN.x - mapN.y*mapN.y));
+                }
+                N = normalize(vTBN * mapN);
+            }
 
             if (uUseLightmap != 0) {
                 vec4 lmColor = texture(uTexLightmap, vLmUV);
@@ -356,7 +394,7 @@ public sealed unsafe class BspRenderer : IDisposable
                 if (vcSum > 0.01) {
                     oColor = texColor * vColor;
                 } else {
-                    float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
+                    float ndl = max(dot(N, uLightDir), 0.0);
                     float light = 0.3 + 0.7 * ndl;
                     oColor = texColor * vec4(vec3(light), 1.0);
                 }
@@ -364,6 +402,16 @@ public sealed unsafe class BspRenderer : IDisposable
                 // rgbGen identity (0) or identityLighting (4) — pass through
                 oColor = texColor;
             }
+
+            // Specular highlight (Blinn-Phong)
+            if (uUseSpecularMap != 0) {
+                vec3 V = normalize(uViewPos - vWorldPos);
+                vec3 H = normalize(uLightDir + V);
+                float spec = pow(max(dot(N, H), 0.0), 16.0);
+                vec3 specColor = texture(uTexSpecularMap, vUV).rgb;
+                oColor.rgb += specColor * spec;
+            }
+
             oColor *= uColor;
             oColor.a = texColor.a * uColor.a;
 
@@ -398,6 +446,18 @@ public sealed unsafe class BspRenderer : IDisposable
         _overbrightScaleLoc = _gl.GetUniformLocation(_program, "uOverbrightScale");
         _useLmUVLoc = _gl.GetUniformLocation(_program, "uUseLmUV");
         _greyscaleLoc = _gl.GetUniformLocation(_program, "uGreyscale");
+        _texNormalMapLoc = _gl.GetUniformLocation(_program, "uTexNormalMap");
+        _texSpecularMapLoc = _gl.GetUniformLocation(_program, "uTexSpecularMap");
+        _useNormalMapLoc = _gl.GetUniformLocation(_program, "uUseNormalMap");
+        _useSpecularMapLoc = _gl.GetUniformLocation(_program, "uUseSpecularMap");
+
+        // Set texture unit bindings (static)
+        _gl.UseProgram(_program);
+        _gl.Uniform1(_texDiffuseLoc, 0);   // GL_TEXTURE0
+        _gl.Uniform1(_texLightmapLoc, 1);  // GL_TEXTURE1
+        _gl.Uniform1(_texNormalMapLoc, 2); // GL_TEXTURE2
+        _gl.Uniform1(_texSpecularMapLoc, 3); // GL_TEXTURE3
+        _gl.UseProgram(0);
 
         // Register r_greyscale cvar (0.0 = color, 1.0 = fully grey)
         EngineImports.Cvar_Get("r_greyscale", "0", 1); // 1 = CVAR_ARCHIVE
@@ -484,6 +544,8 @@ public sealed unsafe class BspRenderer : IDisposable
             verts[o + 8] = v.LmU; verts[o + 9] = v.LmV;
             verts[o + 10] = v.R / 255f; verts[o + 11] = v.G / 255f;
             verts[o + 12] = v.B / 255f; verts[o + 13] = v.A / 255f;
+            verts[o + 14] = v.TX; verts[o + 15] = v.TY;
+            verts[o + 16] = v.TZ; verts[o + 17] = v.TS;
         }
 
         _gl.BindVertexArray(_vao);
@@ -517,6 +579,9 @@ public sealed unsafe class BspRenderer : IDisposable
         // Vertex color (vec4)
         _gl.VertexAttribPointer(4, 4, VertexAttribPointerType.Float, false, stride, (void*)(10 * sizeof(float)));
         _gl.EnableVertexAttribArray(4);
+        // Tangent (vec4: xyz + handedness sign)
+        _gl.VertexAttribPointer(5, 4, VertexAttribPointerType.Float, false, stride, (void*)(14 * sizeof(float)));
+        _gl.EnableVertexAttribArray(5);
 
         _gl.BindVertexArray(0);
     }
@@ -576,6 +641,8 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 2.0f);
         _gl.Uniform1(_useLmUVLoc, 0);
+        _gl.Uniform1(_useNormalMapLoc, 0);
+        _gl.Uniform1(_useSpecularMapLoc, 0);
 
         // Read r_greyscale cvar each frame (0 = color, 1 = fully greyscale)
         int gsInt = EngineImports.Cvar_VariableIntegerValue("r_greyscale");
@@ -668,6 +735,8 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 2.0f);
         _gl.Uniform1(_useLmUVLoc, 0);
+        _gl.Uniform1(_useNormalMapLoc, 0);
+        _gl.Uniform1(_useSpecularMapLoc, 0);
 
         _gl.BindVertexArray(_vao);
         _gl.Enable(EnableCap.DepthTest);
@@ -918,6 +987,26 @@ public sealed unsafe class BspRenderer : IDisposable
             _gl.BindTexture(TextureTarget.Texture2D, _lightmapTextures[surf.LightmapIndex]);
         }
 
+        // Bind normal map if available
+        uint normalTexId = shaders.GetNormalMapTexId(surf.ShaderHandle);
+        bool hasNormalMap = normalTexId != 0;
+        _gl.Uniform1(_useNormalMapLoc, hasNormalMap ? 1 : 0);
+        if (hasNormalMap)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture2);
+            _gl.BindTexture(TextureTarget.Texture2D, normalTexId);
+        }
+
+        // Bind specular map if available
+        uint specTexId = shaders.GetSpecularMapTexId(surf.ShaderHandle);
+        bool hasSpecMap = specTexId != 0;
+        _gl.Uniform1(_useSpecularMapLoc, hasSpecMap ? 1 : 0);
+        if (hasSpecMap)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture3);
+            _gl.BindTexture(TextureTarget.Texture2D, specTexId);
+        }
+
         // Set alpha test mode
         _gl.Uniform1(_alphaFuncLoc, alphaFunc);
 
@@ -966,6 +1055,10 @@ public sealed unsafe class BspRenderer : IDisposable
             _gl.DepthFunc(DepthFunction.Lequal);
         if (hasDeform)
             _gl.Uniform1(_deformTypeLoc, -1);
+        if (hasNormalMap)
+            _gl.Uniform1(_useNormalMapLoc, 0);
+        if (hasSpecMap)
+            _gl.Uniform1(_useSpecularMapLoc, 0);
     }
 
     /// <summary>
@@ -988,6 +1081,25 @@ public sealed unsafe class BspRenderer : IDisposable
         }
 
         bool hasDeform = ApplyDeforms(shaders.GetDeforms(surf.ShaderHandle));
+
+        // Bind normal/specular maps for multi-stage (shared across all stages)
+        uint normalTexId = shaders.GetNormalMapTexId(surf.ShaderHandle);
+        bool hasNormalMap = normalTexId != 0;
+        _gl.Uniform1(_useNormalMapLoc, hasNormalMap ? 1 : 0);
+        if (hasNormalMap)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture2);
+            _gl.BindTexture(TextureTarget.Texture2D, normalTexId);
+        }
+
+        uint specTexId = shaders.GetSpecularMapTexId(surf.ShaderHandle);
+        bool hasSpecMap = specTexId != 0;
+        _gl.Uniform1(_useSpecularMapLoc, hasSpecMap ? 1 : 0);
+        if (hasSpecMap)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture3);
+            _gl.BindTexture(TextureTarget.Texture2D, specTexId);
+        }
 
         float timeSec = _currentTimeSec;
 
@@ -1103,6 +1215,10 @@ public sealed unsafe class BspRenderer : IDisposable
             _gl.Disable(EnableCap.PolygonOffsetFill);
         if (hasDeform)
             _gl.Uniform1(_deformTypeLoc, -1);
+        if (hasNormalMap)
+            _gl.Uniform1(_useNormalMapLoc, 0);
+        if (hasSpecMap)
+            _gl.Uniform1(_useSpecularMapLoc, 0);
     }
 
     /// <summary>Set tcMod uniforms from an array of TcMod operations.</summary>

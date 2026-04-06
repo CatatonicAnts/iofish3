@@ -115,6 +115,7 @@ public static unsafe class BspLoader
             $"{world.Nodes.Length} nodes, {world.Leafs.Length} leafs, {world.Lightmaps.Length} lightmaps)\n");
 
         TessellatePatches(world);
+        ComputeTangents(world);
 
         return world;
     }
@@ -626,5 +627,111 @@ public static unsafe class BspLoader
         }
 
         world.Fogs = fogs;
+    }
+
+    /// <summary>
+    /// Compute per-vertex tangent vectors from triangle UV deltas.
+    /// Uses MikkTSpace-style averaging: accumulate tangent per triangle vertex,
+    /// then normalize and Gram-Schmidt orthogonalize against the normal.
+    /// </summary>
+    private static void ComputeTangents(BspWorld world)
+    {
+        var verts = world.Vertices;
+        int numVerts = verts.Length;
+
+        // Accumulate tangent + bitangent per vertex
+        var tan1 = new float[numVerts * 3]; // tangent accumulator
+        var tan2 = new float[numVerts * 3]; // bitangent accumulator
+
+        // Process each surface's triangles
+        for (int si = 0; si < world.Surfaces.Length; si++)
+        {
+            ref var surf = ref world.Surfaces[si];
+            if (surf.SurfaceType != SurfaceTypes.MST_PLANAR &&
+                surf.SurfaceType != SurfaceTypes.MST_TRIANGLE_SOUP &&
+                surf.SurfaceType != SurfaceTypes.MST_PATCH)
+                continue;
+
+            for (int j = 0; j < surf.NumIndices; j += 3)
+            {
+                int idx0 = surf.FirstIndex + j;
+                int idx1 = surf.FirstIndex + j + 1;
+                int idx2 = surf.FirstIndex + j + 2;
+                if (idx2 >= world.Indices.Length) break;
+
+                int i0 = world.Indices[idx0] + surf.FirstVertex;
+                int i1 = world.Indices[idx1] + surf.FirstVertex;
+                int i2 = world.Indices[idx2] + surf.FirstVertex;
+                if (i0 >= numVerts || i1 >= numVerts || i2 >= numVerts) continue;
+
+                ref var v0 = ref verts[i0];
+                ref var v1 = ref verts[i1];
+                ref var v2 = ref verts[i2];
+
+                float dx1 = v1.X - v0.X, dy1 = v1.Y - v0.Y, dz1 = v1.Z - v0.Z;
+                float dx2 = v2.X - v0.X, dy2 = v2.Y - v0.Y, dz2 = v2.Z - v0.Z;
+
+                float du1 = v1.U - v0.U, dv1 = v1.V - v0.V;
+                float du2 = v2.U - v0.U, dv2 = v2.V - v0.V;
+
+                float r = du1 * dv2 - du2 * dv1;
+                if (MathF.Abs(r) < 1e-12f) continue;
+                r = 1f / r;
+
+                float tx = (dv2 * dx1 - dv1 * dx2) * r;
+                float ty = (dv2 * dy1 - dv1 * dy2) * r;
+                float tz = (dv2 * dz1 - dv1 * dz2) * r;
+
+                float bx = (du1 * dx2 - du2 * dx1) * r;
+                float by = (du1 * dy2 - du2 * dy1) * r;
+                float bz = (du1 * dz2 - du2 * dz1) * r;
+
+                // Accumulate for all 3 vertices
+                foreach (int vi in new[] { i0, i1, i2 })
+                {
+                    tan1[vi * 3] += tx; tan1[vi * 3 + 1] += ty; tan1[vi * 3 + 2] += tz;
+                    tan2[vi * 3] += bx; tan2[vi * 3 + 1] += by; tan2[vi * 3 + 2] += bz;
+                }
+            }
+        }
+
+        // Gram-Schmidt orthogonalize and compute handedness
+        for (int i = 0; i < numVerts; i++)
+        {
+            float nx = verts[i].NX, ny = verts[i].NY, nz = verts[i].NZ;
+            float tx = tan1[i * 3], ty = tan1[i * 3 + 1], tz = tan1[i * 3 + 2];
+
+            // t = normalize(t - n * dot(n, t))
+            float dot = nx * tx + ny * ty + nz * tz;
+            tx -= nx * dot; ty -= ny * dot; tz -= nz * dot;
+
+            float len = MathF.Sqrt(tx * tx + ty * ty + tz * tz);
+            if (len > 1e-6f)
+            {
+                tx /= len; ty /= len; tz /= len;
+            }
+            else
+            {
+                // Fallback: generate arbitrary tangent perpendicular to normal
+                if (MathF.Abs(nx) < 0.9f)
+                { tx = 0; ty = -nz; tz = ny; }
+                else
+                { tx = nz; ty = 0; tz = -nx; }
+                len = MathF.Sqrt(tx * tx + ty * ty + tz * tz);
+                if (len > 0) { tx /= len; ty /= len; tz /= len; }
+            }
+
+            // Handedness: sign = dot(cross(n, t), bitangent)
+            float cx = ny * tz - nz * ty;
+            float cy = nz * tx - nx * tz;
+            float cz = nx * ty - ny * tx;
+            float bx = tan2[i * 3], by = tan2[i * 3 + 1], bz = tan2[i * 3 + 2];
+            float sign = (cx * bx + cy * by + cz * bz) < 0f ? -1f : 1f;
+
+            verts[i].TX = tx;
+            verts[i].TY = ty;
+            verts[i].TZ = tz;
+            verts[i].TS = sign;
+        }
     }
 }

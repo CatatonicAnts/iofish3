@@ -332,6 +332,24 @@ public unsafe class ShaderManager
         return entry.NoMarks;
     }
 
+    /// <summary>Get normal map texture ID for a shader handle (0 = none).</summary>
+    public uint GetNormalMapTexId(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count) return 0;
+        var entry = _shaders[handle];
+        if (!entry.Loaded) { entry.Loaded = true; TryLoadTexture(entry); }
+        return entry.NormalMapTexId;
+    }
+
+    /// <summary>Get specular map texture ID for a shader handle (0 = none).</summary>
+    public uint GetSpecularMapTexId(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count) return 0;
+        var entry = _shaders[handle];
+        if (!entry.Loaded) { entry.Loaded = true; TryLoadTexture(entry); }
+        return entry.SpecularMapTexId;
+    }
+
     private void TryLoadTexture(ShaderEntry entry)
     {
         if (_renderer == null) return;
@@ -368,6 +386,30 @@ public unsafe class ShaderManager
             entry.Deforms = def.Deforms;
             entry.NoDLight = def.NoDLight;
             entry.NoMarks = def.NoMarks;
+
+            // Load normal map if specified
+            if (def.NormalMapPath != null && _renderer != null)
+            {
+                var nmImg = ImageLoader.LoadFromEngineFS(def.NormalMapPath);
+                if (nmImg != null)
+                {
+                    fixed (byte* nd = nmImg.Data)
+                        entry.NormalMapTexId = _renderer.CreateTexture(
+                            nmImg.Width, nmImg.Height, nd, clamp: false, generateMipmaps: true);
+                }
+            }
+
+            // Load specular map if specified
+            if (def.SpecularMapPath != null && _renderer != null)
+            {
+                var smImg = ImageLoader.LoadFromEngineFS(def.SpecularMapPath);
+                if (smImg != null)
+                {
+                    fixed (byte* sd = smImg.Data)
+                        entry.SpecularMapTexId = _renderer.CreateTexture(
+                            smImg.Width, smImg.Height, sd, clamp: false, generateMipmaps: true);
+                }
+            }
 
             // Determine mipmap generation policy
             bool useMipmaps = !def.NoMipMaps;
@@ -524,6 +566,10 @@ public unsafe class ShaderManager
         public bool NoDLight { get; set; }
         /// <summary>Surface doesn't receive impact marks</summary>
         public bool NoMarks { get; set; }
+        /// <summary>Normal map texture ID (0 = none)</summary>
+        public uint NormalMapTexId { get; set; }
+        /// <summary>Specular map texture ID (0 = none)</summary>
+        public uint SpecularMapTexId { get; set; }
     }
 
     /// <summary>

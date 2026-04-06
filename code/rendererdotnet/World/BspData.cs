@@ -225,6 +225,7 @@ public struct BspVertex
     public float LmU, LmV;        // Lightmap coords
     public float NX, NY, NZ;      // Normal
     public byte R, G, B, A;       // Vertex color
+    public float TX, TY, TZ, TS;  // Tangent + sign (for normal mapping)
 }
 
 public struct BspSurface

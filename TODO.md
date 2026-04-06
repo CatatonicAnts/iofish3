@@ -41,8 +41,8 @@ A list of planned features, improvements, and tasks for this project.
 
 - [x] **HDR rendering** - RGBA16F scene FBO, filmic tonemapping (Uncharted 2 curve), auto-exposure via luminance pyramid with temporal smoothing. Controlled by `r_hdr`, `r_autoExposure`, `r_cameraExposure`. `CPX 4`
 - [x] **Bloom / post-processing** - FBO-based bloom pipeline: bright-pass extraction, multi-pass Gaussian blur, additive composite. Controlled by `r_bloom` cvar. `CPX 3`
-- [ ] **Normal mapping** - `normalMap`/`bumpMap` stage type for per-pixel lighting. GL2 generates normals from height maps if missing. `CPX 3`
-- [ ] **Specular mapping** - `specularMap` stage type with `specularScale`, `specularReflectance`, `specularExponent`, `gloss` controls. `CPX 3`
+- [x] **Normal mapping** - `normalMap`/`bumpMap` stage type for per-pixel lighting. Tangent vectors computed from BSP triangle UV deltas (MikkTSpace-style), TBN matrix constructed in vertex shader, normal map sampled and transformed in fragment shader. `CPX 3`
+- [x] **Specular mapping** - `specularMap` stage type with Blinn-Phong specular highlights. Specular map sampled in fragment shader, combined with view-dependent half-vector lighting. `CPX 3`
 - [ ] **PBR (Physically Based Rendering)** - GL2 has `r_pbr` cvar for metallic/roughness workflow. Converts specular values to PBR parameters. `CPX 4`
 - [ ] **Parallax mapping** - Height-based parallax offset (`r_parallaxMapping`) with optional parallax shadow mapping. `CPX 3`
 - [ ] **Cubemap reflections** - GL2 loads/renders cubemaps for environment reflections with parallax correction. `CPX 4`

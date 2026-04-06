@@ -177,6 +177,8 @@ public sealed unsafe class ShaderScriptParser
         bool noPicMip = false;
         bool noMipMaps = false;
         bool isPortal = false;
+        string? normalMapPath = null;
+        string? specularMapPath = null;
         bool stageIsLightmap = false;
         bool stageIsWhiteImage = false;
         string? stageMapRaw = null; // raw map token including $lightmap/$whiteimage
@@ -453,6 +455,19 @@ public sealed unsafe class ShaderScriptParser
                         stageAnimFrequency = animFreq;
                     }
                 }
+                else if (string.Equals(token, "normalMap", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(token, "bumpMap", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? mapToken = tokenizer.NextToken();
+                    if (mapToken != null && !IsSpecialMap(mapToken))
+                        normalMapPath = mapToken;
+                }
+                else if (string.Equals(token, "specularMap", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? mapToken = tokenizer.NextToken();
+                    if (mapToken != null && !IsSpecialMap(mapToken))
+                        specularMapPath = mapToken;
+                }
                 else if (string.Equals(token, "blendFunc", StringComparison.OrdinalIgnoreCase))
                 {
                     stageBlend = ParseBlendFunc(ref tokenizer);
@@ -606,7 +621,9 @@ public sealed unsafe class ShaderScriptParser
             NoMarks = noMarks,
             NoPicMip = noPicMip,
             NoMipMaps = noMipMaps,
-            IsPortal = isPortal
+            IsPortal = isPortal,
+            NormalMapPath = normalMapPath,
+            SpecularMapPath = specularMapPath
         };
     }
 
@@ -674,7 +691,10 @@ public sealed unsafe class ShaderScriptParser
                string.Equals(token, "rgbGen", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(token, "alphaGen", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(token, "depthFunc", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(token, "depthWrite", StringComparison.OrdinalIgnoreCase);
+               string.Equals(token, "depthWrite", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "normalMap", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "bumpMap", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(token, "specularMap", StringComparison.OrdinalIgnoreCase);
     }
 
     private static TcMod? ParseTcMod(ref ShaderTokenizer tokenizer)
@@ -1040,6 +1060,12 @@ public sealed class ShaderDef
 
     /// <summary>Whether this is a portal/mirror shader (sort portal or surfaceparm).</summary>
     public bool IsPortal { get; init; }
+
+    /// <summary>Normal map image path from normalMap/bumpMap directive (null if none).</summary>
+    public string? NormalMapPath { get; init; }
+
+    /// <summary>Specular map image path from specularMap directive (null if none).</summary>
+    public string? SpecularMapPath { get; init; }
 }
 
 /// <summary>
