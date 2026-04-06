@@ -228,6 +228,8 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.BindVertexArray(_vao);
         _gl.Enable(EnableCap.DepthTest);
         _gl.DepthFunc(DepthFunction.Lequal);
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
         _gl.Enable(EnableCap.CullFace);
         _gl.CullFace(TriangleFace.Front); // Q3 winding
 
