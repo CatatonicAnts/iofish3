@@ -101,6 +101,22 @@ The cgame DLL interface is:
 - [x] **Sound integration** — Port CG_AddLoopingSound, entity sound triggers, positional audio, ambient sounds, announcer voice. `CPX 3`
 - [x] **Default loading** — Modify engine to prefer `cgame_dotnet` DLL over QVM when `vm_cgame 0` is set. Add a cvar (e.g. `cl_cgame`) to select cgame implementation by name, similar to `cl_renderer` for renderers. `CPX 3`
 
+### Polish Features
+
+- [x] **View effects** — Port CG_OffsetFirstPersonView: view bobbing (head bob from bobCycle/xySpeed), step offset smoothing (stair climbing), duck height smoothing (crouch transition), landing deflection (fall impact), damage kick (pitch/roll punch when hit), velocity-based run pitch/roll, dead view angles. `CPX 3`
+- [x] **FOV and zoom** — Port CG_CalcFov: read cg_fov cvar (1-160), zoom support (+zoom/-zoom commands with cg_zoomFov interpolation over 150ms). `CPX 2`
+- [x] **Damage blend blob** — Port CG_DamageBlendBlob: directional blood vignette sprite rendered in front of view on damage with fade-out. `CPX 2`
+- [x] **Center print** — Port CG_CenterPrint: handle "cp" server command, display centered text messages (objectives, notifications) with 3-second fade-out. `CPX 2`
+- [x] **Chat display** — Handle "chat"/"tchat" server commands, display recent chat messages with ring buffer and 6-second fade-out. `CPX 2`
+- [x] **Item pickup notifications** — Show item name on pickup (e.g. "Rocket Launcher", "Mega Health") with 3-second centered display and fade-out. `CPX 2`
+- [ ] **Crosshair target names** — Port CG_DrawCrosshairNames: display player name when crosshair is over another player, with team color support. `CPX 2`
+- [ ] **Powerup timers** — Port CG_DrawPowerups: display active powerup icons and remaining time for quad damage, haste, invisibility, regeneration, etc. `CPX 3`
+- [ ] **Reward medals** — Port CG_DrawReward: display excellence/impressive/gauntlet medals with sound on multi-kills and skill achievements. `CPX 3`
+- [ ] **Lagometer** — Port CG_DrawLagometer: network latency graph showing snapshot timing and command round-trip, with disconnect indicator. `CPX 3`
+- [ ] **Warmup countdown** — Port CG_DrawWarmup: pre-match countdown display with announcer sounds. `CPX 2`
+- [ ] **Attacker display** — Port CG_DrawAttacker: show last attacker's name/head icon in upper-left when damaged by a player. `CPX 2`
+- [ ] **Third-person camera** — Port CG_OffsetThirdPersonView: third-person camera with collision tracing, controlled by cg_thirdPerson cvar. `CPX 3`
+
 ### Notes
 
 - The cgame communicates with the engine entirely through numbered syscalls (not function pointers like the renderer). The NativeAOT DLL must store the syscall pointer from `dllEntry` and dispatch through it.
