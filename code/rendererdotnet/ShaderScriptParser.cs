@@ -135,11 +135,13 @@ public sealed unsafe class ShaderScriptParser
         BlendMode blend = BlendMode.Opaque;
         bool foundUsableStage = false;
         string? skyBox = null;
+        string? editorImage = null;
 
         // Per-stage tracking
         string? stageImage = null;
         bool stageClamp = false;
         BlendMode stageBlend = BlendMode.Opaque;
+        bool stageHasEnvMap = false;
 
         while (depth > 0 && tokenizer.HasMore())
         {
@@ -155,6 +157,7 @@ public sealed unsafe class ShaderScriptParser
                     stageImage = null;
                     stageClamp = false;
                     stageBlend = BlendMode.Opaque;
+                    stageHasEnvMap = false;
                 }
                 continue;
             }
@@ -162,7 +165,8 @@ public sealed unsafe class ShaderScriptParser
             if (token == "}")
             {
                 // When leaving a stage, adopt the first stage that has a real image
-                if (depth == 2 && !foundUsableStage && stageImage != null)
+                // and doesn't use environment mapping
+                if (depth == 2 && !foundUsableStage && stageImage != null && !stageHasEnvMap)
                 {
                     imagePath = stageImage;
                     clamp = stageClamp;
@@ -178,12 +182,17 @@ public sealed unsafe class ShaderScriptParser
             {
                 if (string.Equals(token, "skyparms", StringComparison.OrdinalIgnoreCase))
                 {
-                    // skyparms <outerbox> <cloudheight> <innerbox>
                     string? outerBox = tokenizer.NextToken();
                     tokenizer.NextToken(); // cloudheight
                     tokenizer.NextToken(); // innerbox
                     if (outerBox != null && outerBox != "-")
                         skyBox = outerBox;
+                }
+                else if (string.Equals(token, "qer_editorimage", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? edImg = tokenizer.NextToken();
+                    if (edImg != null && !IsSpecialMap(edImg))
+                        editorImage = edImg;
                 }
             }
 
@@ -207,7 +216,6 @@ public sealed unsafe class ShaderScriptParser
                 }
                 else if (string.Equals(token, "animMap", StringComparison.OrdinalIgnoreCase))
                 {
-                    // animMap <frequency> <image1> <image2> ...
                     tokenizer.NextToken(); // skip frequency
                     string? firstFrame = tokenizer.NextToken();
                     if (firstFrame != null && !IsSpecialMap(firstFrame) && stageImage == null)
@@ -220,12 +228,14 @@ public sealed unsafe class ShaderScriptParser
                 else if (string.Equals(token, "tcGen", StringComparison.OrdinalIgnoreCase))
                 {
                     string? tcGenToken = tokenizer.NextToken();
-                    // Skip stages with environment mapping — they don't provide the actual model texture
                     if (tcGenToken != null && string.Equals(tcGenToken, "environment", StringComparison.OrdinalIgnoreCase))
-                        stageImage = null;
+                        stageHasEnvMap = true;
                 }
             }
         }
+
+        // Fallback: if no usable stage image found, use qer_editorimage
+        imagePath ??= editorImage;
 
         return new ShaderDef
         {

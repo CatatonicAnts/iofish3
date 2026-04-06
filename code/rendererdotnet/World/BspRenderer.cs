@@ -35,6 +35,9 @@ public sealed unsafe class BspRenderer : IDisposable
     private int[] _surfaceDrawnFrame = [];
     private int _frameCount;
 
+    // Transparent surfaces deferred to second pass
+    private readonly List<(int SurfIdx, BlendMode Blend)> _transparentSurfaces = new(256);
+
     private const string VertSrc = """
         #version 450 core
         layout(location = 0) in vec3 aPos;
@@ -198,6 +201,7 @@ public sealed unsafe class BspRenderer : IDisposable
 
     /// <summary>
     /// Render the world using BSP tree traversal for visibility.
+    /// Renders opaque surfaces first, then transparent surfaces in a second pass.
     /// </summary>
     public void Render(float* mvp, float viewX, float viewY, float viewZ,
                        ShaderManager shaders)
@@ -205,6 +209,7 @@ public sealed unsafe class BspRenderer : IDisposable
         if (_world == null) return;
 
         _frameCount++;
+        _transparentSurfaces.Clear();
 
         _gl.UseProgram(_program);
         _gl.UniformMatrix4(_mvpLoc, 1, false, mvp);
@@ -225,8 +230,39 @@ public sealed unsafe class BspRenderer : IDisposable
         if (leafIdx >= 0 && leafIdx < _world.Leafs.Length)
             cameraCluster = _world.Leafs[leafIdx].Cluster;
 
-        // Walk BSP tree and draw visible surfaces
+        // Walk BSP tree and draw visible opaque surfaces,
+        // collect transparent ones for second pass
         WalkBspTree(0, cameraCluster, shaders);
+
+        // Second pass: draw transparent surfaces with blending enabled
+        if (_transparentSurfaces.Count > 0)
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.DepthMask(false);
+
+            foreach (var (surfIdx, blend) in _transparentSurfaces)
+            {
+                ref var surf = ref _world.Surfaces[surfIdx];
+
+                switch (blend)
+                {
+                    case BlendMode.Add:
+                        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                        break;
+                    case BlendMode.Filter:
+                        _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
+                        break;
+                    default:
+                        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+                        break;
+                }
+
+                DrawSurfaceGeometry(ref surf, shaders);
+            }
+
+            _gl.DepthMask(true);
+            _gl.Disable(EnableCap.Blend);
+        }
 
         _gl.BindVertexArray(0);
     }
@@ -257,7 +293,7 @@ public sealed unsafe class BspRenderer : IDisposable
                 if (_surfaceDrawnFrame[surfIdx] == _frameCount) continue;
                 _surfaceDrawnFrame[surfIdx] = _frameCount;
 
-                DrawSurface(ref _world.Surfaces[surfIdx], shaders);
+                DrawSurface(ref _world.Surfaces[surfIdx], surfIdx, shaders);
             }
             return;
         }
@@ -271,7 +307,7 @@ public sealed unsafe class BspRenderer : IDisposable
         WalkBspTree(node.Child1, cameraCluster, shaders);
     }
 
-    private void DrawSurface(ref BspSurface surf, ShaderManager shaders)
+    private void DrawSurface(ref BspSurface surf, int surfIdx, ShaderManager shaders)
     {
         // Only draw planar faces, triangle soups, and tessellated patches
         if (surf.SurfaceType != SurfaceTypes.MST_PLANAR &&
@@ -292,6 +328,19 @@ public sealed unsafe class BspRenderer : IDisposable
                 return;
         }
 
+        // Check blend mode — defer transparent surfaces
+        BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
+        if (blend != BlendMode.Opaque)
+        {
+            _transparentSurfaces.Add((surfIdx, blend));
+            return;
+        }
+
+        DrawSurfaceGeometry(ref surf, shaders);
+    }
+
+    private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders)
+    {
         // Bind diffuse texture
         uint texId = shaders.GetTextureId(surf.ShaderHandle);
         _gl.ActiveTexture(TextureUnit.Texture0);

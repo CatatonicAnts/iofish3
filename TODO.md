@@ -24,7 +24,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### High Priority
 
-- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline, 3D model rendering (MD3), BSP world loading with lightmaps and PVS all working. Next: patch surfaces, shader blending modes, dynamic lighting. `CPX 5`
+- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline, 3D model rendering (MD3), BSP world loading with lightmaps and PVS, skybox rendering, shader blending, beam/lightning entities, mark fragments, and entity token parsing all working. Next: dynamic lighting, fog, alpha testing, improved patch tessellation. `CPX 5`
 
 ### Medium Priority
 
@@ -56,7 +56,7 @@ A list of planned features, improvements, and tasks for this project.
 ## Documentation **LOW PRIORITY**
 
 - [ ] Architecture overview covering subsystem relationships (renderer, game, botlib)
-- [ ] GL1 vs GL2 renderer comparison and migration notes
+- [ ] GL1 vs GL2 vs dotnet renderer comparison and migration notes
 - [ ] Document AAS magic number constants in `code/botlib/be_aas_reach.c`
 - [ ] Build and testing guide for contributors
 
@@ -124,6 +124,15 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Add skin loading (SkinManager) — parses `.skin` files mapping surface names to shader handles, customSkin/customShader priority in rendering.
 - [x] Fix window duplication — reuse existing SDL window/GL context on renderer re-init instead of spawning new windows.
 - [x] Implement BSP map loading — binary BSP v46 parser (vertices, indices, surfaces, nodes, leafs, planes, lightmaps, PVS), static GPU upload, BSP tree walk with PVS culling, dual-texture lightmap rendering.
+- [x] Implement skybox rendering — parses Q3 `skyparms` directives, loads 6-face cube textures, renders before world geometry with depth at far plane.
+- [x] Implement shader blending — parses `blendFunc` directives (add/filter/blend + GL_* long form), applies per-shader blend modes in 2D, 3D, sprites, polys, and BSP transparent surface pass.
+- [x] Implement beam/lightning/rail entities — billboarded quad strips for RT_BEAM, RT_LIGHTNING, RT_RAIL_CORE, RT_RAIL_RINGS entity types.
+- [x] Implement MarkFragments — basic decal projection onto BSP surfaces for bullet/weapon impact marks.
+- [x] Implement GetEntityToken — tokenizer for BSP entity string, used by cgame for entity spawning.
+- [x] Implement InPVS — PVS visibility check between two world points.
+- [x] Implement DrawStretchRaw — raw pixel data rendering for cinematic frames.
+- [x] Fix pickup textures — skip `tcGen environment` shader stages, fall back to `qer_editorimage`.
+- [x] Remove intro video and CD key prompt — commented out cinematics defines, CL_CDKeyValidate always returns qtrue.
 
 ### Fixed Bugs
 

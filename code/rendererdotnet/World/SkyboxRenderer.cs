@@ -170,32 +170,38 @@ public sealed unsafe class SkyboxRenderer : IDisposable
     }
 
     /// <summary>
-    /// Build a unit cube centered at origin. Each face has 2 triangles with UV coords.
-    /// Q3 sky convention: rt=+Y, lf=-Y, ft=-X, bk=+X, up=+Z, dn=-Z
+    /// Build a cube centered at origin. Each face has 2 triangles with UV coords.
+    /// Face-to-axis mapping derived from Q3's MakeSkyVec st_to_vec table:
+    ///   rt(0)=+X, bk(1)=-X, lf(2)=+Y, ft(3)=-Y, up(4)=+Z, dn(5)=-Z
+    /// UV mapping: u = (s+1)/2, v = 1-(t+1)/2 matching Q3's outSt calculation.
     /// </summary>
     private static void BuildCubeVertices(Span<float> v)
     {
-        const float S = 4096f; // Large enough to encompass view
+        const float S = 4096f;
         int o = 0;
 
-        // Right face (+Y) — looking from outside
-        AddQuad(v, ref o, 
-            new(-S, S, -S), new(-S, S, S), new(S, S, S), new(S, S, -S));
-        // Back face (+X)
+        // AddQuad vertex UV mapping: a(0,1) b(0,0) c(1,0) d(1,1)
+        // For each face, corners are computed from Q3's st_to_vec:
+        //   UV(0,0)=s=-1,t=1  UV(1,0)=s=1,t=1  UV(0,1)=s=-1,t=-1  UV(1,1)=s=1,t=-1
+
+        // rt (+X): y = -s*S, z = t*S
         AddQuad(v, ref o,
             new(S, S, -S), new(S, S, S), new(S, -S, S), new(S, -S, -S));
-        // Left face (-Y)
-        AddQuad(v, ref o,
-            new(S, -S, -S), new(S, -S, S), new(-S, -S, S), new(-S, -S, -S));
-        // Front face (-X)
+        // bk (-X): y = s*S, z = t*S
         AddQuad(v, ref o,
             new(-S, -S, -S), new(-S, -S, S), new(-S, S, S), new(-S, S, -S));
-        // Up face (+Z)
+        // lf (+Y): x = s*S, z = t*S
         AddQuad(v, ref o,
-            new(-S, S, S), new(-S, -S, S), new(S, -S, S), new(S, S, S));
-        // Down face (-Z)
+            new(-S, S, -S), new(-S, S, S), new(S, S, S), new(S, S, -S));
+        // ft (-Y): x = -s*S, z = t*S
         AddQuad(v, ref o,
-            new(-S, -S, -S), new(-S, S, -S), new(S, S, -S), new(S, -S, -S));
+            new(S, -S, -S), new(S, -S, S), new(-S, -S, S), new(-S, -S, -S));
+        // up (+Z): x = -t*S, y = -s*S
+        AddQuad(v, ref o,
+            new(S, S, S), new(-S, S, S), new(-S, -S, S), new(S, -S, S));
+        // dn (-Z): x = t*S, y = -s*S
+        AddQuad(v, ref o,
+            new(-S, S, -S), new(S, S, -S), new(S, -S, -S), new(-S, -S, -S));
     }
 
     private static void AddQuad(Span<float> v, ref int o,

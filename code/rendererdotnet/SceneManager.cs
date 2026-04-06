@@ -38,7 +38,12 @@ public sealed unsafe class SceneManager
 
     // Entity types
     private const int RT_MODEL = 0;
+    private const int RT_POLY = 1;
     private const int RT_SPRITE = 2;
+    private const int RT_BEAM = 3;
+    private const int RT_RAIL_CORE = 4;
+    private const int RT_RAIL_RINGS = 5;
+    private const int RT_LIGHTNING = 6;
 
     public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
                      Renderer3D renderer3D, World.BspRenderer bspRenderer,
@@ -157,6 +162,36 @@ public sealed unsafe class SceneManager
                 B = rgba[2] / 255.0f,
                 A = rgba[3] / 255.0f,
             };
+
+            _entities.Add(entity);
+        }
+        else if (reType is RT_BEAM or RT_LIGHTNING or RT_RAIL_CORE or RT_RAIL_RINGS)
+        {
+            int customShader = *(int*)(entityPtr + 112);
+            if (customShader <= 0) return;
+
+            float* origin = (float*)(entityPtr + 68);
+            float* oldorigin = (float*)(entityPtr + 84);
+            byte* rgba = entityPtr + 116;
+
+            var entity = new SceneEntity
+            {
+                ReType = reType,
+                Renderfx = renderfx,
+                CustomShader = customShader,
+                OriginX = origin[0],
+                OriginY = origin[1],
+                OriginZ = origin[2],
+                OldOriginX = oldorigin[0],
+                OldOriginY = oldorigin[1],
+                OldOriginZ = oldorigin[2],
+                Radius = *(float*)(entityPtr + 132),
+                R = rgba[0] / 255.0f,
+                G = rgba[1] / 255.0f,
+                B = rgba[2] / 255.0f,
+                A = rgba[3] / 255.0f,
+            };
+            if (entity.Radius <= 0) entity.Radius = 2.0f;
 
             _entities.Add(entity);
         }
@@ -326,6 +361,10 @@ public sealed unsafe class SceneManager
             else if (ent.ReType == RT_SPRITE)
             {
                 DrawSprite(ent, viewAxis, vp);
+            }
+            else if (ent.ReType is RT_BEAM or RT_LIGHTNING or RT_RAIL_CORE or RT_RAIL_RINGS)
+            {
+                DrawBeam(ent, viewOrg, vp);
             }
         }
 
@@ -575,6 +614,105 @@ public sealed unsafe class SceneManager
     }
 
     /// <summary>
+    /// Draw a beam/lightning/rail effect as a billboarded quad strip from origin to oldorigin.
+    /// </summary>
+    private void DrawBeam(SceneEntity ent, float* viewOrg, ReadOnlySpan<float> vp)
+    {
+        if (_gl == null || _shaders == null) return;
+
+        float radius = ent.Radius;
+        if (radius <= 0) radius = 2.0f;
+
+        // Direction from origin to oldorigin
+        float dx = ent.OldOriginX - ent.OriginX;
+        float dy = ent.OldOriginY - ent.OriginY;
+        float dz = ent.OldOriginZ - ent.OriginZ;
+        float len = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (len < 0.001f) return;
+
+        float invLen = 1.0f / len;
+        dx *= invLen; dy *= invLen; dz *= invLen;
+
+        // View direction from midpoint to camera
+        float midX = (ent.OriginX + ent.OldOriginX) * 0.5f;
+        float midY = (ent.OriginY + ent.OldOriginY) * 0.5f;
+        float midZ = (ent.OriginZ + ent.OldOriginZ) * 0.5f;
+
+        float vx = viewOrg[0] - midX;
+        float vy = viewOrg[1] - midY;
+        float vz = viewOrg[2] - midZ;
+
+        // Cross product of beam direction with view direction → perpendicular offset
+        float px = dy * vz - dz * vy;
+        float py = dz * vx - dx * vz;
+        float pz = dx * vy - dy * vx;
+        float plen = MathF.Sqrt(px * px + py * py + pz * pz);
+        if (plen < 0.001f) return;
+
+        float pInv = radius / plen;
+        px *= pInv; py *= pInv; pz *= pInv;
+
+        // 4 vertices forming a quad
+        float numSegU = len / 128.0f; // Tile texture along length
+        Span<float> verts = stackalloc float[4 * 9];
+        SetSpriteVert(verts, 0,
+            ent.OriginX + px, ent.OriginY + py, ent.OriginZ + pz,
+            0, 0, ent.R, ent.G, ent.B, ent.A);
+        SetSpriteVert(verts, 1,
+            ent.OriginX - px, ent.OriginY - py, ent.OriginZ - pz,
+            0, 1, ent.R, ent.G, ent.B, ent.A);
+        SetSpriteVert(verts, 2,
+            ent.OldOriginX - px, ent.OldOriginY - py, ent.OldOriginZ - pz,
+            numSegU, 1, ent.R, ent.G, ent.B, ent.A);
+        SetSpriteVert(verts, 3,
+            ent.OldOriginX + px, ent.OldOriginY + py, ent.OldOriginZ + pz,
+            numSegU, 0, ent.R, ent.G, ent.B, ent.A);
+
+        Span<uint> indices = stackalloc uint[] { 0, 1, 2, 0, 2, 3 };
+
+        uint texId = _shaders.GetTextureId(ent.CustomShader);
+
+        _gl.UseProgram(_spriteProgram);
+        fixed (float* vpPtr = vp)
+            _gl.UniformMatrix4(_spriteMvpLoc, 1, false, vpPtr);
+        _gl.Uniform1(_spriteTexLoc, 0);
+
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, texId);
+
+        _gl.BindVertexArray(_spriteVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _spriteVbo);
+        fixed (float* p = verts)
+            _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(verts.Length * sizeof(float)), p, BufferUsageARB.StreamDraw);
+        _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _spriteEbo);
+        fixed (uint* p = indices)
+            _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indices.Length * sizeof(uint)), p, BufferUsageARB.StreamDraw);
+
+        _gl.Enable(EnableCap.Blend);
+        BlendMode beamBlend = _shaders.GetBlendMode(ent.CustomShader);
+        switch (beamBlend)
+        {
+            case BlendMode.Add:
+                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                break;
+            case BlendMode.Filter:
+                _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
+                break;
+            default:
+                _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+                break;
+        }
+        _gl.DepthMask(false);
+        _gl.Disable(EnableCap.CullFace);
+
+        _gl.DrawElements(PrimitiveType.Triangles, 6, DrawElementsType.UnsignedInt, null);
+
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
+        _gl.BindVertexArray(0);
+    }
+
+    /// <summary>
     /// Render all accumulated scene polys as triangle fans.
     /// </summary>
     private void DrawPolys(ReadOnlySpan<float> vp)
@@ -673,6 +811,7 @@ internal unsafe struct SceneEntity
     public int CustomShader;
 
     public float OriginX, OriginY, OriginZ;
+    public float OldOriginX, OldOriginY, OldOriginZ;
     public fixed float Axis[9];
     public float R, G, B, A;
 

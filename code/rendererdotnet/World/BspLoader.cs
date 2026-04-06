@@ -15,6 +15,7 @@ public static unsafe class BspLoader
     private const int HEADER_LUMPS = 17;
 
     // Lump indices
+    private const int LUMP_ENTITIES = 0;
     private const int LUMP_SHADERS = 1;
     private const int LUMP_PLANES = 2;
     private const int LUMP_NODES = 3;
@@ -93,6 +94,12 @@ public static unsafe class BspLoader
         world.Surfaces = LoadSurfaces(buf, lumps[LUMP_SURFACES * 2], lumps[LUMP_SURFACES * 2 + 1]);
         world.Lightmaps = LoadLightmaps(buf, lumps[LUMP_LIGHTMAPS * 2], lumps[LUMP_LIGHTMAPS * 2 + 1]);
         LoadVisibility(world, buf, lumps[LUMP_VISIBILITY * 2], lumps[LUMP_VISIBILITY * 2 + 1]);
+
+        // Load entity string for GetEntityToken
+        int entOfs = lumps[LUMP_ENTITIES * 2];
+        int entLen = lumps[LUMP_ENTITIES * 2 + 1];
+        if (entLen > 0)
+            world.EntityString = System.Text.Encoding.UTF8.GetString(buf + entOfs, entLen).TrimEnd('\0');
 
         EngineImports.Printf(EngineImports.PRINT_ALL,
             $"[.NET] Loaded BSP: {path} ({world.Vertices.Length} verts, {world.Surfaces.Length} surfs, " +

@@ -30,6 +30,9 @@ public sealed class BspWorld
     public int ClusterBytes { get; set; }
     public byte[]? VisData { get; set; }
 
+    // Entity string from BSP for GetEntityToken
+    public string EntityString { get; set; } = "";
+
     /// <summary>Check if cluster 'from' can see cluster 'to' via PVS.</summary>
     public bool ClusterVisible(int from, int to)
     {
