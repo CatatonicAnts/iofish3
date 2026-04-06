@@ -25,6 +25,10 @@ public sealed class BspWorld
     // Lightmaps
     public BspLightmap[] Lightmaps { get; set; } = [];
 
+    // Deluxe maps (per-pixel light direction, interleaved with lightmaps in BSP)
+    public BspLightmap[] DeluxeMaps { get; set; } = [];
+    public bool HasDeluxeMapping { get; set; }
+
     // Visibility (PVS)
     public int NumClusters { get; set; }
     public int ClusterBytes { get; set; }

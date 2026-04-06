@@ -100,6 +100,7 @@ public static unsafe class BspLoader
         world.Indices = LoadIndices(buf, lumps[LUMP_DRAWINDEXES * 2], lumps[LUMP_DRAWINDEXES * 2 + 1]);
         world.Surfaces = LoadSurfaces(buf, lumps[LUMP_SURFACES * 2], lumps[LUMP_SURFACES * 2 + 1]);
         world.Lightmaps = LoadLightmaps(buf, lumps[LUMP_LIGHTMAPS * 2], lumps[LUMP_LIGHTMAPS * 2 + 1]);
+        DetectAndSplitDeluxeMaps(world);
         LoadVisibility(world, buf, lumps[LUMP_VISIBILITY * 2], lumps[LUMP_VISIBILITY * 2 + 1]);
         LoadLightGrid(world, buf, lumps[LUMP_LIGHTGRID * 2], lumps[LUMP_LIGHTGRID * 2 + 1]);
         LoadFogs(world, buf, lumps, lumps[LUMP_FOGS * 2], lumps[LUMP_FOGS * 2 + 1]);
@@ -318,6 +319,78 @@ public static unsafe class BspLoader
             }
         }
         return result;
+    }
+
+    /// <summary>
+    /// Detect interleaved deluxe maps in lightmap data.
+    /// If numLightmaps > 1 and all surface lightmap indices are even,
+    /// the lightmaps are interleaved as (lightmap, deluxe, lightmap, deluxe, ...).
+    /// Split them into separate arrays and remap surface lightmap indices.
+    /// </summary>
+    private static void DetectAndSplitDeluxeMaps(BspWorld world)
+    {
+        int numLm = world.Lightmaps.Length;
+        if (numLm <= 1)
+        {
+            world.HasDeluxeMapping = false;
+            world.DeluxeMaps = [];
+            return;
+        }
+
+        // Check if all surface lightmap indices are even
+        bool allEven = true;
+        for (int i = 0; i < world.Surfaces.Length; i++)
+        {
+            int lmIdx = world.Surfaces[i].LightmapIndex;
+            if (lmIdx >= 0 && (lmIdx & 1) != 0)
+            {
+                allEven = false;
+                break;
+            }
+        }
+
+        if (!allEven || numLm < 2)
+        {
+            world.HasDeluxeMapping = false;
+            world.DeluxeMaps = [];
+            return;
+        }
+
+        // Split interleaved lightmaps: even = lightmap, odd = deluxe
+        int halfCount = numLm / 2;
+        var lightmaps = new BspLightmap[halfCount];
+        var deluxeMaps = new BspLightmap[halfCount];
+
+        for (int i = 0; i < halfCount; i++)
+        {
+            lightmaps[i] = world.Lightmaps[i * 2];
+            deluxeMaps[i] = world.Lightmaps[i * 2 + 1];
+
+            // Remap 0,0,0 to 127,127,127 in deluxe maps (no direction → neutral)
+            var data = deluxeMaps[i].Data;
+            for (int j = 0; j < data.Length; j += 3)
+            {
+                if (data[j] == 0 && data[j + 1] == 0 && data[j + 2] == 0)
+                {
+                    data[j] = 127; data[j + 1] = 127; data[j + 2] = 127;
+                }
+            }
+        }
+
+        // Remap surface lightmap indices from even to sequential
+        for (int i = 0; i < world.Surfaces.Length; i++)
+        {
+            int lmIdx = world.Surfaces[i].LightmapIndex;
+            if (lmIdx >= 0)
+                world.Surfaces[i].LightmapIndex = lmIdx / 2;
+        }
+
+        world.Lightmaps = lightmaps;
+        world.DeluxeMaps = deluxeMaps;
+        world.HasDeluxeMapping = true;
+
+        EngineImports.Printf(EngineImports.PRINT_ALL,
+            $"[.NET] Detected deluxe mapping: {halfCount} lightmap/deluxe pairs\n");
     }
 
     private static void LoadVisibility(BspWorld world, byte* buf, int ofs, int len)

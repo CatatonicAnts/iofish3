@@ -39,6 +39,8 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _useSpecularMapLoc;
     private int _useParallaxLoc;
     private int _parallaxScaleLoc;
+    private int _texDeluxeMapLoc;
+    private int _useDeluxeMapLoc;
     private float _greyscaleValue; // 0.0=color, 1.0=fully greyscale
 
     private uint _vao;
@@ -47,6 +49,8 @@ public sealed unsafe class BspRenderer : IDisposable
 
     private BspWorld? _world;
     private uint[] _lightmapTextures = [];
+    private uint[] _deluxeMapTextures = [];
+    private bool _hasDeluxeMapping;
 
     // Per-vertex: x,y,z, nx,ny,nz, u,v, lmU,lmV, r,g,b,a, tx,ty,tz,ts = 18 floats
     private const int FLOATS_PER_VERT = 18;
@@ -350,6 +354,7 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform sampler2D uTexLightmap;
         uniform sampler2D uTexNormalMap;
         uniform sampler2D uTexSpecularMap;
+        uniform sampler2D uTexDeluxeMap;
         uniform vec4 uColor;
         uniform vec3 uLightDir;
         uniform vec3 uViewPos;
@@ -363,6 +368,7 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uUseSpecularMap;
         uniform int uUseParallax;
         uniform float uParallaxScale; // height scale (default 0.05)
+        uniform int uUseDeluxeMap;
 
         out vec4 oColor;
 
@@ -431,6 +437,18 @@ public sealed unsafe class BspRenderer : IDisposable
             if (uUseLightmap != 0) {
                 vec4 lmColor = texture(uTexLightmap, vLmUV);
                 oColor = texColor * lmColor * uOverbrightScale;
+
+                // Deluxe map: per-pixel light direction for enhanced lighting
+                if (uUseDeluxeMap != 0 && uUseNormalMap != 0) {
+                    vec3 deluxeDir = normalize(texture(uTexDeluxeMap, vLmUV).rgb * 2.0 - 1.0);
+                    float ndl = max(dot(N, deluxeDir), 0.0);
+                    // Blend between lightmap-only and deluxe-enhanced
+                    float lmLuma = dot(lmColor.rgb, vec3(0.299, 0.587, 0.114));
+                    if (lmLuma > 0.01) {
+                        float ratio = ndl / max(lmLuma, 0.01);
+                        oColor.rgb = texColor.rgb * lmColor.rgb * ratio * uOverbrightScale;
+                    }
+                }
             } else if (uRgbGen == 1) {
                 // rgbGen vertex — multiply by vertex color directly
                 oColor = texColor * vColor;
@@ -452,10 +470,15 @@ public sealed unsafe class BspRenderer : IDisposable
             // Specular highlight (Blinn-Phong)
             if (uUseSpecularMap != 0) {
                 vec3 V = normalize(uViewPos - vWorldPos);
-                vec3 H = normalize(uLightDir + V);
+                // Use deluxe map direction for specular if available
+                vec3 L = uLightDir;
+                if (uUseDeluxeMap != 0) {
+                    L = normalize(texture(uTexDeluxeMap, vLmUV).rgb * 2.0 - 1.0);
+                }
+                vec3 H = normalize(L + V);
                 float spec = pow(max(dot(N, H), 0.0), 16.0);
                 vec3 specColor = texture(uTexSpecularMap, uv).rgb;
-                oColor.rgb += specColor * spec;
+                oColor.rgb += specColor * spec * 0.3;
             }
 
             oColor *= uColor;
@@ -498,6 +521,8 @@ public sealed unsafe class BspRenderer : IDisposable
         _useSpecularMapLoc = _gl.GetUniformLocation(_program, "uUseSpecularMap");
         _useParallaxLoc = _gl.GetUniformLocation(_program, "uUseParallax");
         _parallaxScaleLoc = _gl.GetUniformLocation(_program, "uParallaxScale");
+        _texDeluxeMapLoc = _gl.GetUniformLocation(_program, "uTexDeluxeMap");
+        _useDeluxeMapLoc = _gl.GetUniformLocation(_program, "uUseDeluxeMap");
 
         // Set texture unit bindings (static)
         _gl.UseProgram(_program);
@@ -505,12 +530,14 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_texLightmapLoc, 1);  // GL_TEXTURE1
         _gl.Uniform1(_texNormalMapLoc, 2); // GL_TEXTURE2
         _gl.Uniform1(_texSpecularMapLoc, 3); // GL_TEXTURE3
+        _gl.Uniform1(_texDeluxeMapLoc, 4); // GL_TEXTURE4
         _gl.UseProgram(0);
 
         // Register r_greyscale cvar (0.0 = color, 1.0 = fully grey)
         EngineImports.Cvar_Get("r_greyscale", "0", 1); // 1 = CVAR_ARCHIVE
         EngineImports.Cvar_Get("r_parallaxMapping", "0", 1); // 1 = CVAR_ARCHIVE
         EngineImports.Cvar_Get("r_baseParallax", "0.05", 1);
+        EngineImports.Cvar_Get("r_deluxeMapping", "1", 1);
 
         // Dlight shader program
         _dlightProgram = CreateDlightProgram();
@@ -572,9 +599,11 @@ public sealed unsafe class BspRenderer : IDisposable
         _world = world;
         _frameCount = 0;
         _surfaceDrawnFrame = new int[world.Surfaces.Length];
+        _hasDeluxeMapping = world.HasDeluxeMapping;
 
         UploadGeometry(world);
         UploadLightmaps(world);
+        UploadDeluxeMaps(world);
     }
 
     private void UploadGeometry(BspWorld world)
@@ -659,6 +688,35 @@ public sealed unsafe class BspRenderer : IDisposable
         }
     }
 
+    private void UploadDeluxeMaps(BspWorld world)
+    {
+        if (!world.HasDeluxeMapping || world.DeluxeMaps.Length == 0)
+        {
+            _deluxeMapTextures = [];
+            return;
+        }
+
+        _deluxeMapTextures = new uint[world.DeluxeMaps.Length];
+        for (int i = 0; i < world.DeluxeMaps.Length; i++)
+        {
+            uint tex = _gl.GenTexture();
+            _gl.BindTexture(TextureTarget.Texture2D, tex);
+
+            fixed (byte* p = world.DeluxeMaps[i].Data)
+            {
+                _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgb8,
+                    128, 128, 0, PixelFormat.Rgb, PixelType.UnsignedByte, p);
+            }
+
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+            _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+
+            _deluxeMapTextures[i] = tex;
+        }
+    }
+
     /// <summary>
     /// Render the world using BSP tree traversal for visibility.
     /// Renders opaque surfaces first, then transparent surfaces in a second pass.
@@ -703,6 +761,10 @@ public sealed unsafe class BspRenderer : IDisposable
         int parallaxEnabled = EngineImports.Cvar_VariableIntegerValue("r_parallaxMapping");
         _gl.Uniform1(_useParallaxLoc, parallaxEnabled);
         _gl.Uniform1(_parallaxScaleLoc, 0.05f);
+
+        // Deluxe mapping (set per-frame, actual binding per-surface)
+        int deluxeEnabled = _hasDeluxeMapping ? EngineImports.Cvar_VariableIntegerValue("r_deluxeMapping") : 0;
+        _gl.Uniform1(_useDeluxeMapLoc, deluxeEnabled != 0 ? 1 : 0);
 
         ExtractFrustumPlanes(mvp);
 
@@ -1040,6 +1102,13 @@ public sealed unsafe class BspRenderer : IDisposable
         {
             _gl.ActiveTexture(TextureUnit.Texture1);
             _gl.BindTexture(TextureTarget.Texture2D, _lightmapTextures[surf.LightmapIndex]);
+
+            // Bind deluxe map alongside lightmap (same index)
+            if (_hasDeluxeMapping && surf.LightmapIndex < _deluxeMapTextures.Length)
+            {
+                _gl.ActiveTexture(TextureUnit.Texture4);
+                _gl.BindTexture(TextureTarget.Texture2D, _deluxeMapTextures[surf.LightmapIndex]);
+            }
         }
 
         // Bind normal map if available
@@ -1154,6 +1223,13 @@ public sealed unsafe class BspRenderer : IDisposable
         {
             _gl.ActiveTexture(TextureUnit.Texture3);
             _gl.BindTexture(TextureTarget.Texture2D, specTexId);
+        }
+
+        // Bind deluxe map for multi-stage
+        if (_hasDeluxeMapping && surf.LightmapIndex >= 0 && surf.LightmapIndex < _deluxeMapTextures.Length)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture4);
+            _gl.BindTexture(TextureTarget.Texture2D, _deluxeMapTextures[surf.LightmapIndex]);
         }
 
         float timeSec = _currentTimeSec;
@@ -1819,6 +1895,10 @@ public sealed unsafe class BspRenderer : IDisposable
         foreach (uint tex in _lightmapTextures)
             if (tex != 0) _gl.DeleteTexture(tex);
         _lightmapTextures = [];
+
+        foreach (uint tex in _deluxeMapTextures)
+            if (tex != 0) _gl.DeleteTexture(tex);
+        _deluxeMapTextures = [];
 
         if (_dlightTexture != 0) { _gl.DeleteTexture(_dlightTexture); _dlightTexture = 0; }
         if (_dlightProgram != 0) { _gl.DeleteProgram(_dlightProgram); _dlightProgram = 0; }
