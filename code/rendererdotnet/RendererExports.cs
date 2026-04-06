@@ -359,6 +359,11 @@ public static unsafe class RendererExports
 
         uint tex = _shaders.GetTextureId(hShader);
         BlendMode blend = _shaders.GetBlendMode(hShader);
+        // 2D UI elements (text, buttons, HUD) always need alpha blending
+        // for transparency. The shader blend mode is for 3D surface sorting;
+        // for 2D, treat opaque as alpha-blended since textures have alpha channels.
+        if (blend.IsOpaque)
+            blend = BlendMode.Alpha;
         _renderer2D.DrawQuad(x, y, w, h, s1, t1, s2, t2, tex, blend);
     }
 
