@@ -40,6 +40,8 @@ public static unsafe class RendererExports
     private static SkinManager? _skins;
     private static Models.ModelManager? _models;
     private static SceneManager? _scene;
+    private static World.BspRenderer? _bspRenderer;
+    private static World.BspWorld? _bspWorld;
 
     private const int WIDTH = 1280;
     private const int HEIGHT = 720;
@@ -64,6 +66,9 @@ public static unsafe class RendererExports
         _scene = null;
         _models = null;
         _skins = null;
+        _bspRenderer?.Dispose();
+        _bspRenderer = null;
+        _bspWorld = null;
         _renderer3D?.Dispose();
         _renderer3D = null;
         _renderer2D?.Dispose();
@@ -164,8 +169,13 @@ public static unsafe class RendererExports
         _models = new Models.ModelManager();
         _models.SetShaderManager(_shaders);
 
+        _bspRenderer?.Dispose();
+        _bspRenderer = new World.BspRenderer();
+        _bspRenderer.Init(_gl!);
+        _bspWorld = null;
+
         _scene = new SceneManager();
-        _scene.Init(_models, _shaders, _skins, _renderer3D, _gl!, WIDTH, HEIGHT);
+        _scene.Init(_models, _shaders, _skins, _renderer3D, _bspRenderer, _gl!, WIDTH, HEIGHT);
 
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
@@ -222,7 +232,33 @@ public static unsafe class RendererExports
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void LoadWorld(byte* name) { }
+    public static void LoadWorld(byte* name)
+    {
+        if (name == null || _bspRenderer == null || _shaders == null) return;
+
+        string mapName = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)name) ?? "";
+        if (string.IsNullOrEmpty(mapName)) return;
+
+        EngineImports.Printf(EngineImports.PRINT_ALL, $"[.NET] Loading world: {mapName}\n");
+
+        _bspWorld = World.BspLoader.LoadFromEngineFS(mapName);
+        if (_bspWorld == null) return;
+
+        // Register all BSP shader names with the shader manager
+        for (int i = 0; i < _bspWorld.Surfaces.Length; i++)
+        {
+            ref var surf = ref _bspWorld.Surfaces[i];
+            if (surf.ShaderIndex >= 0 && surf.ShaderIndex < _bspWorld.Shaders.Length)
+            {
+                string shaderName = _bspWorld.Shaders[surf.ShaderIndex].Name;
+                if (!string.IsNullOrEmpty(shaderName))
+                    surf.ShaderHandle = _shaders.Register(shaderName);
+            }
+        }
+
+        _bspRenderer.LoadWorld(_bspWorld);
+        _scene?.SetWorld(_bspWorld);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void SetWorldVisData(byte* vis) { }

@@ -17,20 +17,29 @@ public sealed unsafe class SceneManager
     private ShaderManager? _shaders;
     private SkinManager? _skins;
     private Renderer3D? _renderer3D;
+    private World.BspRenderer? _bspRenderer;
+    private World.BspWorld? _bspWorld;
     private GL? _gl;
     private int _screenW;
     private int _screenH;
 
     public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
-                     Renderer3D renderer3D, GL gl, int screenW, int screenH)
+                     Renderer3D renderer3D, World.BspRenderer bspRenderer,
+                     GL gl, int screenW, int screenH)
     {
         _models = models;
         _shaders = shaders;
         _skins = skins;
         _renderer3D = renderer3D;
+        _bspRenderer = bspRenderer;
         _gl = gl;
         _screenW = screenW;
         _screenH = screenH;
+    }
+
+    public void SetWorld(World.BspWorld? world)
+    {
+        _bspWorld = world;
     }
 
     public void ClearScene()
@@ -133,7 +142,10 @@ public sealed unsafe class SceneManager
         float* viewAxis = (float*)(refdefPtr + 36);
 
         if (width <= 0 || height <= 0) return;
-        if (_entities.Count == 0) return;
+
+        bool hasWorld = _bspWorld != null && _bspRenderer != null;
+        bool hasEntities = _entities.Count > 0;
+        if (!hasWorld && !hasEntities) return;
 
         // Set GL viewport to the refdef rectangle
         // Q3 y=0 is top of screen, OpenGL y=0 is bottom — flip vertically
@@ -156,6 +168,15 @@ public sealed unsafe class SceneManager
         // VP = Projection * View
         Span<float> vp = stackalloc float[16];
         MatMul(proj, view, vp);
+
+        // Render world geometry (BSP) first
+        if (hasWorld)
+        {
+            fixed (float* vpPtr = vp)
+            {
+                _bspRenderer!.Render(vpPtr, viewOrg[0], viewOrg[1], viewOrg[2], _shaders);
+            }
+        }
 
         // Pre-allocate outside loop to avoid stackalloc warnings
         Span<float> modelMat = stackalloc float[16];
