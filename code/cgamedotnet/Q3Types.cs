@@ -123,6 +123,10 @@ public unsafe struct Q3PlayerState
 }
 
 // snapshot_t — ~53772 bytes
+// Note: The entities[256] array can't be represented as a fixed array of structs in C#.
+// We use a single _entity0 placeholder and read entities via pointer arithmetic.
+// NumServerCommands and ServerCommandSequence come AFTER the full 256-element array
+// in the C layout, so we access them via helper methods, not struct fields.
 [StructLayout(LayoutKind.Sequential)]
 public unsafe struct Q3Snapshot
 {
@@ -135,23 +139,27 @@ public unsafe struct Q3Snapshot
     public Q3PlayerState Ps;
 
     public int NumEntities;
-    // entityState_t entities[MAX_ENTITIES_IN_SNAPSHOT]
-    // We can't use fixed with non-primitive types, so we use an inline array trick.
-    // Access via GetEntity() helper.
+    // First entity — remaining 255 follow in memory (buffer must be full size)
     private Q3EntityState _entity0;
-    // The remaining 255 entities follow sequentially in memory.
-
-    public int NumServerCommands;
-    public int ServerCommandSequence;
 
     public const int MAX_MAP_AREA_BYTES = 32;
     public const int MAX_ENTITIES_IN_SNAPSHOT = 256;
 
-    // Helper to get entity at index (only safe in fixed/pinned context)
+    // Offset to NumServerCommands (after all 256 entities)
+    private static readonly int ServerCmdOffset =
+        4 + 4 + 4 + MAX_MAP_AREA_BYTES + sizeof(Q3PlayerState) + 4 + MAX_ENTITIES_IN_SNAPSHOT * sizeof(Q3EntityState);
+
     public readonly unsafe ref Q3EntityState GetEntity(int index)
     {
         fixed (Q3EntityState* p = &_entity0)
             return ref p[index];
+    }
+
+    /// <summary>Read ServerCommandSequence from the correct C layout offset.</summary>
+    public readonly int GetServerCommandSequence()
+    {
+        fixed (int* p = &SnapFlags)
+            return *(int*)((byte*)p + ServerCmdOffset + 4);
     }
 }
 
