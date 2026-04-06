@@ -220,6 +220,13 @@ public unsafe class ShaderManager
         return entry.PolygonOffset;
     }
 
+    public bool GetEntityMergable(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return false;
+        return _shaders[handle].EntityMergable;
+    }
+
     public int GetDepthFunc(int handle)
     {
         if (handle <= 0 || handle >= _shaders.Count)
@@ -380,6 +387,7 @@ public unsafe class ShaderManager
             entry.RgbGen = def.RgbGen;
             entry.AlphaGen = def.AlphaGen;
             entry.PolygonOffset = def.PolygonOffset;
+            entry.EntityMergable = def.EntityMergable;
             entry.DepthFunc = def.DepthFunc;
             entry.DepthWrite = def.DepthWrite;
             entry.SortKey = def.SortKey;
@@ -540,6 +548,8 @@ public unsafe class ShaderManager
         /// <summary>0=identity, 1=vertex, 2=entity, 3=wave</summary>
         public int AlphaGen { get; set; }
         public bool PolygonOffset { get; set; }
+        /// <summary>Surfaces from different entities can be merged (smoke, blood sprites)</summary>
+        public bool EntityMergable { get; set; }
         /// <summary>0=lequal, 1=equal</summary>
         public int DepthFunc { get; set; }
         public bool DepthWrite { get; set; }

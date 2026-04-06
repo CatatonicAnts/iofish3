@@ -65,7 +65,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] **Screenshot support** - `/screenshot` command captures framebuffer to TGA via ReadPixels + FS_WriteFile. `CPX 2`
 - [x] **TakeVideoFrame** - Video frame capture for demo recording. Reads framebuffer as RGBA, converts to BGR with AVI line padding, calls CL_WriteAVIVideoFrame. `CPX 2`
 - [x] **surfaceparm parsing** - Parse `trans`, `nolightmap`, `nodlight`, `nomarks`/`noimpact` surfaceparms. Flags propagated to shader entries for use by dlight pass and mark system. `CPX 2`
-- [ ] **entityMergable** - Allow batching of entities that share shader state. `CPX 2`
+- [x] **entityMergable** - Parse `entityMergable` shader directive. Surfaces from different entities sharing this shader can be batched together (smoke, blood sprites). Flag propagated through ShaderDef → ShaderEntry with public accessor. `CPX 2`
 
 ---
 

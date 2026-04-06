@@ -164,6 +164,7 @@ public sealed unsafe class ShaderScriptParser
         int rgbGen = 0;
         int alphaGen = 0;
         bool polygonOffset = false;
+        bool entityMergable = false;
         int depthFunc = 0; // 0=lequal, 1=equal
         bool depthWrite = false;
         int sortKey = 0;
@@ -348,6 +349,10 @@ public sealed unsafe class ShaderScriptParser
                 else if (string.Equals(token, "polygonOffset", StringComparison.OrdinalIgnoreCase))
                 {
                     polygonOffset = true;
+                }
+                else if (string.Equals(token, "entityMergable", StringComparison.OrdinalIgnoreCase))
+                {
+                    entityMergable = true;
                 }
                 else if (string.Equals(token, "fogParms", StringComparison.OrdinalIgnoreCase))
                 {
@@ -606,6 +611,7 @@ public sealed unsafe class ShaderScriptParser
             RgbGen = rgbGen,
             AlphaGen = alphaGen,
             PolygonOffset = polygonOffset,
+            EntityMergable = entityMergable,
             DepthFunc = depthFunc,
             DepthWrite = depthWrite,
             SortKey = sortKey,
@@ -1016,6 +1022,9 @@ public sealed class ShaderDef
 
     /// <summary>Whether polygonOffset is set for this shader (prevents z-fighting on decals).</summary>
     public bool PolygonOffset { get; init; }
+
+    /// <summary>Whether this shader allows surfaces from different entities to be merged (smoke, blood).</summary>
+    public bool EntityMergable { get; init; }
 
     /// <summary>Depth function: 0=lequal (default), 1=equal.</summary>
     public int DepthFunc { get; init; }
