@@ -164,6 +164,11 @@ public static unsafe class CGame
         Marks.Init();
         Scoreboard.Init();
         WeaponEffects.Init();
+        Player.Init();
+
+        // Load client info for all players
+        for (int i = 0; i < 64; i++)
+            Player.NewClientInfo(i, _gameStateRaw);
 
         // Read level start time
         string startTimeStr = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_LEVEL_START_TIME);
@@ -293,6 +298,18 @@ public static unsafe class CGame
 
         try { Marks.AddToScene(_time); }
         catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in Marks.AddToScene: {ex.Message}\n"); }
+
+        // First-person view weapon
+        try
+        {
+            Player.AddViewWeapon(&_snap->Ps, _time,
+                refdef.ViewOrgX, refdef.ViewOrgY, refdef.ViewOrgZ,
+                refdef.Axis0X, refdef.Axis0Y, refdef.Axis0Z,
+                refdef.Axis1X, refdef.Axis1Y, refdef.Axis1Z,
+                refdef.Axis2X, refdef.Axis2Y, refdef.Axis2Z,
+                (int)refdef.FovX);
+        }
+        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in AddViewWeapon: {ex.Message}\n"); }
 
         refdef.Time = _time;
         for (int i = 0; i < Q3RefDef.MAX_MAP_AREA_BYTES; i++)
@@ -573,6 +590,10 @@ public static unsafe class CGame
             string soundName = Q3GameState.GetConfigString(_gameStateRaw, index);
             if (!string.IsNullOrEmpty(soundName) && soundName[0] != '*')
                 _gameSounds[index - CS_SOUNDS] = Syscalls.S_RegisterSound(soundName, 0);
+        }
+        else if (index >= Q3GameState.CS_PLAYERS && index < Q3GameState.CS_PLAYERS + 64)
+        {
+            Player.NewClientInfo(index - Q3GameState.CS_PLAYERS, _gameStateRaw);
         }
     }
 
@@ -1063,19 +1084,11 @@ public static unsafe class CGame
     private static void AddPlayer(ref CEntity cent)
     {
         ref var s1 = ref cent.CurrentState;
-        if (s1.ModelIndex == 0) return;
 
-        // Skip our own player model (first person)
-        if (s1.ClientNum == _clientNum) return;
-
-        Q3RefEntity rent = default;
-        rent.ReType = Q3RefEntity.RT_MODEL;
-        rent.HModel = _gameModels[s1.ModelIndex];
-        SetEntityOriginAndAxis(ref rent, ref cent);
-        rent.FrameNum = s1.Frame;
-        rent.OldFrame = s1.Frame;
-        SetEntityColors(ref rent, 255, 255, 255, 255);
-        Syscalls.R_AddRefEntityToScene(&rent);
+        Player.Render(ref s1,
+            cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ,
+            cent.LerpAnglesX, cent.LerpAnglesY, cent.LerpAnglesZ,
+            s1.Number, _clientNum, _time);
     }
 
     private static void AddItem(ref CEntity cent)

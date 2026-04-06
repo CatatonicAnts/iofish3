@@ -18,6 +18,12 @@ public static unsafe class WeaponEffects
         public float TrailRadius;
         public int TrailTime;
         public bool HasTrail;
+
+        // First-person view models
+        public int WeaponModel;
+        public int HandsModel;
+        public int BarrelModel;
+        public int FlashModel;
     }
 
     private static readonly WeaponInfo[] _weapons = new WeaponInfo[Weapons.WP_NUM_WEAPONS];
@@ -115,7 +121,45 @@ public static unsafe class WeaponEffects
         ref var sg = ref _weapons[Weapons.WP_SHOTGUN];
         sg.FlashDlight = 300;
         sg.FlashDlightR = 1; sg.FlashDlightG = 1; sg.FlashDlightB = 0;
+
+        // Register first-person view models for each weapon
+        RegisterViewModels(Weapons.WP_GAUNTLET, "models/weapons2/gauntlet/gauntlet");
+        RegisterViewModels(Weapons.WP_MACHINEGUN, "models/weapons2/machinegun/machinegun");
+        RegisterViewModels(Weapons.WP_SHOTGUN, "models/weapons2/shotgun/shotgun");
+        RegisterViewModels(Weapons.WP_GRENADE_LAUNCHER, "models/weapons2/grenadel/grenadel");
+        RegisterViewModels(Weapons.WP_ROCKET_LAUNCHER, "models/weapons2/rocketl/rocketl");
+        RegisterViewModels(Weapons.WP_LIGHTNING, "models/weapons2/lightning/lightning");
+        RegisterViewModels(Weapons.WP_RAILGUN, "models/weapons2/railgun/railgun");
+        RegisterViewModels(Weapons.WP_PLASMAGUN, "models/weapons2/plasma/plasma");
+        RegisterViewModels(Weapons.WP_BFG, "models/weapons2/bfg/bfg");
     }
+
+    private static void RegisterViewModels(int weapon, string basePath)
+    {
+        ref var wi = ref _weapons[weapon];
+        wi.WeaponModel = Syscalls.R_RegisterModel(basePath + ".md3");
+        wi.HandsModel = Syscalls.R_RegisterModel(basePath + "_hand.md3");
+        if (wi.HandsModel == 0)
+            wi.HandsModel = Syscalls.R_RegisterModel("models/weapons2/shotgun/shotgun_hand.md3");
+        wi.BarrelModel = Syscalls.R_RegisterModel(basePath + "_barrel.md3");
+        wi.FlashModel = Syscalls.R_RegisterModel(basePath + "_flash.md3");
+    }
+
+    /// <summary>Get weapon model handle for first-person rendering.</summary>
+    public static int GetWeaponModel(int weapon) =>
+        (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS) ? _weapons[weapon].WeaponModel : 0;
+
+    /// <summary>Get hand model handle for first-person rendering.</summary>
+    public static int GetHandsModel(int weapon) =>
+        (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS) ? _weapons[weapon].HandsModel : 0;
+
+    /// <summary>Get barrel model handle for first-person rendering.</summary>
+    public static int GetBarrelModel(int weapon) =>
+        (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS) ? _weapons[weapon].BarrelModel : 0;
+
+    /// <summary>Get flash model handle for first-person rendering.</summary>
+    public static int GetFlashModel(int weapon) =>
+        (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS) ? _weapons[weapon].FlashModel : 0;
 
     /// <summary>Add muzzle flash dynamic light when weapon fires.</summary>
     public static void MuzzleFlash(float x, float y, float z, int weapon, int time)
