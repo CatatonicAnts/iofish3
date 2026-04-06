@@ -175,12 +175,18 @@ public static unsafe class CGame
 
     public static void Shutdown()
     {
-        Syscalls.Print("[.NET cgame] Shutdown\n");
+        Syscalls.Print($"[.NET cgame] Shutdown (frames rendered: {_frameCount})\n");
         _initialized = false;
+        _frameCount = 0;
+        _dumpedEntities = false;
 
-        if (_snapBuffer1 != null) { NativeMemory.Free(_snapBuffer1); _snapBuffer1 = null; }
-        if (_snapBuffer2 != null) { NativeMemory.Free(_snapBuffer2); _snapBuffer2 = null; }
-        if (_gameStateRaw != null) { NativeMemory.Free(_gameStateRaw); _gameStateRaw = null; }
+        // Don't free native memory — the DLL stays loaded and these
+        // buffers will be re-allocated on next CG_Init. Freeing here
+        // can trigger heap corruption asserts if any system wrote
+        // out of bounds during the session.
+        _snapBuffer1 = null;
+        _snapBuffer2 = null;
+        _gameStateRaw = null;
         _snap = null;
         _nextSnap = null;
     }
@@ -188,6 +194,7 @@ public static unsafe class CGame
     public static bool ConsoleCommand()
     {
         string cmd = Syscalls.Argv(0);
+        Syscalls.Print($"[.NET cgame] ConsoleCommand: {cmd}\n");
 
         if (cmd == "+scores") { Scoreboard.ScoresDown(); return true; }
         if (cmd == "-scores") { Scoreboard.ScoresUp(); return true; }
@@ -218,9 +225,14 @@ public static unsafe class CGame
     }
 
     // ── DrawActiveFrame — main per-frame entry point ──
+    private static int _frameCount;
     public static void DrawActiveFrame(int serverTime, int stereoView, bool demoPlayback)
     {
         if (!_initialized) return;
+
+        _frameCount++;
+        if (_frameCount <= 3)
+            Syscalls.Print($"[.NET cgame] DrawActiveFrame #{_frameCount}: serverTime={serverTime}\n");
 
         _oldTime = _time;
         _time = serverTime;
@@ -234,8 +246,16 @@ public static unsafe class CGame
 
         ProcessSnapshots();
 
-        if (_snap == null) return;
-        if ((_snap->SnapFlags & SnapFlags.SNAPFLAG_NOT_ACTIVE) != 0) return;
+        if (_snap == null)
+        {
+            if (_frameCount <= 5) Syscalls.Print("[.NET cgame] DrawActiveFrame: _snap is null, skipping\n");
+            return;
+        }
+        if ((_snap->SnapFlags & SnapFlags.SNAPFLAG_NOT_ACTIVE) != 0)
+        {
+            if (_frameCount <= 5) Syscalls.Print("[.NET cgame] DrawActiveFrame: SNAPFLAG_NOT_ACTIVE, skipping\n");
+            return;
+        }
 
         // Track weapon changes for weapon select display (before updating)
         int newWeapon = _snap->Ps.Weapon;
@@ -418,6 +438,7 @@ public static unsafe class CGame
     private static void SetInitialSnapshot(Q3Snapshot* snap)
     {
         _snap = snap;
+        Syscalls.Print($"[.NET cgame] Initial snapshot: serverTime={snap->ServerTime}, entities={snap->NumEntities}, ps.weapon={snap->Ps.Weapon}\n");
 
         // Initialize all entities from first snapshot
         for (int i = 0; i < snap->NumEntities; i++)
@@ -511,6 +532,7 @@ public static unsafe class CGame
             if (!Syscalls.GetServerCommand(_serverCommandSequence)) continue;
 
             string cmd = Syscalls.Argv(0);
+            Syscalls.Print($"[.NET cgame] ServerCmd: {cmd}\n");
             if (cmd == "scores")
                 Scoreboard.ParseScores();
             else if (cmd == "cs")
@@ -619,6 +641,7 @@ public static unsafe class CGame
     private static void HandleEntityEvent(ref CEntity cent, int eventType, int eventParm)
     {
         ref var es = ref cent.CurrentState;
+        Syscalls.Print($"[.NET cgame] Event: type={eventType} parm={eventParm} ent={es.Number} eType={es.EType}\n");
         float* origin = stackalloc float[3];
         origin[0] = cent.LerpOriginX;
         origin[1] = cent.LerpOriginY;
@@ -946,9 +969,29 @@ public static unsafe class CGame
 
     // ── Entity Rendering (cg_ents.c equivalent) ──
 
+    private static bool _dumpedEntities;
     private static void AddPacketEntities()
     {
         if (_snap == null) return;
+
+        // One-time dump of all entity types in the snapshot
+        if (!_dumpedEntities && _snap->NumEntities > 0)
+        {
+            _dumpedEntities = true;
+            Syscalls.Print($"[.NET cgame] Entity dump: {_snap->NumEntities} entities in snapshot\n");
+            int[] typeCounts = new int[16];
+            for (int i = 0; i < _snap->NumEntities; i++)
+            {
+                ref var e = ref _snap->GetEntity(i);
+                int t = e.EType < 16 ? e.EType : 15;
+                typeCounts[t]++;
+            }
+            for (int t = 0; t < 16; t++)
+            {
+                if (typeCounts[t] > 0)
+                    Syscalls.Print($"[.NET cgame]   eType={t}: {typeCounts[t]} entities\n");
+            }
+        }
 
         for (int i = 0; i < _snap->NumEntities; i++)
         {
