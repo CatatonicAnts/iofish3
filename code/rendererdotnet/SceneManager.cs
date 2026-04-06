@@ -581,6 +581,9 @@ public sealed unsafe class SceneManager
 
         _gl.Enable(EnableCap.Blend);
         BlendMode spriteBlend = _shaders.GetBlendMode(ent.CustomShader);
+        // Sprites should never be fully opaque — force at least alpha blending
+        if (spriteBlend.IsOpaque)
+            spriteBlend = BlendMode.Alpha;
         _gl.BlendFunc((BlendingFactor)spriteBlend.SrcFactor, (BlendingFactor)spriteBlend.DstFactor);
         _gl.DepthMask(false);
         _gl.Disable(EnableCap.CullFace);
@@ -721,8 +724,10 @@ public sealed unsafe class SceneManager
             _gl.ActiveTexture(TextureUnit.Texture0);
             _gl.BindTexture(TextureTarget.Texture2D, texId);
 
-            // Apply per-shader blend mode
+            // Apply per-shader blend mode (polys should always blend)
             BlendMode polyBlend = _shaders.GetBlendMode(poly.ShaderHandle);
+            if (polyBlend.IsOpaque)
+                polyBlend = BlendMode.Alpha;
             _gl.Enable(EnableCap.Blend);
             _gl.BlendFunc((BlendingFactor)polyBlend.SrcFactor, (BlendingFactor)polyBlend.DstFactor);
 

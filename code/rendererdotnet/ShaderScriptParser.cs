@@ -138,6 +138,9 @@ public sealed unsafe class ShaderScriptParser
         string? editorImage = null;
         bool isTransparent = false;
         string? envMapImage = null; // fallback: first env-mapped stage's image
+        BlendMode envMapBlend = BlendMode.Opaque;
+        bool allStagesEnvMap = true; // track if ALL stages use tcGen environment
+        int stageCount = 0;
 
         // Per-stage tracking
         string? stageImage = null;
@@ -166,18 +169,28 @@ public sealed unsafe class ShaderScriptParser
 
             if (token == "}")
             {
-                // When leaving a stage, adopt the first stage that has a real image
-                // and doesn't use environment mapping
-                if (depth == 2 && !foundUsableStage && stageImage != null && !stageHasEnvMap)
+                if (depth == 2)
                 {
-                    imagePath = stageImage;
-                    clamp = stageClamp;
-                    blend = stageBlend;
-                    foundUsableStage = true;
+                    stageCount++;
+                    // When leaving a stage, adopt the first stage that has a real image
+                    // and doesn't use environment mapping
+                    if (!foundUsableStage && stageImage != null && !stageHasEnvMap)
+                    {
+                        imagePath = stageImage;
+                        clamp = stageClamp;
+                        blend = stageBlend;
+                        foundUsableStage = true;
+                    }
+                    // Track env-mapped images as a last-resort fallback
+                    if (stageHasEnvMap && stageImage != null && envMapImage == null)
+                    {
+                        envMapImage = stageImage;
+                        envMapBlend = stageBlend;
+                    }
+                    // Track if any stage is NOT envmap
+                    if (!stageHasEnvMap)
+                        allStagesEnvMap = false;
                 }
-                // Track env-mapped images as a last-resort fallback
-                if (depth == 2 && stageHasEnvMap && stageImage != null && envMapImage == null)
-                    envMapImage = stageImage;
 
                 depth--;
                 continue;
@@ -246,8 +259,18 @@ public sealed unsafe class ShaderScriptParser
             }
         }
 
-        // Fallback chain: qer_editorimage → env-mapped stage image
-        imagePath ??= editorImage ?? envMapImage;
+        // Fallback chain: qer_editorimage → env-mapped stage image → shader name itself
+        if (imagePath == null)
+        {
+            imagePath = editorImage ?? envMapImage;
+            // Use the env stage's blend mode when falling back to its image
+            if (imagePath == envMapImage && envMapImage != null)
+                blend = envMapBlend;
+        }
+        // If all stages were env-mapped with no map directive (implicit $whiteimage),
+        // try the shader name itself as a texture path
+        if (imagePath == null && stageCount > 0 && allStagesEnvMap)
+            imagePath = name;
 
         return new ShaderDef
         {

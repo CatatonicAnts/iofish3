@@ -24,7 +24,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### High Priority
 
-- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline, 3D model rendering (MD3), BSP world loading with lightmaps and PVS, skybox rendering, shader blending, beam/lightning entities, mark fragments, and entity token parsing all working. Next: dynamic lighting, fog, alpha testing, improved patch tessellation. `CPX 5`
+- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline, 3D model rendering (MD3), BSP world loading with lightmaps and PVS, skybox rendering, shader blending, beam/lightning entities, mark fragments, and entity token parsing all working. Next: environment mapping, dynamic lighting, fog, alpha testing, world portals, improved patch tessellation. `CPX 5`
 
 ### Medium Priority
 
@@ -127,7 +127,11 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Implement skybox rendering — parses Q3 `skyparms` directives, loads 6-face cube textures, renders before world geometry with depth at far plane.
 - [x] Implement shader blending — parses `blendFunc` directives (add/filter/blend + GL_* long form), applies per-shader blend modes in 2D, 3D, sprites, polys, and BSP transparent surface pass.
 - [x] Implement beam/lightning/rail entities — billboarded quad strips for RT_BEAM, RT_LIGHTNING, RT_RAIL_CORE, RT_RAIL_RINGS entity types.
-- [x] Implement MarkFragments — basic decal projection onto BSP surfaces for bullet/weapon impact marks.
+- [x] Implement MarkFragments — proper polygon clipping via BSP traversal with Sutherland-Hodgman clipping against bounding planes (matches Q3's R_MarkFragments algorithm). Supports multi-fragment output across faces, patches, and triangle soups.
+- [x] Fix depth ordering — BSP surfaces only deferred to transparent pass when CONTENTS_TRANSLUCENT or surfaceparm trans is set. Prevents multi-pass shaders from being incorrectly rendered without depth writes.
+- [x] BlendMode refactor — replaced enum with struct storing actual GL blend factors for correct rendering of all Q3 blend modes (marks, filter, additive, etc).
+- [x] Fix sprite/poly blend — sprites and polys always blend (never fully opaque), preventing screen-blocking effects like lightning gun overlay.
+- [x] Improve shader fallback — env-mapped stages capture blend mode for fallback, try shader name itself when all stages use tcGen environment.
 - [x] Implement GetEntityToken — tokenizer for BSP entity string, used by cgame for entity spawning.
 - [x] Implement InPVS — PVS visibility check between two world points.
 - [x] Implement DrawStretchRaw — raw pixel data rendering for cinematic frames.
