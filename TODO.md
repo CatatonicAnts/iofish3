@@ -114,9 +114,11 @@ The cgame DLL interface is:
 - [x] **Warmup countdown** — Port CG_DrawWarmup: pre-match countdown display showing game type and "Starts in: N" timer. `CPX 2`
 - [x] **Attacker display** — Port CG_DrawAttacker: show last attacker's name in upper-right when damaged by a player, with 10-second fade. `CPX 2`
 - [x] **Muzzle flash model** — Render flash model at tag_flash on first-person weapon during fire events, with dynamic light. `CPX 2`
-- [ ] **Reward medals** — Port CG_DrawReward: display excellence/impressive/gauntlet medals with sound on multi-kills and skill achievements. `CPX 3`
-- [ ] **Lagometer** — Port CG_DrawLagometer: network latency graph showing snapshot timing and command round-trip, with disconnect indicator. `CPX 3`
-- [ ] **Third-person camera** — Port CG_OffsetThirdPersonView: third-person camera with collision tracing, controlled by cg_thirdPerson cvar. `CPX 3`
+- [x] **Reward medals** — Port CG_DrawReward: display excellence/impressive/gauntlet medals with sound on multi-kills and skill achievements. `CPX 3`
+- [x] **Lagometer** — Port CG_DrawLagometer: network latency graph showing snapshot timing and command round-trip, with disconnect indicator. `CPX 3`
+- [x] **Third-person camera** — Port CG_OffsetThirdPersonView: third-person camera with collision tracing, controlled by cg_thirdPerson cvar. `CPX 3`
+- [x] **Hit feedback sounds** — Play hit/hit_teammate sounds when PERS_HITS changes. `CPX 1`
+- [x] **Denied/gauntlet reward events** — Play denied/humiliation announcer sounds on player events. `CPX 1`
 
 ### Notes
 

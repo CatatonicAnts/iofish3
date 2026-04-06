@@ -190,6 +190,42 @@ public static unsafe class CGame
     private const int MUZZLE_FLASH_TIME = 20;
     private const int EF_FIRING = 0x00000100;
 
+    // Reward medals
+    private const int MAX_REWARDSTACK = 10;
+    private const int REWARD_TIME = 3000;
+    private static int _rewardStack;
+    private static int _rewardTime;
+    private static readonly int[] _rewardCount = new int[MAX_REWARDSTACK];
+    private static readonly int[] _rewardShader = new int[MAX_REWARDSTACK];
+    private static readonly int[] _rewardSound = new int[MAX_REWARDSTACK];
+
+    // Reward media
+    private static int _medalExcellent, _medalImpressive, _medalGauntlet;
+    private static int _medalDefend, _medalAssist, _medalCapture;
+    private static int _impressiveSound, _excellentSound, _humiliationSound;
+    private static int _defendSound, _assistSound, _captureAwardSound;
+    private static int _deniedSound, _hitSound, _hitTeamSound;
+
+    // Lagometer
+    private const int LAG_SAMPLES = 128;
+    private const int MAX_LAGOMETER_PING = 900;
+    private const int MAX_LAGOMETER_RANGE = 300;
+    private static readonly int[] _lagFrameSamples = new int[LAG_SAMPLES];
+    private static int _lagFrameCount;
+    private static readonly int[] _lagSnapshotSamples = new int[LAG_SAMPLES];
+    private static readonly int[] _lagSnapshotFlags = new int[LAG_SAMPLES];
+    private static int _lagSnapshotCount;
+    private static int _lagometerShader;
+    private static int _disconnectIcon;
+
+    // Third-person camera
+    private static bool _thirdPerson;
+    private static float _thirdPersonRange = 80.0f;
+    private static float _thirdPersonAngle;
+
+    // Previous player state (for reward detection)
+    private static Q3PlayerState _oldPlayerState;
+
     // Last computed view (for crosshair scan)
     private static float _viewOrgX, _viewOrgY, _viewOrgZ;
     private static float _viewFwdX, _viewFwdY, _viewFwdZ;
@@ -299,6 +335,17 @@ public static unsafe class CGame
         _lastViewHeight = 0;
         _centerPrint = ""; _centerPrintTime = 0;
         _chatIndex = 0; _pickupName = ""; _pickupTime = 0;
+        _rewardStack = 0; _rewardTime = 0;
+        _lagFrameCount = 0; _lagSnapshotCount = 0;
+        _oldPlayerState = default;
+
+        // Read third-person cvars
+        string tp = Syscalls.CvarGetString("cg_thirdPerson");
+        _thirdPerson = tp == "1";
+        string tpr = Syscalls.CvarGetString("cg_thirdPersonRange");
+        _thirdPersonRange = float.TryParse(tpr, out float tpRange) ? tpRange : 80.0f;
+        string tpa = Syscalls.CvarGetString("cg_thirdPersonAngle");
+        _thirdPersonAngle = float.TryParse(tpa, out float tpAngle) ? tpAngle : 0.0f;
         for (int i = 0; i < MAX_CHAT_LINES; i++) { _chatMessages[i] = ""; _chatTimes[i] = 0; }
         Prediction.Reset();
         _initialized = true;
@@ -393,6 +440,9 @@ public static unsafe class CGame
         try { ProcessSnapshots(); }
         catch (Exception ex) { CrashLog.LogException("ProcessSnapshots", ex); Syscalls.Print($"[.NET cgame] ERROR in ProcessSnapshots: {ex.Message}\n"); }
 
+        // Record frame timing for lagometer
+        AddLagometerFrameInfo();
+
         if (_snap == null)
         {
             if (_frameCount <= 5) Syscalls.Print("[.NET cgame] DrawActiveFrame: _snap is null, skipping\n");
@@ -469,7 +519,9 @@ public static unsafe class CGame
         try { Marks.AddToScene(_time); }
         catch (Exception ex) { CrashLog.LogException("Marks", ex); Syscalls.Print($"[.NET cgame] ERROR in Marks.AddToScene: {ex.Message}\n"); }
 
-        // First-person view weapon
+        // First-person view weapon (skip in third-person mode)
+        if (!_thirdPerson)
+        {
         CrashLog.Breadcrumb("AddViewWeapon");
         try
         {
@@ -505,6 +557,7 @@ public static unsafe class CGame
             }
         }
         catch (Exception ex) { CrashLog.LogException("AddViewWeapon", ex); Syscalls.Print($"[.NET cgame] ERROR in AddViewWeapon: {ex.Message}\n"); }
+        } // end !_thirdPerson
 
         CrashLog.Breadcrumb("RenderScene");
         DamageBlendBlob(ref refdef);
@@ -565,6 +618,18 @@ public static unsafe class CGame
         _powerupIcons[PW_FLIGHT] = Syscalls.R_RegisterShaderNoMip("icons/flight");
         _powerupIcons[PW_REDFLAG] = Syscalls.R_RegisterShaderNoMip("icons/iconf_red1");
         _powerupIcons[PW_BLUEFLAG] = Syscalls.R_RegisterShaderNoMip("icons/iconf_blu1");
+
+        // Reward medal shaders
+        _medalExcellent = Syscalls.R_RegisterShaderNoMip("medal_excellent");
+        _medalImpressive = Syscalls.R_RegisterShaderNoMip("medal_impressive");
+        _medalGauntlet = Syscalls.R_RegisterShaderNoMip("medal_gauntlet");
+        _medalDefend = Syscalls.R_RegisterShaderNoMip("medal_defend");
+        _medalAssist = Syscalls.R_RegisterShaderNoMip("medal_assist");
+        _medalCapture = Syscalls.R_RegisterShaderNoMip("medal_capture");
+
+        // Lagometer
+        _lagometerShader = Syscalls.R_RegisterShaderNoMip("lagometer");
+        _disconnectIcon = Syscalls.R_RegisterShaderNoMip("gfx/2d/net");
 
         // Weapon icons
         string[] weaponIconPaths = {
@@ -740,6 +805,9 @@ public static unsafe class CGame
 
     private static void TransitionSnapshot()
     {
+        // Save old player state for reward/sound detection before transition
+        _oldPlayerState = _snap->Ps;
+
         // Shift teleport flags forward
         _thisFrameTeleport = _nextFrameTeleport;
         _nextFrameTeleport = false;
@@ -782,6 +850,12 @@ public static unsafe class CGame
 
         // Check for damage feedback
         DamageFeedback();
+
+        // Check for reward medals and hit sounds
+        CheckLocalSounds(&_snap->Ps, ref _oldPlayerState);
+
+        // Record snapshot info for lagometer
+        AddLagometerSnapshotInfo(_snap);
     }
 
     /// <summary>
@@ -944,6 +1018,17 @@ public static unsafe class CGame
         _sfxGrenBounce2 = Syscalls.S_RegisterSound("sound/weapons/grenade/hgrenb2a.wav", 0);
         _sfxRocketExplosion = Syscalls.S_RegisterSound("sound/weapons/rocket/rocklx1a.wav", 0);
         _sfxPlasmaExplosion = Syscalls.S_RegisterSound("sound/weapons/plasma/plasmx1a.wav", 0);
+
+        // Reward sounds
+        _impressiveSound = Syscalls.S_RegisterSound("sound/feedback/impressive.wav", 0);
+        _excellentSound = Syscalls.S_RegisterSound("sound/feedback/excellent.wav", 0);
+        _humiliationSound = Syscalls.S_RegisterSound("sound/feedback/humiliation.wav", 0);
+        _defendSound = Syscalls.S_RegisterSound("sound/feedback/defense.wav", 0);
+        _assistSound = Syscalls.S_RegisterSound("sound/feedback/assist.wav", 0);
+        _captureAwardSound = Syscalls.S_RegisterSound("sound/teamplay/flagcap_yourteam.wav", 0);
+        _deniedSound = Syscalls.S_RegisterSound("sound/feedback/denied.wav", 0);
+        _hitSound = Syscalls.S_RegisterSound("sound/feedback/hit.wav", 0);
+        _hitTeamSound = Syscalls.S_RegisterSound("sound/feedback/hit_teammate.wav", 0);
 
         // Weapon fire sounds
         _weaponFireSounds[Weapons.WP_GAUNTLET, 0] = Syscalls.S_RegisterSound("sound/weapons/melee/fstatck.wav", 0);
@@ -1360,6 +1445,14 @@ public static unsafe class CGame
     {
         ref var ps = ref Prediction.PredictedPlayerState;
 
+        // Update third-person cvars each frame
+        string tp = Syscalls.CvarGetString("cg_thirdPerson");
+        _thirdPerson = tp == "1";
+        string tpr = Syscalls.CvarGetString("cg_thirdPersonRange");
+        _thirdPersonRange = float.TryParse(tpr, out float tpRange) ? tpRange : 80.0f;
+        string tpa = Syscalls.CvarGetString("cg_thirdPersonAngle");
+        _thirdPersonAngle = float.TryParse(tpa, out float tpAngle) ? tpAngle : 0.0f;
+
         refdef.X = 0;
         refdef.Y = 0;
         refdef.Width = _screenWidth;
@@ -1370,7 +1463,7 @@ public static unsafe class CGame
         _bobFracSin = MathF.Abs(MathF.Sin((ps.BobCycle & 127) / 127.0f * MathF.PI));
         _xySpeed = MathF.Sqrt(ps.VelocityX * ps.VelocityX + ps.VelocityY * ps.VelocityY);
 
-        // Base view origin from predicted state (viewheight added in OffsetFirstPersonView)
+        // Base view origin from predicted state (viewheight added in offset functions)
         refdef.ViewOrgX = ps.OriginX;
         refdef.ViewOrgY = ps.OriginY;
         refdef.ViewOrgZ = ps.OriginZ;
@@ -1386,8 +1479,16 @@ public static unsafe class CGame
         float viewYaw = ps.ViewAnglesY;
         float viewRoll = ps.ViewAnglesZ;
 
-        // Apply first-person view offsets (bobbing, damage kick, duck, landing, step)
-        OffsetFirstPersonView(ref refdef, ref viewPitch, ref viewYaw, ref viewRoll);
+        if (_thirdPerson)
+        {
+            // Third-person camera
+            OffsetThirdPersonView(ref refdef, ref viewPitch, ref viewYaw, ref viewRoll);
+        }
+        else
+        {
+            // Apply first-person view offsets (bobbing, damage kick, duck, landing, step)
+            OffsetFirstPersonView(ref refdef, ref viewPitch, ref viewYaw, ref viewRoll);
+        }
 
         // Convert angles to axis AFTER applying offsets
         float pitch = viewPitch * MathF.PI / 180.0f;
@@ -1511,6 +1612,111 @@ public static unsafe class CGame
                 refdef.ViewOrgZ -= _stepChange * (STEP_TIME - stepDelta) / (float)STEP_TIME;
             }
         }
+    }
+
+    // ── Third-Person Camera (CG_OffsetThirdPersonView equivalent) ──
+    private const float FOCUS_DISTANCE = 512.0f;
+
+    private static void OffsetThirdPersonView(ref Q3RefDef refdef, ref float pitch, ref float yaw, ref float roll)
+    {
+        ref var ps = ref Prediction.PredictedPlayerState;
+
+        // Add viewheight
+        refdef.ViewOrgZ += ps.ViewHeight;
+
+        float focusPitch = pitch;
+        float focusYaw = yaw;
+
+        // If dead, look at killer
+        if (ps.Stats[Stats.STAT_HEALTH] <= 0)
+        {
+            focusYaw = ps.Stats[Stats.STAT_DEAD_YAW];
+            yaw = ps.Stats[Stats.STAT_DEAD_YAW];
+        }
+
+        // Don't go too far overhead
+        if (focusPitch > 45) focusPitch = 45;
+
+        // Calculate focus point
+        float focusRad = focusPitch * MathF.PI / 180.0f;
+        float focusYawRad = focusYaw * MathF.PI / 180.0f;
+        float fwdX = MathF.Cos(focusYawRad) * MathF.Cos(focusRad);
+        float fwdY = MathF.Sin(focusYawRad) * MathF.Cos(focusRad);
+        float fwdZ = -MathF.Sin(focusRad);
+
+        float focusPtX = refdef.ViewOrgX + FOCUS_DISTANCE * fwdX;
+        float focusPtY = refdef.ViewOrgY + FOCUS_DISTANCE * fwdY;
+        float focusPtZ = refdef.ViewOrgZ + FOCUS_DISTANCE * fwdZ;
+
+        // Start from current view position, raised slightly
+        float viewX = refdef.ViewOrgX;
+        float viewY = refdef.ViewOrgY;
+        float viewZ = refdef.ViewOrgZ + 8;
+
+        // Reduce pitch for less extreme angles
+        pitch *= 0.5f;
+
+        // Calculate camera offset using full angle set
+        float pitchRad = pitch * MathF.PI / 180.0f;
+        float yawRad = yaw * MathF.PI / 180.0f;
+
+        // Forward and right vectors
+        float cfX = MathF.Cos(yawRad) * MathF.Cos(pitchRad);
+        float cfY = MathF.Sin(yawRad) * MathF.Cos(pitchRad);
+        float cfZ = -MathF.Sin(pitchRad);
+        float crX = MathF.Sin(yawRad);
+        float crY = -MathF.Cos(yawRad);
+        float crZ = 0;
+
+        float forwardScale = MathF.Cos(_thirdPersonAngle * MathF.PI / 180.0f);
+        float sideScale = MathF.Sin(_thirdPersonAngle * MathF.PI / 180.0f);
+
+        viewX += -_thirdPersonRange * forwardScale * cfX + -_thirdPersonRange * sideScale * crX;
+        viewY += -_thirdPersonRange * forwardScale * cfY + -_thirdPersonRange * sideScale * crY;
+        viewZ += -_thirdPersonRange * forwardScale * cfZ;
+
+        // Trace to prevent camera in walls
+        const int CONTENTS_SOLID = 1;
+        float* trStart = stackalloc float[3];
+        float* trEnd = stackalloc float[3];
+        float* trMins = stackalloc float[3];
+        float* trMaxs = stackalloc float[3];
+        trStart[0] = refdef.ViewOrgX; trStart[1] = refdef.ViewOrgY; trStart[2] = refdef.ViewOrgZ;
+        trEnd[0] = viewX; trEnd[1] = viewY; trEnd[2] = viewZ;
+        trMins[0] = -4; trMins[1] = -4; trMins[2] = -4;
+        trMaxs[0] = 4; trMaxs[1] = 4; trMaxs[2] = 4;
+
+        Q3Trace trace;
+        Prediction.Trace(&trace, trStart, trMins, trMaxs, trEnd, ps.ClientNum, CONTENTS_SOLID);
+
+        if (trace.Fraction != 1.0f)
+        {
+            viewX = trace.EndPosX;
+            viewY = trace.EndPosY;
+            viewZ = trace.EndPosZ;
+            viewZ += (1.0f - trace.Fraction) * 32;
+
+            // Second trace to handle tunnels/ceilings
+            trEnd[0] = viewX; trEnd[1] = viewY; trEnd[2] = viewZ;
+            Prediction.Trace(&trace, trStart, trMins, trMaxs, trEnd, ps.ClientNum, CONTENTS_SOLID);
+            viewX = trace.EndPosX;
+            viewY = trace.EndPosY;
+            viewZ = trace.EndPosZ;
+        }
+
+        refdef.ViewOrgX = viewX;
+        refdef.ViewOrgY = viewY;
+        refdef.ViewOrgZ = viewZ;
+
+        // Calculate pitch to look at focus point from camera
+        float fpX = focusPtX - refdef.ViewOrgX;
+        float fpY = focusPtY - refdef.ViewOrgY;
+        float fpZ = focusPtZ - refdef.ViewOrgZ;
+        float focusDist = MathF.Sqrt(fpX * fpX + fpY * fpY);
+        if (focusDist < 1) focusDist = 1;
+
+        pitch = -180.0f / MathF.PI * MathF.Atan2(fpZ, focusDist);
+        yaw -= _thirdPersonAngle;
     }
 
     private static void CalcFov(ref Q3RefDef refdef)
@@ -2052,6 +2258,12 @@ public static unsafe class CGame
         // Warmup countdown
         DrawWarmup();
 
+        // Reward medals
+        DrawReward();
+
+        // Lagometer
+        DrawLagometer();
+
         // Scoreboard overlay
         if (Scoreboard.IsShowing || _snap->Ps.PmType >= 4) // PM_DEAD=4, PM_INTERMISSION=5
             Scoreboard.Draw(_time, _clientNum, _gametype);
@@ -2301,6 +2513,276 @@ public static unsafe class CGame
             int w = line.Length * 8;
             int x = (SCREEN_WIDTH - w) / 2;
             DrawString(x, startY + i * lineHeight, line, 1.0f, 1.0f, 1.0f, alpha);
+        }
+    }
+
+    // ── Reward Medals (CG_DrawReward equivalent) ──
+
+    private static void DrawReward()
+    {
+        if (_rewardTime == 0 && _rewardStack <= 0) return;
+
+        // Calculate fade
+        int elapsed = _time - _rewardTime;
+        float alpha;
+        if (elapsed < 0 || elapsed >= REWARD_TIME)
+        {
+            // Expired — pop next from stack
+            if (_rewardStack > 0)
+            {
+                for (int i = 0; i < _rewardStack; i++)
+                {
+                    _rewardSound[i] = _rewardSound[i + 1];
+                    _rewardShader[i] = _rewardShader[i + 1];
+                    _rewardCount[i] = _rewardCount[i + 1];
+                }
+                _rewardTime = _time;
+                _rewardStack--;
+                elapsed = 0;
+                alpha = 1.0f;
+                Syscalls.S_StartLocalSound(_rewardSound[0], SoundChannel.CHAN_ANNOUNCER);
+            }
+            else
+            {
+                _rewardTime = 0;
+                return;
+            }
+        }
+        else
+        {
+            alpha = 1.0f - (float)elapsed / REWARD_TIME;
+        }
+        if (alpha <= 0) return;
+
+        float* color = stackalloc float[4];
+        color[0] = 1; color[1] = 1; color[2] = 1; color[3] = alpha;
+        Syscalls.R_SetColor(color);
+
+        int count = _rewardCount[0];
+        float y = 56;
+
+        if (count >= 10)
+        {
+            // Single icon + count text
+            float rx = 320 - ICON_SIZE / 2;
+            DrawPic(rx, y, ICON_SIZE - 4, ICON_SIZE - 4, _rewardShader[0]);
+            string countStr = count.ToString();
+            float tx = (SCREEN_WIDTH - 8 * countStr.Length) / 2;
+            DrawString((int)tx, (int)(y + ICON_SIZE), countStr, 1.0f, 1.0f, 1.0f, alpha);
+        }
+        else
+        {
+            // Repeated icons
+            float rx = 320 - count * ICON_SIZE / 2;
+            for (int i = 0; i < count; i++)
+            {
+                DrawPic(rx, y, ICON_SIZE - 4, ICON_SIZE - 4, _rewardShader[0]);
+                rx += ICON_SIZE;
+            }
+        }
+
+        Syscalls.R_SetColor(null);
+    }
+
+    // ── Lagometer (CG_DrawLagometer equivalent) ──
+
+    private static void AddLagometerFrameInfo()
+    {
+        int offset = _time - _latestSnapshotTime;
+        _lagFrameSamples[_lagFrameCount & (LAG_SAMPLES - 1)] = offset;
+        _lagFrameCount++;
+    }
+
+    private static void AddLagometerSnapshotInfo(Q3Snapshot* snap)
+    {
+        if (snap == null)
+        {
+            _lagSnapshotSamples[_lagSnapshotCount & (LAG_SAMPLES - 1)] = -1;
+            _lagSnapshotCount++;
+            return;
+        }
+        _lagSnapshotSamples[_lagSnapshotCount & (LAG_SAMPLES - 1)] = snap->Ping;
+        _lagSnapshotFlags[_lagSnapshotCount & (LAG_SAMPLES - 1)] = snap->SnapFlags;
+        _lagSnapshotCount++;
+    }
+
+    private static void DrawLagometer()
+    {
+        // Draw disconnect indicator regardless
+        DrawDisconnect();
+
+        // Skip lagometer on local server
+        string sv = Syscalls.CvarGetString("sv_running");
+        if (sv == "1") return;
+
+        // Check cg_lagometer cvar
+        string lagCvar = Syscalls.CvarGetString("cg_lagometer");
+        if (lagCvar == "0") return;
+
+        float x = 640 - 48;
+        float y = 480 - 48;
+
+        Syscalls.R_SetColor(null);
+        DrawPic(x, y, 48, 48, _lagometerShader);
+
+        // Get adjusted coordinates for pixel drawing
+        float ax = x, ay = y, aw = 48, ah = 48;
+        AdjustFrom640(ref ax, ref ay, ref aw, ref ah);
+
+        int color = -1;
+        float range = ah / 3;
+        float mid = ay + range;
+        float vscale = range / MAX_LAGOMETER_RANGE;
+
+        // Frame interpolate/extrapolate graph (top half)
+        for (int a = 0; a < (int)aw; a++)
+        {
+            int idx = (_lagFrameCount - 1 - a) & (LAG_SAMPLES - 1);
+            float v = _lagFrameSamples[idx] * vscale;
+            if (v > 0)
+            {
+                if (color != 1) { color = 1; SetColorYellow(); }
+                if (v > range) v = range;
+                Syscalls.R_DrawStretchPic(ax + aw - a, mid - v, 1, v, 0, 0, 0, 0, _whiteShader);
+            }
+            else if (v < 0)
+            {
+                if (color != 2) { color = 2; SetColorBlue(); }
+                v = -v;
+                if (v > range) v = range;
+                Syscalls.R_DrawStretchPic(ax + aw - a, mid, 1, v, 0, 0, 0, 0, _whiteShader);
+            }
+        }
+
+        // Snapshot latency/drop graph (bottom half)
+        range = ah / 2;
+        vscale = range / MAX_LAGOMETER_PING;
+
+        for (int a = 0; a < (int)aw; a++)
+        {
+            int idx = (_lagSnapshotCount - 1 - a) & (LAG_SAMPLES - 1);
+            float v = _lagSnapshotSamples[idx];
+            if (v > 0)
+            {
+                if ((_lagSnapshotFlags[idx] & SnapFlags.SNAPFLAG_RATE_DELAYED) != 0)
+                {
+                    if (color != 5) { color = 5; SetColorYellow(); }
+                }
+                else
+                {
+                    if (color != 3) { color = 3; SetColorGreen(); }
+                }
+                v *= vscale;
+                if (v > range) v = range;
+                Syscalls.R_DrawStretchPic(ax + aw - a, ay + ah - v, 1, v, 0, 0, 0, 0, _whiteShader);
+            }
+            else if (v < 0)
+            {
+                if (color != 4) { color = 4; SetColorRed(); }
+                Syscalls.R_DrawStretchPic(ax + aw - a, ay + ah - range, 1, range, 0, 0, 0, 0, _whiteShader);
+            }
+        }
+
+        Syscalls.R_SetColor(null);
+    }
+
+    private static void DrawDisconnect()
+    {
+        // Show disconnected icon if no snapshots received for > 1 second
+        if (_snap == null) return;
+        int elapsed = _time - _snap->ServerTime;
+        if (elapsed < 1000) return;
+
+        // Flash the icon
+        float x = 640 - 48;
+        float y = 480 - 48;
+        DrawPic(x, y, 48, 48, _disconnectIcon);
+    }
+
+    private static void SetColorYellow()
+    {
+        float* c = stackalloc float[4]; c[0] = 1; c[1] = 1; c[2] = 0; c[3] = 1;
+        Syscalls.R_SetColor(c);
+    }
+    private static void SetColorBlue()
+    {
+        float* c = stackalloc float[4]; c[0] = 0; c[1] = 0; c[2] = 1; c[3] = 1;
+        Syscalls.R_SetColor(c);
+    }
+    private static void SetColorGreen()
+    {
+        float* c = stackalloc float[4]; c[0] = 0; c[1] = 1; c[2] = 0; c[3] = 1;
+        Syscalls.R_SetColor(c);
+    }
+    private static void SetColorRed()
+    {
+        float* c = stackalloc float[4]; c[0] = 1; c[1] = 0; c[2] = 0; c[3] = 1;
+        Syscalls.R_SetColor(c);
+    }
+
+    // ── Reward / Sound Detection (CG_CheckLocalSounds equivalent) ──
+
+    private static void CheckLocalSounds(Q3PlayerState* ps, ref Q3PlayerState ops)
+    {
+        // Don't play sounds if the player just changed teams
+        if (ps->Persistant[Persistant.PERS_TEAM] != ops.Persistant[Persistant.PERS_TEAM])
+            return;
+
+        // Hit feedback
+        if (ps->Persistant[Persistant.PERS_HITS] > ops.Persistant[Persistant.PERS_HITS])
+            Syscalls.S_StartLocalSound(_hitSound, SoundChannel.CHAN_LOCAL_SOUND);
+        else if (ps->Persistant[Persistant.PERS_HITS] < ops.Persistant[Persistant.PERS_HITS])
+            Syscalls.S_StartLocalSound(_hitTeamSound, SoundChannel.CHAN_LOCAL_SOUND);
+
+        // Reward medals
+        if (ps->Persistant[Persistant.PERS_CAPTURES] != ops.Persistant[Persistant.PERS_CAPTURES])
+            PushReward(_captureAwardSound, _medalCapture, ps->Persistant[Persistant.PERS_CAPTURES]);
+
+        if (ps->Persistant[Persistant.PERS_IMPRESSIVE_COUNT] != ops.Persistant[Persistant.PERS_IMPRESSIVE_COUNT])
+            PushReward(_impressiveSound, _medalImpressive, ps->Persistant[Persistant.PERS_IMPRESSIVE_COUNT]);
+
+        if (ps->Persistant[Persistant.PERS_EXCELLENT_COUNT] != ops.Persistant[Persistant.PERS_EXCELLENT_COUNT])
+            PushReward(_excellentSound, _medalExcellent, ps->Persistant[Persistant.PERS_EXCELLENT_COUNT]);
+
+        if (ps->Persistant[Persistant.PERS_GAUNTLET_FRAG_COUNT] != ops.Persistant[Persistant.PERS_GAUNTLET_FRAG_COUNT])
+            PushReward(_humiliationSound, _medalGauntlet, ps->Persistant[Persistant.PERS_GAUNTLET_FRAG_COUNT]);
+
+        if (ps->Persistant[Persistant.PERS_DEFEND_COUNT] != ops.Persistant[Persistant.PERS_DEFEND_COUNT])
+            PushReward(_defendSound, _medalDefend, ps->Persistant[Persistant.PERS_DEFEND_COUNT]);
+
+        if (ps->Persistant[Persistant.PERS_ASSIST_COUNT] != ops.Persistant[Persistant.PERS_ASSIST_COUNT])
+            PushReward(_assistSound, _medalAssist, ps->Persistant[Persistant.PERS_ASSIST_COUNT]);
+
+        // Player events (denied, gauntlet reward)
+        if (ps->Persistant[Persistant.PERS_PLAYEREVENTS] != ops.Persistant[Persistant.PERS_PLAYEREVENTS])
+        {
+            const int PLAYEREVENT_DENIEDREWARD = 1;
+            const int PLAYEREVENT_GAUNTLETREWARD = 2;
+            int newEvents = ps->Persistant[Persistant.PERS_PLAYEREVENTS];
+            int oldEvents = ops.Persistant[Persistant.PERS_PLAYEREVENTS];
+
+            if ((newEvents & PLAYEREVENT_DENIEDREWARD) != (oldEvents & PLAYEREVENT_DENIEDREWARD))
+                Syscalls.S_StartLocalSound(_deniedSound, SoundChannel.CHAN_ANNOUNCER);
+            else if ((newEvents & PLAYEREVENT_GAUNTLETREWARD) != (oldEvents & PLAYEREVENT_GAUNTLETREWARD))
+                Syscalls.S_StartLocalSound(_humiliationSound, SoundChannel.CHAN_ANNOUNCER);
+        }
+    }
+
+    private static void PushReward(int sfx, int shader, int count)
+    {
+        if (_rewardStack < MAX_REWARDSTACK - 1)
+        {
+            _rewardStack++;
+            _rewardSound[_rewardStack] = sfx;
+            _rewardShader[_rewardStack] = shader;
+            _rewardCount[_rewardStack] = count;
+        }
+
+        // If this is the first reward, start it immediately
+        if (_rewardStack == 0 && _rewardTime == 0)
+        {
+            _rewardTime = _time;
+            Syscalls.S_StartLocalSound(_rewardSound[0], SoundChannel.CHAN_ANNOUNCER);
         }
     }
 
