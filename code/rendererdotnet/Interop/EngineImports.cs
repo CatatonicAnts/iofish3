@@ -61,4 +61,34 @@ public static unsafe class EngineImports
             return;
         ((delegate* unmanaged[Cdecl]<nint, void>)_ri.IN_Init)(windowHandle);
     }
+
+    /// <summary>
+    /// Read a file from the engine's virtual filesystem (pk3 archives + loose files).
+    /// Returns file length, or -1 if not found. Caller must free with FS_FreeFile.
+    /// </summary>
+    public static long FS_ReadFile(string path, out byte* buffer)
+    {
+        buffer = null;
+        if (!_initialized || _ri.FS_ReadFile == 0)
+            return -1;
+
+        byte[] pathBytes = Encoding.UTF8.GetBytes(path + "\0");
+        fixed (byte* pathPtr = pathBytes)
+        {
+            byte* buf = null;
+            long len = ((delegate* unmanaged[Cdecl]<byte*, byte**, long>)_ri.FS_ReadFile)(pathPtr, &buf);
+            buffer = buf;
+            return len;
+        }
+    }
+
+    /// <summary>
+    /// Free a buffer allocated by FS_ReadFile.
+    /// </summary>
+    public static void FS_FreeFile(byte* buffer)
+    {
+        if (!_initialized || _ri.FS_FreeFile == 0 || buffer == null)
+            return;
+        ((delegate* unmanaged[Cdecl]<byte*, void>)_ri.FS_FreeFile)(buffer);
+    }
 }

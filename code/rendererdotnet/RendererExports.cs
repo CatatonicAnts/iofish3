@@ -7,8 +7,9 @@ using Silk.NET.SDL;
 namespace RendererDotNet;
 
 /// <summary>
-/// Stub implementations for all 30 refexport_t functions.
+/// Implementations for all 30 refexport_t functions.
 /// Uses Silk.NET for SDL2 windowing and OpenGL 4.5 rendering.
+/// 2D rendering (menus, console, HUD) is handled by Renderer2D.
 /// </summary>
 public static unsafe class RendererExports
 {
@@ -33,12 +34,11 @@ public static unsafe class RendererExports
     private static Silk.NET.SDL.Window* _window;
     private static void* _glContext;
 
+    private static Renderer2D? _renderer2D;
+    private static ShaderManager? _shaders;
+
     private const int WIDTH = 1280;
     private const int HEIGHT = 720;
-
-    internal static GL? Gl => _gl;
-    internal static Sdl? Sdl => _sdl;
-    internal static Silk.NET.SDL.Window* Window => _window;
 
     private static void WriteString(byte* dest, string value, int maxLen)
     {
@@ -58,6 +58,10 @@ public static unsafe class RendererExports
 
         if (destroyWindow != 0)
         {
+            _renderer2D?.Dispose();
+            _renderer2D = null;
+            _shaders = null;
+
             _gl?.Dispose();
             _gl = null;
 
@@ -120,6 +124,14 @@ public static unsafe class RendererExports
 
         _gl = GL.GetApi(new SdlGLContext(_sdl));
 
+        // Initialize 2D renderer and shader manager
+        _renderer2D = new Renderer2D();
+        _renderer2D.Init(_gl, WIDTH, HEIGHT);
+
+        _shaders = new ShaderManager();
+        _shaders.WhiteTexture = _renderer2D.WhiteTexture;
+        _shaders.SetRenderer(_renderer2D);
+
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
         NativeMemory.Clear(cfg, GLCONFIG_SIZE);
@@ -141,7 +153,7 @@ public static unsafe class RendererExports
         EngineImports.IN_Init((nint)_window);
 
         _gl.Viewport(0, 0, (uint)WIDTH, (uint)HEIGHT);
-        _gl.ClearColor(0.1f, 0.1f, 0.2f, 1.0f);
+        _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
         _sdl.GLSwapWindow(_window);
 
@@ -157,10 +169,16 @@ public static unsafe class RendererExports
     public static int RegisterSkin(byte* name) => 0;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int RegisterShader(byte* name) => 0;
+    public static int RegisterShader(byte* name)
+    {
+        return _shaders?.Register(name) ?? 0;
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int RegisterShaderNoMip(byte* name) => 0;
+    public static int RegisterShaderNoMip(byte* name)
+    {
+        return _shaders?.Register(name) ?? 0;
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void LoadWorld(byte* name) { }
@@ -193,11 +211,25 @@ public static unsafe class RendererExports
     public static void RenderScene(nint fd) { }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void SetColor(float* rgba) { }
+    public static void SetColor(float* rgba)
+    {
+        if (_renderer2D == null) return;
+
+        if (rgba != null)
+            _renderer2D.SetColor(rgba[0], rgba[1], rgba[2], rgba[3]);
+        else
+            _renderer2D.ResetColor();
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void DrawStretchPic(float x, float y, float w, float h,
-        float s1, float t1, float s2, float t2, int hShader) { }
+        float s1, float t1, float s2, float t2, int hShader)
+    {
+        if (_renderer2D == null || _shaders == null) return;
+
+        uint tex = _shaders.GetTextureId(hShader);
+        _renderer2D.DrawQuad(x, y, w, h, s1, t1, s2, t2, tex);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void DrawStretchRaw(int x, int y, int w, int h,
@@ -210,20 +242,21 @@ public static unsafe class RendererExports
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void BeginFrame(int stereoFrame)
     {
-        if (_gl != null)
-        {
-            _gl.ClearColor(0.1f, 0.1f, 0.2f, 1.0f);
-            _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-        }
+        if (_gl == null) return;
+
+        _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+        _renderer2D?.ResetColor();
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void EndFrame(int* frontEndMsec, int* backEndMsec)
     {
+        // Flush any pending 2D draw calls
+        _renderer2D?.Flush();
+
         if (_sdl != null && _window != null)
-        {
             _sdl.GLSwapWindow(_window);
-        }
 
         if (frontEndMsec != null) *frontEndMsec = 0;
         if (backEndMsec != null) *backEndMsec = 0;
@@ -241,7 +274,44 @@ public static unsafe class RendererExports
     public static void ModelBounds(int model, float* mins, float* maxs) { }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void RegisterFont(byte* fontName, int pointSize, nint font) { }
+    public static void RegisterFont(byte* fontName, int pointSize, nint font)
+    {
+        if (fontName == null || font == 0 || _shaders == null) return;
+        if (pointSize <= 0) pointSize = 12;
+
+        // Font data is stored as binary in fonts/fontImage_{pointSize}.dat
+        string datFile = $"fonts/fontImage_{pointSize}.dat";
+        const int FONT_INFO_SIZE = 20548; // sizeof(fontInfo_t)
+
+        long len = EngineImports.FS_ReadFile(datFile, out byte* data);
+        if (len != FONT_INFO_SIZE || data == null)
+        {
+            if (data != null) EngineImports.FS_FreeFile(data);
+            return;
+        }
+
+        byte* dst = (byte*)font;
+
+        // Binary layout matches struct layout on little-endian (x64): direct copy
+        System.Buffer.MemoryCopy(data, dst, FONT_INFO_SIZE, FONT_INFO_SIZE);
+        EngineImports.FS_FreeFile(data);
+
+        // Fix up glyph shader handles — register each font atlas page
+        const int GLYPH_SIZE = 80;
+        const int GLYPH_HANDLE_OFF = 44;
+        const int GLYPH_SHADER_OFF = 48;
+        for (int i = 0; i < 256; i++)
+        {
+            int off = i * GLYPH_SIZE;
+            string shaderName = System.Runtime.InteropServices.Marshal
+                .PtrToStringAnsi((nint)(dst + off + GLYPH_SHADER_OFF)) ?? "";
+            if (shaderName.Length > 0)
+                *(int*)(dst + off + GLYPH_HANDLE_OFF) = _shaders.Register(shaderName);
+        }
+
+        // Overwrite name field with the dat filename
+        WriteString(dst + 20484, datFile, 64);
+    }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void RemapShader(byte* oldShader, byte* newShader, byte* offsetTime) { }
