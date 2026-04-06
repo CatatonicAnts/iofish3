@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\bg_lib.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\bg_misc.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\q_math.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\q_shared.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\ui_atoms.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\ui_gameinfo.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\ui_main.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\ui_players.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\8feaf40539373a1659ae0796dd20ffc7\ui_shared.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\ff1d1e67720abfd9132201402483a696\ui.qvm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\0499e0f601e0296592ebd4a514c64985\uiqvm_missionpack.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="E:\Projects\iofish3\msvc\CMakeFiles\uiqvm_missionpack" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D8E92B7E-0F28-3783-A15F-0E73466B91BF}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

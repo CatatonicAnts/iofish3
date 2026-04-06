@@ -1,0 +1,251 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_bot.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_client.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_ccmds.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_game.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_init.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_net_chan.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_snapshot.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\server\sv_world.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\null\null_client.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\null\null_input.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\null\null_snddma.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_load.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_patch.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_polylib.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_test.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_trace.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cmd.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\common.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cvar.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\files.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\md4.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\md5.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\msg.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\net_chan.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\net_ip.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\huffman.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\q_math.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\q_shared.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\unzip.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\ioapi.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_armv7l.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_interpreted.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_powerpc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_sparc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_x86.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_bspq3.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_cluster.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_debug.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_entity.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_file.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_move.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_optimize.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_reach.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_route.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_routealt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_sample.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_char.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_chat.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_gen.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_goal.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_move.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_weap.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_weight.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ea.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_interface.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_crc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_libvar.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_log.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_memory.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_precomp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_script.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_struct.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\sys\con_log.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\sys\sys_autoupdater.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\sys\sys_main.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\sys\sys_win32.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\sys\con_win32.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\adler32.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\crc32.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\inffast.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\inflate.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\inftrees.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\zutil.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="E:\Projects\iofish3\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="E:\Projects\iofish3\code\asm\snapvector.asm" />
+    <MASM Include="E:\Projects\iofish3\code\asm\ftola.asm" />
+    <MASM Include="E:\Projects\iofish3\code\asm\vm_x86_64.asm" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="E:\Projects\iofish3\code\sys\win_resource.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{466BAB17-4599-3177-82B8-600B1EC257FA}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

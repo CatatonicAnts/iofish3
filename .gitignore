@@ -1,9 +1,17 @@
-build*
 *.swp
 *tags
 *~
 /.vscode/
 /baseq3
+
+# CMake
+####################
+/build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeSettings.json
+CMakeUserPresets.json
 
 # OS X
 ####################
@@ -21,7 +29,6 @@ Icon?
 *.mode2v3
 *.pbxuser
 *.perspectivev3
-*.user
 *.xcuserstate
 *.moved-aside
 *~.nib
@@ -40,4 +47,11 @@ profile
 *.sdf
 *.opensdf
 *.suo
-/.vs
+*.vcxproj.user
+.vs/
+*.dir/
+Release/
+Debug/
+RelWithDebInfo/
+MinSizeRel/
+x64/

@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\bg_lib.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\bg_misc.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\bg_pmove.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\bg_slidemove.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_consolecmds.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_draw.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_drawtools.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_effects.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_ents.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_event.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_info.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_localents.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_main.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_marks.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_particles.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_players.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_playerstate.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_predict.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_scoreboard.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_servercmds.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_snapshot.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_view.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\cg_weapons.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\q_math.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\6d3ef3d2204072bcf581c2ea2e509aed\q_shared.asm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\f138ef2659bf033b79b32145e660a9a3\cgame.qvm.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\0499e0f601e0296592ebd4a514c64985\cgameqvm_baseq3.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="E:\Projects\iofish3\msvc\CMakeFiles\cgameqvm_baseq3" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D8E92B7E-0F28-3783-A15F-0E73466B91BF}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

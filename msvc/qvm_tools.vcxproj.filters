@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\3679ceeb9528d5b5eb789826ec71af98\qvm_tools-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\3679ceeb9528d5b5eb789826ec71af98\qvm_tools-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\3679ceeb9528d5b5eb789826ec71af98\qvm_tools-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\3679ceeb9528d5b5eb789826ec71af98\qvm_tools-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\3679ceeb9528d5b5eb789826ec71af98\qvm_tools-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\3679ceeb9528d5b5eb789826ec71af98\qvm_tools-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\3679ceeb9528d5b5eb789826ec71af98\qvm_tools-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\773104c94257a84e953735dfb19c93d9\qvm_tools-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\0499e0f601e0296592ebd4a514c64985\qvm_tools.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Projects\iofish3\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="E:\Projects\iofish3\msvc\CMakeFiles\qvm_tools" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D8E92B7E-0F28-3783-A15F-0E73466B91BF}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
