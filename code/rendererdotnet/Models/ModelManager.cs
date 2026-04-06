@@ -50,7 +50,7 @@ public sealed class ModelManager
         if (_nameToHandle.TryGetValue(name, out int existing))
         {
             var cached = _models[existing];
-            return (cached.Model != null || cached.BspModelIndex >= 0) ? existing : 0;
+            return (cached.Model != null || cached.IqmModel != null || cached.BspModelIndex >= 0) ? existing : 0;
         }
 
         int handle = _models.Count;
@@ -69,10 +69,24 @@ public sealed class ModelManager
             return 0;
         }
 
-        // Try to load the model
-        entry.Model = LoadModel(name);
+        // Try IQM first if extension is .iqm, or as fallback after MD3
+        string ext = "";
+        int dotIdx = name.LastIndexOf('.');
+        if (dotIdx >= 0) ext = name[(dotIdx + 1)..];
 
-        if (entry.Model == null)
+        if (ext.Equals("iqm", System.StringComparison.OrdinalIgnoreCase))
+        {
+            entry.IqmModel = LoadIqmModel(name);
+        }
+        else
+        {
+            entry.Model = LoadModel(name);
+            // Try IQM as fallback
+            if (entry.Model == null)
+                entry.IqmModel = LoadIqmModel(name);
+        }
+
+        if (entry.Model == null && entry.IqmModel == null)
         {
             EngineImports.Printf(EngineImports.PRINT_DEVELOPER,
                 $"[.NET] Could not load model: {name}\n");
@@ -82,15 +96,34 @@ public sealed class ModelManager
         // Resolve surface shaders
         if (_shaders != null)
         {
-            foreach (var surface in entry.Model.Surfaces)
+            if (entry.Model != null)
             {
-                if (!string.IsNullOrEmpty(surface.ShaderName))
-                    surface.ShaderHandle = _shaders.Register(surface.ShaderName);
+                foreach (var surface in entry.Model.Surfaces)
+                {
+                    if (!string.IsNullOrEmpty(surface.ShaderName))
+                        surface.ShaderHandle = _shaders.Register(surface.ShaderName);
+                }
+            }
+            else if (entry.IqmModel != null)
+            {
+                foreach (var surface in entry.IqmModel.Surfaces)
+                {
+                    if (!string.IsNullOrEmpty(surface.ShaderName))
+                        surface.ShaderHandle = _shaders.Register(surface.ShaderName);
+                }
             }
         }
 
-        EngineImports.Printf(EngineImports.PRINT_DEVELOPER,
-            $"[.NET] Loaded model: {name} ({entry.Model.Surfaces.Length} surfaces, {entry.Model.NumFrames} frames)\n");
+        if (entry.Model != null)
+        {
+            EngineImports.Printf(EngineImports.PRINT_DEVELOPER,
+                $"[.NET] Loaded model: {name} ({entry.Model.Surfaces.Length} surfaces, {entry.Model.NumFrames} frames)\n");
+        }
+        else if (entry.IqmModel != null)
+        {
+            EngineImports.Printf(EngineImports.PRINT_DEVELOPER,
+                $"[.NET] Loaded IQM: {name} ({entry.IqmModel.Surfaces.Length} surfaces, {entry.IqmModel.NumJoints} joints, {entry.IqmModel.NumFrames} frames)\n");
+        }
 
         return handle;
     }
@@ -103,6 +136,26 @@ public sealed class ModelManager
         if (handle <= 0 || handle >= _models.Count)
             return null;
         return _models[handle].Model;
+    }
+
+    /// <summary>
+    /// Get the IQM model data for a handle. Returns null if not an IQM model.
+    /// </summary>
+    public IqmModel? GetIqmModel(int handle)
+    {
+        if (handle <= 0 || handle >= _models.Count)
+            return null;
+        return _models[handle].IqmModel;
+    }
+
+    /// <summary>
+    /// Check if the given handle is an IQM model.
+    /// </summary>
+    public bool IsIqmModel(int handle)
+    {
+        if (handle <= 0 || handle >= _models.Count)
+            return false;
+        return _models[handle].IqmModel != null;
     }
 
     /// <summary>
@@ -162,13 +215,24 @@ public sealed class ModelManager
         }
 
         var model = GetModel(handle);
-        if (model == null || model.Frames.Length == 0)
-            return false;
+        if (model != null && model.Frames.Length > 0)
+        {
+            ref var frame = ref model.Frames[0];
+            minX = frame.MinX; minY = frame.MinY; minZ = frame.MinZ;
+            maxX = frame.MaxX; maxY = frame.MaxY; maxZ = frame.MaxZ;
+            return true;
+        }
 
-        ref var frame = ref model.Frames[0];
-        minX = frame.MinX; minY = frame.MinY; minZ = frame.MinZ;
-        maxX = frame.MaxX; maxY = frame.MaxY; maxZ = frame.MaxZ;
-        return true;
+        // Check IQM model bounds
+        var iqm = GetIqmModel(handle);
+        if (iqm != null && iqm.Bounds.Length >= 6)
+        {
+            minX = iqm.Bounds[0]; minY = iqm.Bounds[1]; minZ = iqm.Bounds[2];
+            maxX = iqm.Bounds[3]; maxY = iqm.Bounds[4]; maxZ = iqm.Bounds[5];
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -201,6 +265,12 @@ public sealed class ModelManager
                         string tagName, out Md3Tag result)
     {
         result = default;
+
+        // Try IQM model (joints as tags)
+        var iqm = GetIqmModel(handle);
+        if (iqm != null)
+            return LerpIqmTag(iqm, startFrame, endFrame, frac, tagName, out result);
+
         var model = GetModel(handle);
         if (model == null || model.NumTags == 0)
             return false;
@@ -250,6 +320,74 @@ public sealed class ModelManager
         return true;
     }
 
+    private static bool LerpIqmTag(IqmModel model, int startFrame, int endFrame, float frac,
+                                    string tagName, out Md3Tag result)
+    {
+        result = default;
+        int numJoints = model.NumJoints;
+        if (numJoints == 0) return false;
+
+        // Find joint by name
+        int jointIdx = -1;
+        for (int i = 0; i < numJoints; i++)
+        {
+            if (string.Equals(model.Joints[i].Name, tagName, System.StringComparison.OrdinalIgnoreCase))
+            {
+                jointIdx = i;
+                break;
+            }
+        }
+        if (jointIdx < 0) return false;
+
+        // Compute pose matrices for the requested frame interpolation
+        Span<float> poseMats = stackalloc float[numJoints * 12];
+        float backLerp = 1.0f - frac;
+        IqmLoader.ComputePoseMatrices(model, endFrame, startFrame, backLerp, poseMats);
+
+        // Extract the joint's world-space 3x4 matrix
+        // But we need to multiply by the bind pose (not inverse bind) to get world pos
+        // Actually, ComputePoseMatrices outputs matrices that include invBindPose multiply,
+        // so we need a different approach: compute the raw joint transform chain.
+        // For tags, we actually want the joint's world-space transform without inverse bind.
+        // Let's compute it directly from the pose data.
+
+        // Simpler approach: compute the joint's world-space matrix using bind pose * poseMatrix
+        // poseMatrix = parentPose * localPose * invBind
+        // jointWorld = poseMatrix * bindPose
+        var pm = poseMats.Slice(jointIdx * 12, 12);
+        var bp = model.BindJoints.AsSpan(jointIdx * 12, 12);
+
+        // Multiply: result = poseMatrix * bindPose
+        Span<float> world = stackalloc float[12];
+        // Row-major 3x4 multiply
+        world[0] = pm[0] * bp[0] + pm[1] * bp[4] + pm[2] * bp[8];
+        world[1] = pm[0] * bp[1] + pm[1] * bp[5] + pm[2] * bp[9];
+        world[2] = pm[0] * bp[2] + pm[1] * bp[6] + pm[2] * bp[10];
+        world[3] = pm[0] * bp[3] + pm[1] * bp[7] + pm[2] * bp[11] + pm[3];
+
+        world[4] = pm[4] * bp[0] + pm[5] * bp[4] + pm[6] * bp[8];
+        world[5] = pm[4] * bp[1] + pm[5] * bp[5] + pm[6] * bp[9];
+        world[6] = pm[4] * bp[2] + pm[5] * bp[6] + pm[6] * bp[10];
+        world[7] = pm[4] * bp[3] + pm[5] * bp[7] + pm[6] * bp[11] + pm[7];
+
+        world[8] = pm[8] * bp[0] + pm[9] * bp[4] + pm[10] * bp[8];
+        world[9] = pm[8] * bp[1] + pm[9] * bp[5] + pm[10] * bp[9];
+        world[10] = pm[8] * bp[2] + pm[9] * bp[6] + pm[10] * bp[10];
+        world[11] = pm[8] * bp[3] + pm[9] * bp[7] + pm[10] * bp[11] + pm[11];
+
+        // Extract origin (column 3 of 3x4)
+        result.OriginX = world[3];
+        result.OriginY = world[7];
+        result.OriginZ = world[11];
+
+        // Extract axes (rows 0-2 of 3x3 portion)
+        result.Ax0 = world[0]; result.Ax1 = world[1]; result.Ax2 = world[2];
+        result.Ay0 = world[4]; result.Ay1 = world[5]; result.Ay2 = world[6];
+        result.Az0 = world[8]; result.Az1 = world[9]; result.Az2 = world[10];
+
+        return true;
+    }
+
     public int Count => _models.Count - 1;
 
     /// <summary>
@@ -268,6 +406,10 @@ public sealed class ModelManager
             baseName = name[..dotIdx];
         }
 
+        // If explicitly requesting IQM, try that first
+        if (ext.Equals("iqm", System.StringComparison.OrdinalIgnoreCase))
+            return null; // IQM handled separately
+
         // Try LOD 0 first (highest detail)
         string path = $"{baseName}.{ext}";
         var model = Md3Loader.LoadFromEngineFS(path);
@@ -282,10 +424,23 @@ public sealed class ModelManager
         return model;
     }
 
+    private static IqmModel? LoadIqmModel(string name)
+    {
+        // Strip extension and try .iqm
+        string baseName = name;
+        int dotIdx = name.LastIndexOf('.');
+        if (dotIdx >= 0)
+            baseName = name[..dotIdx];
+
+        string path = $"{baseName}.iqm";
+        return IqmLoader.LoadFromEngineFS(path);
+    }
+
     private class ModelEntry
     {
         public string Name { get; set; } = "";
         public Md3Model? Model { get; set; }
+        public IqmModel? IqmModel { get; set; }
         public int BspModelIndex { get; set; } = -1;
     }
 }

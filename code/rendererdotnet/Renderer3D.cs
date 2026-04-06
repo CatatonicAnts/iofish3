@@ -256,6 +256,159 @@ public sealed unsafe class Renderer3D : IDisposable
         _gl.BindVertexArray(0);
     }
 
+    // Reusable index buffer for IQM surfaces
+    private int[] _iqmIdxBuf = new int[4096];
+    // Reusable bone matrix buffer for CPU skinning
+    private float[] _poseMatBuf = new float[128 * 12];
+
+    /// <summary>
+    /// Render an IQM model surface with CPU-side bone skinning.
+    /// poseMats are 3x4 row-major matrices (12 floats per joint), already multiplied by inverse bind pose.
+    /// </summary>
+    public void DrawIqmSurface(IqmSurface surface, IqmModel model,
+                                float* poseMats, int numJoints,
+                                float* mvp, float* modelMatrix, uint textureId,
+                                float r, float g, float b, float a,
+                                bool envMap = false, float viewX = 0, float viewY = 0, float viewZ = 0,
+                                BlendMode blend = default,
+                                float ambR = 0.5f, float ambG = 0.5f, float ambB = 0.5f,
+                                float dirLightR = 0.5f, float dirLightG = 0.5f, float dirLightB = 0.5f,
+                                float lightDirX = 0.57735f, float lightDirY = 0.57735f, float lightDirZ = 0.57735f)
+    {
+        int numVerts = surface.NumVertexes;
+        int numTris = surface.NumTriangles;
+        if (numVerts == 0 || numTris == 0) return;
+
+        int needed = numVerts * FLOATS_PER_VERT;
+        if (_vertBuf.Length < needed)
+            _vertBuf = new float[needed];
+
+        int firstVert = surface.FirstVertex;
+
+        // CPU-side bone skinning: transform each vertex by weighted blend of bone matrices
+        for (int i = 0; i < numVerts; i++)
+        {
+            int vi = firstVert + i;
+            int vo = i * FLOATS_PER_VERT;
+
+            float px = model.Positions[vi * 3];
+            float py = model.Positions[vi * 3 + 1];
+            float pz = model.Positions[vi * 3 + 2];
+            float nx = model.Normals[vi * 3];
+            float ny = model.Normals[vi * 3 + 1];
+            float nz = model.Normals[vi * 3 + 2];
+
+            float ox = 0, oy = 0, oz = 0;
+            float onx = 0, ony = 0, onz = 0;
+
+            // Blend up to 4 bones
+            for (int bi = 0; bi < 4; bi++)
+            {
+                int boneIdx = model.BlendIndexes[vi * 4 + bi];
+                float weight = model.BlendWeights[vi * 4 + bi] / 255.0f;
+                if (weight <= 0) continue;
+                if (boneIdx >= numJoints) continue;
+
+                float* m = poseMats + boneIdx * 12;
+
+                // Transform position: m * [px,py,pz,1]
+                ox += weight * (m[0] * px + m[1] * py + m[2] * pz + m[3]);
+                oy += weight * (m[4] * px + m[5] * py + m[6] * pz + m[7]);
+                oz += weight * (m[8] * px + m[9] * py + m[10] * pz + m[11]);
+
+                // Transform normal: m * [nx,ny,nz,0] (rotation only)
+                onx += weight * (m[0] * nx + m[1] * ny + m[2] * nz);
+                ony += weight * (m[4] * nx + m[5] * ny + m[6] * nz);
+                onz += weight * (m[8] * nx + m[9] * ny + m[10] * nz);
+            }
+
+            _vertBuf[vo] = ox;
+            _vertBuf[vo + 1] = oy;
+            _vertBuf[vo + 2] = oz;
+
+            float nlen = MathF.Sqrt(onx * onx + ony * ony + onz * onz);
+            if (nlen > 0.0001f) { onx /= nlen; ony /= nlen; onz /= nlen; }
+
+            _vertBuf[vo + 3] = onx;
+            _vertBuf[vo + 4] = ony;
+            _vertBuf[vo + 5] = onz;
+
+            _vertBuf[vo + 6] = model.TexCoords[vi * 2];
+            _vertBuf[vo + 7] = model.TexCoords[vi * 2 + 1];
+        }
+
+        // Build local index buffer (offset from firstTriangle, rebased to 0)
+        int firstTri = surface.FirstTriangle;
+        int numIdx = numTris * 3;
+        if (_iqmIdxBuf.Length < numIdx)
+            _iqmIdxBuf = new int[numIdx];
+
+        for (int i = 0; i < numIdx; i++)
+            _iqmIdxBuf[i] = model.Triangles[firstTri * 3 + i] - firstVert;
+
+        _gl.UseProgram(_program);
+
+        _gl.UniformMatrix4(_mvpLoc, 1, false, mvp);
+        _gl.UniformMatrix4(_modelLoc, 1, false, modelMatrix);
+        _gl.Uniform4(_colorLoc, r, g, b, a);
+        _gl.Uniform3(_lightDirLoc, lightDirX, lightDirY, lightDirZ);
+        _gl.Uniform3(_ambientLightLoc, ambR, ambG, ambB);
+        _gl.Uniform3(_directedLightLoc, dirLightR, dirLightG, dirLightB);
+        _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
+        _gl.Uniform3(_viewPosLoc, viewX, viewY, viewZ);
+
+        bool useBlend = blend.NeedsBlending || a < 0.999f;
+        _gl.Uniform1(_fullbrightLoc, useBlend ? 1 : 0);
+
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, textureId);
+
+        _gl.BindVertexArray(_vao);
+
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+        fixed (float* p = _vertBuf)
+            _gl.BufferData(BufferTargetARB.ArrayBuffer,
+                (nuint)(numVerts * FLOATS_PER_VERT * sizeof(float)), p, BufferUsageARB.StreamDraw);
+
+        _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _ebo);
+        fixed (int* p = _iqmIdxBuf)
+            _gl.BufferData(BufferTargetARB.ElementArrayBuffer,
+                (nuint)(numIdx * sizeof(int)), p, BufferUsageARB.StreamDraw);
+
+        _gl.Enable(EnableCap.DepthTest);
+        _gl.Enable(EnableCap.CullFace);
+        _gl.CullFace(TriangleFace.Front);
+
+        if (blend.NeedsBlending)
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
+            _gl.DepthMask(false);
+        }
+        else if (a < 0.999f)
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            _gl.DepthMask(false);
+        }
+        else
+        {
+            _gl.Disable(EnableCap.Blend);
+            _gl.DepthMask(true);
+        }
+
+        _gl.DrawElements(PrimitiveType.Triangles,
+            (uint)numIdx, DrawElementsType.UnsignedInt, null);
+
+        if (blend.NeedsBlending || a < 0.999f)
+        {
+            _gl.DepthMask(true);
+            _gl.Disable(EnableCap.Blend);
+        }
+
+        _gl.BindVertexArray(0);
+    }
+
     private uint CreateProgram()
     {
         uint vs = Compile(ShaderType.VertexShader, VertSrc);

@@ -439,6 +439,7 @@ public sealed unsafe class SceneManager
         // Render entities
         Span<float> modelMat = stackalloc float[16];
         Span<float> mvp = stackalloc float[16];
+        Span<float> iqmPoseMats = stackalloc float[128 * 12]; // max 128 joints for IQM
 
         foreach (var ent in _entities)
         {
@@ -462,7 +463,8 @@ public sealed unsafe class SceneManager
                 }
 
                 var model = _models.GetModel(ent.ModelHandle);
-                if (model == null) continue;
+                var iqmModel = model == null ? _models.GetIqmModel(ent.ModelHandle) : null;
+                if (model == null && iqmModel == null) continue;
 
                 BuildModelMatrix(ent, modelMat);
                 MatMul(vp, modelMat, mvp);
@@ -479,14 +481,41 @@ public sealed unsafe class SceneManager
                         out dLightR, out dLightG, out dLightB,
                         out ldX, out ldY, out ldZ);
                     // Transform light direction to entity-local space
-                    // (entity axis is column-major: col0=axis[0..2], col1=axis[3..5], col2=axis[6..8])
                     float tlx = ent.Axis[0] * ldX + ent.Axis[1] * ldY + ent.Axis[2] * ldZ;
                     float tly = ent.Axis[3] * ldX + ent.Axis[4] * ldY + ent.Axis[5] * ldZ;
                     float tlz = ent.Axis[6] * ldX + ent.Axis[7] * ldY + ent.Axis[8] * ldZ;
                     ldX = tlx; ldY = tly; ldZ = tlz;
                 }
 
-                foreach (var surface in model.Surfaces)
+                if (iqmModel != null)
+                {
+                    // IQM model — compute bone pose matrices and render with CPU skinning
+                    int numJoints = iqmModel.NumJoints;
+                    var poseMats = iqmPoseMats[..(numJoints * 12)];
+                    IqmLoader.ComputePoseMatrices(iqmModel, ent.Frame, ent.OldFrame, ent.BackLerp, poseMats);
+
+                    foreach (var surface in iqmModel.Surfaces)
+                    {
+                        int shaderHandle = ResolveIqmSurfaceShader(ent, surface);
+                        uint texId = _shaders.GetTextureId(shaderHandle);
+                        bool envMap = _shaders.GetHasEnvMap(shaderHandle);
+                        BlendMode blend = _shaders.GetBlendMode(shaderHandle);
+
+                        fixed (float* mvpPtr = mvp)
+                        fixed (float* modelPtr = modelMat)
+                        fixed (float* posePtr = poseMats)
+                        {
+                            _renderer3D.DrawIqmSurface(surface, iqmModel, posePtr, numJoints,
+                                mvpPtr, modelPtr, texId, ent.R, ent.G, ent.B, ent.A,
+                                envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend,
+                                ambR, ambG, ambB, dLightR, dLightG, dLightB, ldX, ldY, ldZ);
+                        }
+                    }
+                }
+                else
+                {
+
+                foreach (var surface in model!.Surfaces)
                 {
                     int shaderHandle;
                     if (ent.CustomShader > 0)
@@ -520,6 +549,8 @@ public sealed unsafe class SceneManager
                             ambR, ambG, ambB, dLightR, dLightG, dLightB, ldX, ldY, ldZ);
                     }
                 }
+
+                } // end MD3 path
             }
             else if (ent.ReType == RT_SPRITE)
             {
@@ -586,6 +617,18 @@ public sealed unsafe class SceneManager
         m[1] = ent.Axis[1]; m[5] = ent.Axis[4]; m[9]  = ent.Axis[7]; m[13] = ent.OriginY;
         m[2] = ent.Axis[2]; m[6] = ent.Axis[5]; m[10] = ent.Axis[8]; m[14] = ent.OriginZ;
         m[3] = 0;           m[7] = 0;           m[11] = 0;           m[15] = 1;
+    }
+
+    private int ResolveIqmSurfaceShader(SceneEntity ent, IqmSurface surface)
+    {
+        if (ent.CustomShader > 0)
+            return ent.CustomShader;
+        if (ent.CustomSkin > 0 && _skins != null)
+        {
+            int skinSh = _skins.GetSurfaceShader(ent.CustomSkin, surface.Name);
+            if (skinSh > 0) return skinSh;
+        }
+        return surface.ShaderHandle;
     }
 
     private static void MatMul(ReadOnlySpan<float> a, ReadOnlySpan<float> b, Span<float> result)
@@ -1160,6 +1203,7 @@ public sealed unsafe class SceneManager
         // Render entities (skip portal surface entities and RF_THIRD_PERSON)
         Span<float> modelMat = stackalloc float[16];
         Span<float> mvp = stackalloc float[16];
+        Span<float> iqmPoseMats2 = stackalloc float[128 * 12];
 
         foreach (var ent in _entities)
         {
@@ -1179,7 +1223,8 @@ public sealed unsafe class SceneManager
                 }
 
                 var model = _models.GetModel(ent.ModelHandle);
-                if (model == null) continue;
+                var iqmModel = model == null ? _models.GetIqmModel(ent.ModelHandle) : null;
+                if (model == null && iqmModel == null) continue;
 
                 BuildModelMatrix(ent, modelMat);
                 MatMul(pVp, modelMat, mvp);
@@ -1200,7 +1245,34 @@ public sealed unsafe class SceneManager
                     ldX = tlx; ldY = tly; ldZ = tlz;
                 }
 
-                foreach (var surface in model.Surfaces)
+                if (iqmModel != null)
+                {
+                    int numJoints = iqmModel.NumJoints;
+                    var poseMats = iqmPoseMats2[..(numJoints * 12)];
+                    IqmLoader.ComputePoseMatrices(iqmModel, ent.Frame, ent.OldFrame, ent.BackLerp, poseMats);
+
+                    foreach (var surface in iqmModel.Surfaces)
+                    {
+                        int shaderHandle = ResolveIqmSurfaceShader(ent, surface);
+                        uint texId = _shaders.GetTextureId(shaderHandle);
+                        bool envMap = _shaders.GetHasEnvMap(shaderHandle);
+                        BlendMode blend = _shaders.GetBlendMode(shaderHandle);
+
+                        fixed (float* mvpPtr = mvp)
+                        fixed (float* modelPtr = modelMat)
+                        fixed (float* posePtr = poseMats)
+                        {
+                            _renderer3D!.DrawIqmSurface(surface, iqmModel, posePtr, numJoints,
+                                mvpPtr, modelPtr, texId, ent.R, ent.G, ent.B, ent.A,
+                                envMap, newViewOrg[0], newViewOrg[1], newViewOrg[2], blend,
+                                ambR, ambG, ambB, dLR, dLG, dLB, ldX, ldY, ldZ);
+                        }
+                    }
+                }
+                else
+                {
+
+                foreach (var surface in model!.Surfaces)
                 {
                     int shaderHandle = surface.ShaderHandle;
                     if (ent.CustomShader > 0) shaderHandle = ent.CustomShader;
@@ -1222,6 +1294,8 @@ public sealed unsafe class SceneManager
                             ambR, ambG, ambB, dLR, dLG, dLB, ldX, ldY, ldZ);
                     }
                 }
+
+                } // end MD3 path
             }
             else if (ent.ReType == RT_SPRITE)
             {
