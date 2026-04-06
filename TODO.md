@@ -119,6 +119,11 @@ The cgame DLL interface is:
 - [x] **Third-person camera** — Port CG_OffsetThirdPersonView: third-person camera with collision tracing, controlled by cg_thirdPerson cvar. `CPX 3`
 - [x] **Hit feedback sounds** — Play hit/hit_teammate sounds when PERS_HITS changes. `CPX 1`
 - [x] **Denied/gauntlet reward events** — Play denied/humiliation announcer sounds on player events. `CPX 1`
+- [x] **Spectator/follow mode display** — Show "SPECTATOR" text with gametype instructions, "following <name>" display in follow mode, skip full HUD for spectators. `CPX 2`
+- [x] **Surface-aware footstep sounds** — 7 footstep types (normal/boot/flesh/mech/energy/metal/splash) × 4 variants, parsed from animation.cfg footsteps directive. `CPX 3`
+- [x] **Pain/death sounds** — Per-model pain sounds with health-based selection (pain25/50/75/100) and 500ms throttle, per-model death sounds (death1-3). `CPX 3`
+- [x] **Announcer voice** — Frag limit warnings (1/2/3 frags remaining), prepare/fight/countdown sounds, sudden death, time warnings. `CPX 3`
+- [x] **Water/fall sounds** — Gurp sounds on underwater, gasp on surfacing, per-model fall/falling sounds on medium/far falls. `CPX 2`
 
 ### Notes
 
