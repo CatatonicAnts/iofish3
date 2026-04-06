@@ -43,6 +43,7 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _useDeluxeMapLoc;
     private int _portalMapLoc;
     private int _screenSizeLoc;
+    private int _usePBRLoc;
     private float _greyscaleValue; // 0.0=color, 1.0=fully greyscale
 
     private uint _vao;
@@ -385,6 +386,7 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uUseDeluxeMap;
         uniform int uPortalMap;   // 1=use screen-space UVs from gl_FragCoord
         uniform vec2 uScreenSize; // viewport size for portal mapping
+        uniform int uUsePBR;      // 1=metallic/roughness PBR workflow
 
         out vec4 oColor;
 
@@ -457,8 +459,16 @@ public sealed unsafe class BspRenderer : IDisposable
                 N = normalize(vTBN * mapN);
             }
 
+            // PBR: convert diffuse from sRGB to linear
+            if (uUsePBR != 0) {
+                texColor.rgb *= texColor.rgb;
+            }
+
             if (uUseLightmap != 0) {
                 vec4 lmColor = texture(uTexLightmap, vLmUV);
+                // PBR: convert lightmap to linear
+                if (uUsePBR != 0) lmColor.rgb *= lmColor.rgb;
+
                 oColor = texColor * lmColor * uOverbrightScale;
 
                 // Deluxe map: per-pixel light direction for enhanced lighting
@@ -490,22 +500,58 @@ public sealed unsafe class BspRenderer : IDisposable
                 oColor = texColor;
             }
 
-            // Specular highlight (Blinn-Phong)
+            // Specular / PBR lighting
             if (uUseSpecularMap != 0) {
                 vec3 V = normalize(uViewPos - vWorldPos);
-                // Use deluxe map direction for specular if available
                 vec3 L = uLightDir;
                 if (uUseDeluxeMap != 0) {
                     L = normalize(texture(uTexDeluxeMap, vLmUV).rgb * 2.0 - 1.0);
                 }
                 vec3 H = normalize(L + V);
-                float spec = pow(max(dot(N, H), 0.0), 16.0);
-                vec3 specColor = texture(uTexSpecularMap, uv).rgb;
-                oColor.rgb += specColor * spec * 0.3;
+                float NdotH = max(dot(N, H), 0.0);
+                float NdotL = max(dot(N, L), 0.0);
+                float EdotH = max(dot(V, H), 0.0);
+                float NdotV = max(dot(N, V), 0.0);
+
+                vec4 specSample = texture(uTexSpecularMap, uv);
+
+                if (uUsePBR != 0) {
+                    // PBR metallic/roughness workflow
+                    float gloss = specSample.r;
+                    float metal = specSample.g;
+
+                    // Fresnel F0: dielectric=0.04, metal=albedo
+                    vec3 F0 = metal * texColor.rgb + vec3(0.04 - 0.04 * metal);
+
+                    // Remove metallic from diffuse
+                    oColor.rgb *= (1.0 - metal);
+
+                    // Roughness from gloss (exponential mapping)
+                    float roughness = exp2(-3.0 * gloss);
+                    roughness = max(roughness, 0.04);
+
+                    // Microfacet specular BRDF (GGX/Trowbridge-Reitz)
+                    float rr = roughness * roughness;
+                    float rrrr = rr * rr;
+                    float d = (NdotH * NdotH) * (rrrr - 1.0) + 1.0;
+                    float v = (EdotH * EdotH) * (roughness + 0.5) + 0.0001;
+                    vec3 spec = F0 * (rrrr / (4.0 * d * d * v));
+
+                    oColor.rgb += spec * NdotL;
+                } else {
+                    // Standard Blinn-Phong specular
+                    float spec = pow(NdotH, 16.0);
+                    oColor.rgb += specSample.rgb * spec * 0.3;
+                }
             }
 
             oColor *= uColor;
             oColor.a = texColor.a * uColor.a;
+
+            // PBR: convert linear back to sRGB
+            if (uUsePBR != 0) {
+                oColor.rgb = sqrt(max(oColor.rgb, vec3(0.0)));
+            }
 
             // Greyscale desaturation
             if (uGreyscale > 0.0) {
@@ -548,6 +594,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _useDeluxeMapLoc = _gl.GetUniformLocation(_program, "uUseDeluxeMap");
         _portalMapLoc = _gl.GetUniformLocation(_program, "uPortalMap");
         _screenSizeLoc = _gl.GetUniformLocation(_program, "uScreenSize");
+        _usePBRLoc = _gl.GetUniformLocation(_program, "uUsePBR");
 
         // Set texture unit bindings (static)
         _gl.UseProgram(_program);
@@ -563,6 +610,7 @@ public sealed unsafe class BspRenderer : IDisposable
         EngineImports.Cvar_Get("r_parallaxMapping", "0", 1); // 1 = CVAR_ARCHIVE
         EngineImports.Cvar_Get("r_baseParallax", "0.05", 1);
         EngineImports.Cvar_Get("r_deluxeMapping", "1", 1);
+        EngineImports.Cvar_Get("r_pbr", "0", 1); // PBR metallic/roughness workflow
 
         // Dlight shader program
         _dlightProgram = CreateDlightProgram();
@@ -839,6 +887,10 @@ public sealed unsafe class BspRenderer : IDisposable
         // Deluxe mapping (set per-frame, actual binding per-surface)
         int deluxeEnabled = _hasDeluxeMapping ? EngineImports.Cvar_VariableIntegerValue("r_deluxeMapping") : 0;
         _gl.Uniform1(_useDeluxeMapLoc, deluxeEnabled != 0 ? 1 : 0);
+
+        // PBR mode (metallic/roughness workflow)
+        int pbrEnabled = EngineImports.Cvar_VariableIntegerValue("r_pbr");
+        _gl.Uniform1(_usePBRLoc, pbrEnabled);
 
         ExtractFrustumPlanes(mvp);
 

@@ -43,7 +43,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] **Bloom / post-processing** - FBO-based bloom pipeline: bright-pass extraction, multi-pass Gaussian blur, additive composite. Controlled by `r_bloom` cvar. `CPX 3`
 - [x] **Normal mapping** - `normalMap`/`bumpMap` stage type for per-pixel lighting. Tangent vectors computed from BSP triangle UV deltas (MikkTSpace-style), TBN matrix constructed in vertex shader, normal map sampled and transformed in fragment shader. `CPX 3`
 - [x] **Specular mapping** - `specularMap` stage type with Blinn-Phong specular highlights. Specular map sampled in fragment shader, combined with view-dependent half-vector lighting. `CPX 3`
-- [ ] **PBR (Physically Based Rendering)** - GL2 has `r_pbr` cvar for metallic/roughness workflow. Converts specular values to PBR parameters. `CPX 4`
+- [x] **PBR (Physically Based Rendering)** - Metallic/roughness workflow controlled by `r_pbr` cvar. Specular map reinterpreted: .r=gloss, .g=metallic. GGX microfacet BRDF replaces Blinn-Phong. sRGB↔linear conversions for correct lighting. `CPX 4`
 - [x] **Parallax mapping** - Steep parallax mapping with 16-step linear search and interpolation. Height data from normal map alpha channel. Controlled by `r_parallaxMapping` cvar (default off). `CPX 3`
 - [ ] **Cubemap reflections** - GL2 loads/renders cubemaps for environment reflections with parallax correction. `CPX 4`
 - [ ] **Shadow mapping** - Projection shadows (512×512 maps), sun shadow framework. Partially implemented in GL2 itself. `CPX 5`
