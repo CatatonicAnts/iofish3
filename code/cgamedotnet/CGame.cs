@@ -161,6 +161,8 @@ public static unsafe class CGame
         // Initialize local entity and mark systems
         LocalEntities.Init();
         Marks.Init();
+        Scoreboard.Init();
+        WeaponEffects.Init();
 
         // Read level start time
         string startTimeStr = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_LEVEL_START_TIME);
@@ -186,8 +188,11 @@ public static unsafe class CGame
     public static bool ConsoleCommand()
     {
         string cmd = Syscalls.Argv(0);
-        // All cgame commands are forwarded to the server
-        // No local-only commands yet
+
+        if (cmd == "+scores") { Scoreboard.ScoresDown(); return true; }
+        if (cmd == "-scores") { Scoreboard.ScoresUp(); return true; }
+
+        // Server-forwarded commands — return false to let engine handle
         return false;
     }
 
@@ -207,6 +212,9 @@ public static unsafe class CGame
     {
         foreach (string cmd in _serverCommands)
             Syscalls.AddCommand(cmd);
+
+        Syscalls.AddCommand("+scores");
+        Syscalls.AddCommand("-scores");
     }
 
     // ── DrawActiveFrame — main per-frame entry point ──
@@ -500,7 +508,41 @@ public static unsafe class CGame
         while (_serverCommandSequence < _snap->GetServerCommandSequence())
         {
             _serverCommandSequence++;
-            Syscalls.GetServerCommand(_serverCommandSequence);
+            if (!Syscalls.GetServerCommand(_serverCommandSequence)) continue;
+
+            string cmd = Syscalls.Argv(0);
+            if (cmd == "scores")
+                Scoreboard.ParseScores();
+            else if (cmd == "cs")
+            {
+                // Config string update — re-register model/sound if needed
+                string numStr = Syscalls.Argv(1);
+                if (int.TryParse(numStr, out int csNum))
+                    ConfigStringModified(csNum);
+            }
+        }
+    }
+
+    private static void ConfigStringModified(int index)
+    {
+        // Re-register models from updated config strings
+        const int CS_MODELS = 32;
+        const int CS_SOUNDS = CS_MODELS + MAX_MODELS;
+        if (index >= CS_MODELS && index < CS_MODELS + MAX_MODELS)
+        {
+            string modelName = Q3GameState.GetConfigString(_gameStateRaw, index);
+            if (!string.IsNullOrEmpty(modelName))
+            {
+                _gameModels[index - CS_MODELS] = Syscalls.R_RegisterModel(modelName);
+                if (modelName[0] == '*')
+                    _inlineDrawModel[index - CS_MODELS] = Syscalls.CM_InlineModel(int.Parse(modelName.AsSpan(1)));
+            }
+        }
+        else if (index >= CS_SOUNDS && index < CS_SOUNDS + MAX_SOUNDS)
+        {
+            string soundName = Q3GameState.GetConfigString(_gameStateRaw, index);
+            if (!string.IsNullOrEmpty(soundName) && soundName[0] != '*')
+                _gameSounds[index - CS_SOUNDS] = Syscalls.S_RegisterSound(soundName, 0);
         }
     }
 
@@ -1020,6 +1062,18 @@ public static unsafe class CGame
     private static void AddMissile(ref CEntity cent)
     {
         ref var s1 = ref cent.CurrentState;
+        int weapon = s1.Weapon;
+
+        // Plasma bolts are rendered as sprites, not models
+        if (weapon == Weapons.WP_PLASMAGUN)
+        {
+            WeaponEffects.AddPlasma(cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ, _time);
+            WeaponEffects.MissileTrail(s1.Number, weapon,
+                s1.Pos.TrBaseX, s1.Pos.TrBaseY, s1.Pos.TrBaseZ,
+                cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ, _time);
+            return;
+        }
+
         if (s1.ModelIndex == 0) return;
 
         Q3RefEntity rent = default;
@@ -1028,6 +1082,11 @@ public static unsafe class CGame
         SetEntityOriginAndAxis(ref rent, ref cent);
         SetEntityColors(ref rent, 255, 255, 255, 255);
         Syscalls.R_AddRefEntityToScene(&rent);
+
+        // Projectile trail (smoke puffs for rockets/grenades)
+        WeaponEffects.MissileTrail(s1.Number, weapon,
+            s1.Pos.TrBaseX, s1.Pos.TrBaseY, s1.Pos.TrBaseZ,
+            cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ, _time);
     }
 
     private static void AddMover(ref CEntity cent)
@@ -1138,6 +1197,10 @@ public static unsafe class CGame
 
         // .NET cgame indicator (top right)
         DrawString(SCREEN_WIDTH - 82, (int)y + 2, ".NET CG", 1.0f, 0.0f, 1.0f, 0.6f);
+
+        // Scoreboard overlay
+        if (Scoreboard.IsShowing || _snap->Ps.PmType >= 4) // PM_DEAD=4, PM_INTERMISSION=5
+            Scoreboard.Draw(_time, _clientNum, _gametype);
 
         Syscalls.R_SetColor(null);
     }
@@ -1376,7 +1439,7 @@ public static unsafe class CGame
 
     // ── Character Drawing (bigchars charset — 16x16 grid of glyphs) ──
 
-    private static void DrawChar(float x, float y, int charWidth, int charHeight, int ch)
+    public static void DrawChar(float x, float y, int charWidth, int charHeight, int ch)
     {
         if (ch == ' ') return;
         ch &= 255;
@@ -1392,7 +1455,7 @@ public static unsafe class CGame
             fcol, frow, fcol + size, frow + size, _charsetShader);
     }
 
-    private static void DrawString(int x, int y, string text, float r, float g, float b, float a)
+    public static void DrawString(int x, int y, string text, float r, float g, float b, float a)
     {
         if (string.IsNullOrEmpty(text)) return;
 
@@ -1423,6 +1486,19 @@ public static unsafe class CGame
     {
         Syscalls.R_DrawStretchPic(x, y, w, h, 0, 0, 1, 1, shader);
     }
+
+    public static void FillRect(float x, float y, float w, float h, float* color)
+    {
+        Syscalls.R_SetColor(color);
+        int white = Syscalls.R_RegisterShader("white");
+        Syscalls.R_DrawStretchPic(x, y, w, h, 0, 0, 0, 0, white);
+        Syscalls.R_SetColor(null);
+    }
+
+    public static byte* GetGameStateRaw() => _gameStateRaw;
+
+    public static int ClientNum => _clientNum;
+    public static int GameType => _gametype;
 
     // ── Helpers ──
 
