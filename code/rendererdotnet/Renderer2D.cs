@@ -130,7 +130,11 @@ public sealed unsafe class Renderer2D : System.IDisposable
     }
 
     public void DrawQuad(float x, float y, float w, float h,
-        float s1, float t1, float s2, float t2, uint texture, BlendMode blend = BlendMode.Alpha)
+        float s1, float t1, float s2, float t2, uint texture)
+        => DrawQuad(x, y, w, h, s1, t1, s2, t2, texture, BlendMode.Alpha);
+
+    public void DrawQuad(float x, float y, float w, float h,
+        float s1, float t1, float s2, float t2, uint texture, BlendMode blend)
     {
         if (texture == 0) texture = _whiteTexture;
         if ((texture != _batchTexture || blend != _batchBlend) && _quadCount > 0)
@@ -188,22 +192,14 @@ public sealed unsafe class Renderer2D : System.IDisposable
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _batchTexture);
 
-        _gl.Enable(EnableCap.Blend);
-        switch (_batchBlend)
+        if (_batchBlend.IsOpaque)
         {
-            case BlendMode.Add:
-                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                break;
-            case BlendMode.Filter:
-                _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
-                break;
-            case BlendMode.Opaque:
-                _gl.Disable(EnableCap.Blend);
-                break;
-            case BlendMode.Alpha:
-            default:
-                _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-                break;
+            _gl.Disable(EnableCap.Blend);
+        }
+        else
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.BlendFunc((BlendingFactor)_batchBlend.SrcFactor, (BlendingFactor)_batchBlend.DstFactor);
         }
         _gl.Disable(EnableCap.DepthTest);
         _gl.Disable(EnableCap.CullFace);

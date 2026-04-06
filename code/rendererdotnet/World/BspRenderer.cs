@@ -243,20 +243,7 @@ public sealed unsafe class BspRenderer : IDisposable
             foreach (var (surfIdx, blend) in _transparentSurfaces)
             {
                 ref var surf = ref _world.Surfaces[surfIdx];
-
-                switch (blend)
-                {
-                    case BlendMode.Add:
-                        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                        break;
-                    case BlendMode.Filter:
-                        _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
-                        break;
-                    default:
-                        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-                        break;
-                }
-
+                _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
                 DrawSurfaceGeometry(ref surf, shaders);
             }
 
@@ -321,23 +308,36 @@ public sealed unsafe class BspRenderer : IDisposable
         // Skip NODRAW and SKY surfaces
         if (_world != null && surf.ShaderIndex >= 0 && surf.ShaderIndex < _world.Shaders.Length)
         {
-            int flags = _world.Shaders[surf.ShaderIndex].SurfaceFlags;
-            if ((flags & SurfaceFlags.SURF_NODRAW) != 0)
+            int sFlags = _world.Shaders[surf.ShaderIndex].SurfaceFlags;
+            if ((sFlags & SurfaceFlags.SURF_NODRAW) != 0)
                 return;
-            if ((flags & SurfaceFlags.SURF_SKY) != 0)
+            if ((sFlags & SurfaceFlags.SURF_SKY) != 0)
                 return;
-        }
 
-        // Check blend mode — defer transparent surfaces
-        BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
-        if (blend != BlendMode.Opaque)
-        {
-            _transparentSurfaces.Add((surfIdx, blend));
-            return;
+            // Only defer surfaces that are ACTUALLY transparent
+            // (CONTENTS_TRANSLUCENT flag or surfaceparm trans in shader script)
+            int cFlags = _world.Shaders[surf.ShaderIndex].ContentFlags;
+            bool isTrans = (cFlags & CONTENTS_TRANSLUCENT) != 0;
+
+            // Also check shader script for surfaceparm trans
+            if (!isTrans)
+                isTrans = shaders.IsTransparent(surf.ShaderHandle);
+
+            if (isTrans)
+            {
+                BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
+                if (blend.NeedsBlending)
+                {
+                    _transparentSurfaces.Add((surfIdx, blend));
+                    return;
+                }
+            }
         }
 
         DrawSurfaceGeometry(ref surf, shaders);
     }
+
+    private const int CONTENTS_TRANSLUCENT = 0x20000000;
 
     private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders)
     {

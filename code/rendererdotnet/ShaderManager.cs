@@ -97,6 +97,21 @@ public unsafe class ShaderManager
         return entry.Blend;
     }
 
+    public bool IsTransparent(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return false;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.IsTransparent;
+    }
+
     private void TryLoadTexture(ShaderEntry entry)
     {
         if (_renderer == null) return;
@@ -115,12 +130,14 @@ public unsafe class ShaderManager
                 {
                     entry.Clamp = def.Clamp;
                     entry.Blend = def.Blend;
+                    entry.IsTransparent = def.IsTransparent;
                 }
             }
-            else if (def != null)
+            if (def != null && image == null)
             {
-                // No image but shader def exists — still apply blend mode
+                // No image but shader def exists — still apply blend/transparency
                 entry.Blend = def.Blend;
+                entry.IsTransparent = def.IsTransparent;
             }
         }
 
@@ -164,5 +181,6 @@ public unsafe class ShaderManager
         public bool Loaded { get; set; }
         public bool Clamp { get; set; }
         public BlendMode Blend { get; set; } = BlendMode.Alpha;
+        public bool IsTransparent { get; set; }
     }
 }

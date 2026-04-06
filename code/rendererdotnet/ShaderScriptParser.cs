@@ -136,6 +136,8 @@ public sealed unsafe class ShaderScriptParser
         bool foundUsableStage = false;
         string? skyBox = null;
         string? editorImage = null;
+        bool isTransparent = false;
+        string? envMapImage = null; // fallback: first env-mapped stage's image
 
         // Per-stage tracking
         string? stageImage = null;
@@ -173,6 +175,10 @@ public sealed unsafe class ShaderScriptParser
                     blend = stageBlend;
                     foundUsableStage = true;
                 }
+                // Track env-mapped images as a last-resort fallback
+                if (depth == 2 && stageHasEnvMap && stageImage != null && envMapImage == null)
+                    envMapImage = stageImage;
+
                 depth--;
                 continue;
             }
@@ -193,6 +199,12 @@ public sealed unsafe class ShaderScriptParser
                     string? edImg = tokenizer.NextToken();
                     if (edImg != null && !IsSpecialMap(edImg))
                         editorImage = edImg;
+                }
+                else if (string.Equals(token, "surfaceparm", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? parm = tokenizer.NextToken();
+                    if (parm != null && string.Equals(parm, "trans", StringComparison.OrdinalIgnoreCase))
+                        isTransparent = true;
                 }
             }
 
@@ -234,8 +246,8 @@ public sealed unsafe class ShaderScriptParser
             }
         }
 
-        // Fallback: if no usable stage image found, use qer_editorimage
-        imagePath ??= editorImage;
+        // Fallback chain: qer_editorimage → env-mapped stage image
+        imagePath ??= editorImage ?? envMapImage;
 
         return new ShaderDef
         {
@@ -243,7 +255,8 @@ public sealed unsafe class ShaderScriptParser
             ImagePath = imagePath,
             Clamp = clamp,
             Blend = blend,
-            SkyBox = skyBox
+            SkyBox = skyBox,
+            IsTransparent = isTransparent
         };
     }
 
@@ -268,22 +281,27 @@ public sealed unsafe class ShaderScriptParser
         string? dst = tokenizer.NextToken();
         if (dst == null || dst == "{" || dst == "}") return BlendMode.Alpha;
 
-        // Classify common GL blend factor combinations
-        bool srcIsOne = src.Equals("GL_ONE", StringComparison.OrdinalIgnoreCase);
-        bool dstIsOne = dst.Equals("GL_ONE", StringComparison.OrdinalIgnoreCase);
-        bool srcIsSrcAlpha = src.Equals("GL_SRC_ALPHA", StringComparison.OrdinalIgnoreCase);
-        bool dstIsOneMinusSrcAlpha = dst.Equals("GL_ONE_MINUS_SRC_ALPHA", StringComparison.OrdinalIgnoreCase);
-        bool srcIsDstColor = src.Equals("GL_DST_COLOR", StringComparison.OrdinalIgnoreCase);
-        bool dstIsZero = dst.Equals("GL_ZERO", StringComparison.OrdinalIgnoreCase);
+        return new BlendMode
+        {
+            SrcFactor = ParseGLFactor(src),
+            DstFactor = ParseGLFactor(dst)
+        };
+    }
 
-        if (srcIsOne && dstIsOne) return BlendMode.Add;
-        if (srcIsSrcAlpha && dstIsOneMinusSrcAlpha) return BlendMode.Alpha;
-        if (srcIsDstColor && dstIsZero) return BlendMode.Filter;
-
-        // Any other blend combo that isn't fully opaque → alpha blend
-        if (srcIsOne && dstIsZero) return BlendMode.Opaque;
-
-        return BlendMode.Alpha;
+    private static int ParseGLFactor(string factor)
+    {
+        if (factor.Equals("GL_ZERO", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_ZERO;
+        if (factor.Equals("GL_ONE", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_ONE;
+        if (factor.Equals("GL_SRC_COLOR", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_SRC_COLOR;
+        if (factor.Equals("GL_ONE_MINUS_SRC_COLOR", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_ONE_MINUS_SRC_COLOR;
+        if (factor.Equals("GL_SRC_ALPHA", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_SRC_ALPHA;
+        if (factor.Equals("GL_ONE_MINUS_SRC_ALPHA", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_ONE_MINUS_SRC_ALPHA;
+        if (factor.Equals("GL_DST_ALPHA", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_DST_ALPHA;
+        if (factor.Equals("GL_ONE_MINUS_DST_ALPHA", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_ONE_MINUS_DST_ALPHA;
+        if (factor.Equals("GL_DST_COLOR", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_DST_COLOR;
+        if (factor.Equals("GL_ONE_MINUS_DST_COLOR", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_ONE_MINUS_DST_COLOR;
+        if (factor.Equals("GL_SRC_ALPHA_SATURATE", StringComparison.OrdinalIgnoreCase)) return BlendMode.GL_SRC_ALPHA_SATURATE;
+        return BlendMode.GL_ONE; // Default
     }
 
     private static bool IsSpecialMap(string token)
@@ -412,15 +430,43 @@ public sealed class ShaderDef
 
     /// <summary>Skybox outer box texture base name from skyparms directive (e.g. "env/tim_dm14/dm14").</summary>
     public string? SkyBox { get; init; }
+
+    /// <summary>Whether the shader has surfaceparm trans (truly transparent).</summary>
+    public bool IsTransparent { get; init; }
 }
 
 /// <summary>
-/// Common Q3 blend modes mapped from shader script blendFunc directives.
+/// Q3 blend modes storing actual GL blend factors for correct rendering.
 /// </summary>
-public enum BlendMode
+public struct BlendMode : System.IEquatable<BlendMode>
 {
-    Opaque = 0,   // No blending (solid geometry)
-    Alpha,        // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA (standard transparency)
-    Add,          // GL_ONE, GL_ONE (additive glow effects)
-    Filter,       // GL_DST_COLOR, GL_ZERO (multiplicative darkening)
+    public int SrcFactor;
+    public int DstFactor;
+
+    // GL blend factor constants (matching OpenGL)
+    public const int GL_ZERO = 0;
+    public const int GL_ONE = 1;
+    public const int GL_SRC_COLOR = 0x0300;
+    public const int GL_ONE_MINUS_SRC_COLOR = 0x0301;
+    public const int GL_SRC_ALPHA = 0x0302;
+    public const int GL_ONE_MINUS_SRC_ALPHA = 0x0303;
+    public const int GL_DST_ALPHA = 0x0304;
+    public const int GL_ONE_MINUS_DST_ALPHA = 0x0305;
+    public const int GL_DST_COLOR = 0x0306;
+    public const int GL_ONE_MINUS_DST_COLOR = 0x0307;
+    public const int GL_SRC_ALPHA_SATURATE = 0x0308;
+
+    public static readonly BlendMode Opaque = new() { SrcFactor = GL_ONE, DstFactor = GL_ZERO };
+    public static readonly BlendMode Alpha = new() { SrcFactor = GL_SRC_ALPHA, DstFactor = GL_ONE_MINUS_SRC_ALPHA };
+    public static readonly BlendMode Add = new() { SrcFactor = GL_ONE, DstFactor = GL_ONE };
+    public static readonly BlendMode Filter = new() { SrcFactor = GL_DST_COLOR, DstFactor = GL_ZERO };
+
+    public bool IsOpaque => SrcFactor == GL_ONE && DstFactor == GL_ZERO;
+    public bool NeedsBlending => !IsOpaque;
+
+    public bool Equals(BlendMode other) => SrcFactor == other.SrcFactor && DstFactor == other.DstFactor;
+    public override bool Equals(object? obj) => obj is BlendMode other && Equals(other);
+    public override int GetHashCode() => System.HashCode.Combine(SrcFactor, DstFactor);
+    public static bool operator ==(BlendMode a, BlendMode b) => a.Equals(b);
+    public static bool operator !=(BlendMode a, BlendMode b) => !a.Equals(b);
 }

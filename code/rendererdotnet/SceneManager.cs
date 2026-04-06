@@ -581,18 +581,7 @@ public sealed unsafe class SceneManager
 
         _gl.Enable(EnableCap.Blend);
         BlendMode spriteBlend = _shaders.GetBlendMode(ent.CustomShader);
-        switch (spriteBlend)
-        {
-            case BlendMode.Add:
-                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                break;
-            case BlendMode.Filter:
-                _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
-                break;
-            default:
-                _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-                break;
-        }
+        _gl.BlendFunc((BlendingFactor)spriteBlend.SrcFactor, (BlendingFactor)spriteBlend.DstFactor);
         _gl.DepthMask(false);
         _gl.Disable(EnableCap.CullFace);
 
@@ -690,18 +679,7 @@ public sealed unsafe class SceneManager
 
         _gl.Enable(EnableCap.Blend);
         BlendMode beamBlend = _shaders.GetBlendMode(ent.CustomShader);
-        switch (beamBlend)
-        {
-            case BlendMode.Add:
-                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                break;
-            case BlendMode.Filter:
-                _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
-                break;
-            default:
-                _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-                break;
-        }
+        _gl.BlendFunc((BlendingFactor)beamBlend.SrcFactor, (BlendingFactor)beamBlend.DstFactor);
         _gl.DepthMask(false);
         _gl.Disable(EnableCap.CullFace);
 
@@ -746,18 +724,7 @@ public sealed unsafe class SceneManager
             // Apply per-shader blend mode
             BlendMode polyBlend = _shaders.GetBlendMode(poly.ShaderHandle);
             _gl.Enable(EnableCap.Blend);
-            switch (polyBlend)
-            {
-                case BlendMode.Add:
-                    _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                    break;
-                case BlendMode.Filter:
-                    _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
-                    break;
-                default:
-                    _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-                    break;
-            }
+            _gl.BlendFunc((BlendingFactor)polyBlend.SrcFactor, (BlendingFactor)polyBlend.DstFactor);
 
             // Build triangle fan vertices
             var verts = polyVertBuf[..(nv * 9)];
