@@ -20,4 +20,10 @@
     <PublishDir>E:\Games\Quake3\baseq3\</PublishDir>
   </PropertyGroup>
 
+  <!-- Auto-publish NativeAOT DLL after VS build -->
+  <Target Name="NativeAotPublish" AfterTargets="Build" Condition="'$(_SkipAutoPublish)' != 'true'">
+    <Exec Command="dotnet publish &quot;$(MSBuildProjectFullPath)&quot; -c $(Configuration) -r win-x64 --no-restore -v quiet -p:_SkipAutoPublish=true"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
 </Project>
