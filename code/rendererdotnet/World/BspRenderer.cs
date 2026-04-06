@@ -31,6 +31,7 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _deformParams0Loc;
     private int _deformParams1Loc;
     private int _overbrightScaleLoc;
+    private int _useLmUVLoc;
 
     private uint _vao;
     private uint _vbo;
@@ -178,12 +179,14 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uUseLightmap;
         uniform float uOverbrightScale;
         uniform int uAlphaFunc; // 0=none, 1=GT0, 2=LT128, 3=GE128
-        uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 4=identityLighting
+        uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 4=identityLighting, 5=NDL fallback
+        uniform int uUseLmUV;   // 1=sample diffuse with lightmap UVs (for multi-stage lightmap)
 
         out vec4 oColor;
 
         void main() {
-            vec4 texColor = texture(uTexDiffuse, vUV);
+            vec2 sampleUV = uUseLmUV != 0 ? vLmUV : vUV;
+            vec4 texColor = texture(uTexDiffuse, sampleUV);
 
             // Alpha test — discard fragments based on alpha function
             if (uAlphaFunc == 1 && texColor.a <= 0.0) discard;       // GT0
@@ -236,6 +239,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _deformParams0Loc = _gl.GetUniformLocation(_program, "uDeformParams0");
         _deformParams1Loc = _gl.GetUniformLocation(_program, "uDeformParams1");
         _overbrightScaleLoc = _gl.GetUniformLocation(_program, "uOverbrightScale");
+        _useLmUVLoc = _gl.GetUniformLocation(_program, "uUseLmUV");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -360,6 +364,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_tcModCountLoc, 0);
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 2.0f);
+        _gl.Uniform1(_useLmUVLoc, 0);
 
         ExtractFrustumPlanes(mvp);
 
@@ -428,6 +433,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_tcModCountLoc, 0);
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 2.0f);
+        _gl.Uniform1(_useLmUVLoc, 0);
 
         _gl.BindVertexArray(_vao);
         _gl.Enable(EnableCap.DepthTest);
@@ -708,7 +714,7 @@ public sealed unsafe class BspRenderer : IDisposable
             // Bind texture for this stage
             if (stage.IsLightmap)
             {
-                // Lightmap stage: bind lightmap texture as diffuse
+                // Lightmap stage: bind lightmap texture as diffuse, use lightmap UVs
                 if (surf.LightmapIndex >= 0 && surf.LightmapIndex < _lightmapTextures.Length)
                 {
                     _gl.ActiveTexture(TextureUnit.Texture0);
@@ -720,6 +726,7 @@ public sealed unsafe class BspRenderer : IDisposable
                     _gl.BindTexture(TextureTarget.Texture2D, shaders.WhiteTexture);
                 }
                 _gl.Uniform1(_useLightmapLoc, 0);
+                _gl.Uniform1(_useLmUVLoc, 1); // sample with lightmap UVs
                 // Apply overbright scaling to lightmap stage via uColor
                 _gl.Uniform4(_colorLoc, 2.0f, 2.0f, 2.0f, 1f);
             }
@@ -730,6 +737,7 @@ public sealed unsafe class BspRenderer : IDisposable
                 _gl.ActiveTexture(TextureUnit.Texture0);
                 _gl.BindTexture(TextureTarget.Texture2D, stageTexId);
                 _gl.Uniform1(_useLightmapLoc, 0);
+                _gl.Uniform1(_useLmUVLoc, 0); // sample with regular UVs
                 _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);
             }
 
@@ -801,8 +809,9 @@ public sealed unsafe class BspRenderer : IDisposable
         if (!isTransparentPass)
             _gl.Disable(EnableCap.Blend);
 
-        // Restore uColor to default
+        // Restore uColor and uUseLmUV to defaults
         _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);
+        _gl.Uniform1(_useLmUVLoc, 0);
 
         // Restore shared state
         RestoreCullMode(cullMode);
