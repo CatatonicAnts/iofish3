@@ -133,6 +133,23 @@ public static unsafe class CGame
     // Previous view height for duck tracking
     private static int _lastViewHeight;
 
+    // Center print display
+    private static string _centerPrint = "";
+    private static int _centerPrintTime;
+    private const int CENTER_PRINT_DURATION = 3000; // 3 seconds
+
+    // Chat messages (ring buffer)
+    private const int MAX_CHAT_LINES = 8;
+    private static readonly string[] _chatMessages = new string[MAX_CHAT_LINES];
+    private static readonly int[] _chatTimes = new int[MAX_CHAT_LINES];
+    private static int _chatIndex;
+    private const int CHAT_DISPLAY_TIME = 6000; // 6 seconds
+
+    // Item pickup notification
+    private static string _pickupName = "";
+    private static int _pickupTime;
+    private const int PICKUP_DISPLAY_TIME = 3000;
+
     // Snapshot state
     private static int _latestSnapshotNum;
     private static int _latestSnapshotTime;
@@ -234,6 +251,9 @@ public static unsafe class CGame
         _vDmgPitch = 0; _vDmgRoll = 0; _lastDamageEvent = 0;
         _zoomed = false; _zoomTime = 0;
         _lastViewHeight = 0;
+        _centerPrint = ""; _centerPrintTime = 0;
+        _chatIndex = 0; _pickupName = ""; _pickupTime = 0;
+        for (int i = 0; i < MAX_CHAT_LINES; i++) { _chatMessages[i] = ""; _chatTimes[i] = 0; }
         Prediction.Reset();
         _initialized = true;
         CrashLog.Breadcrumb("Init: DONE");
@@ -735,12 +755,34 @@ public static unsafe class CGame
             Syscalls.Print($"[.NET cgame] ServerCmd: {cmd}\n");
             if (cmd == "scores")
                 Scoreboard.ParseScores();
+            else if (cmd == "cp")
+            {
+                _centerPrint = Syscalls.Argv(1);
+                _centerPrintTime = _time;
+            }
+            else if (cmd == "print")
+            {
+                string msg = Syscalls.Argv(1);
+                Syscalls.Print(msg);
+            }
+            else if (cmd == "chat" || cmd == "tchat")
+            {
+                string msg = Syscalls.Argv(1);
+                _chatMessages[_chatIndex % MAX_CHAT_LINES] = msg;
+                _chatTimes[_chatIndex % MAX_CHAT_LINES] = _time;
+                _chatIndex++;
+                Syscalls.Print($"{msg}\n");
+            }
             else if (cmd == "cs")
             {
-                // Config string update — re-register model/sound if needed
                 string numStr = Syscalls.Argv(1);
                 if (int.TryParse(numStr, out int csNum))
                     ConfigStringModified(csNum);
+            }
+            else if (cmd == "map_restart")
+            {
+                _nextFrameTeleport = true;
+                _centerPrint = ""; _centerPrintTime = 0;
             }
         }
     }
@@ -922,6 +964,12 @@ public static unsafe class CGame
                     Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_AUTO, _gameSounds[eventParm]);
                 else
                     Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_AUTO, _sfxRespawnSound);
+                // Show pickup notification for local player
+                if (es.Number == _snap->Ps.ClientNum)
+                {
+                    _pickupName = GetItemName(eventParm);
+                    _pickupTime = _time;
+                }
                 break;
 
             case EntityEvent.EV_NOAMMO:
@@ -1754,6 +1802,15 @@ public static unsafe class CGame
         // Weapon select overlay
         DrawWeaponSelect();
 
+        // Center print message (objectives, notifications)
+        DrawCenterString();
+
+        // Chat messages
+        DrawChat();
+
+        // Item pickup notification
+        DrawPickupItem();
+
         // Upper right: FPS + Timer
         float y = 0;
         y = DrawFPS(y);
@@ -1767,6 +1824,106 @@ public static unsafe class CGame
             Scoreboard.Draw(_time, _clientNum, _gametype);
 
         Syscalls.R_SetColor(null);
+    }
+
+    private static void DrawCenterString()
+    {
+        if (_centerPrintTime == 0 || string.IsNullOrEmpty(_centerPrint)) return;
+
+        int elapsed = _time - _centerPrintTime;
+        if (elapsed > CENTER_PRINT_DURATION) { _centerPrintTime = 0; return; }
+
+        // Fade out in last 500ms
+        float alpha = elapsed > CENTER_PRINT_DURATION - 500
+            ? (CENTER_PRINT_DURATION - elapsed) / 500.0f
+            : 1.0f;
+
+        var lines = _centerPrint.Split('\n');
+        int lineHeight = 16;
+        int startY = (int)(SCREEN_HEIGHT * 0.30f) - lines.Length * lineHeight / 2;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            int w = line.Length * 8;
+            int x = (SCREEN_WIDTH - w) / 2;
+            DrawString(x, startY + i * lineHeight, line, 1.0f, 1.0f, 1.0f, alpha);
+        }
+    }
+
+    private static void DrawChat()
+    {
+        int y = SCREEN_HEIGHT - 200;
+
+        for (int i = 0; i < MAX_CHAT_LINES; i++)
+        {
+            int idx = (_chatIndex - MAX_CHAT_LINES + i + MAX_CHAT_LINES * 2) % MAX_CHAT_LINES;
+            if (_chatTimes[idx] == 0) continue;
+            int elapsed = _time - _chatTimes[idx];
+            if (elapsed > CHAT_DISPLAY_TIME) continue;
+
+            float alpha = elapsed > CHAT_DISPLAY_TIME - 1000
+                ? (CHAT_DISPLAY_TIME - elapsed) / 1000.0f
+                : 1.0f;
+
+            string msg = _chatMessages[idx] ?? "";
+            DrawString(8, y, msg, 0.0f, 1.0f, 0.0f, alpha);
+            y += 12;
+        }
+    }
+
+    private static void DrawPickupItem()
+    {
+        if (_pickupTime == 0 || string.IsNullOrEmpty(_pickupName)) return;
+
+        int elapsed = _time - _pickupTime;
+        if (elapsed > PICKUP_DISPLAY_TIME) { _pickupTime = 0; return; }
+
+        float alpha = elapsed > PICKUP_DISPLAY_TIME - 500
+            ? (PICKUP_DISPLAY_TIME - elapsed) / 500.0f
+            : 1.0f;
+
+        int w = _pickupName.Length * 8;
+        int x = (SCREEN_WIDTH - w) / 2;
+        DrawString(x, (int)(SCREEN_HEIGHT * 0.65f), _pickupName, 1.0f, 1.0f, 0.5f, alpha);
+    }
+
+    private static string GetItemName(int itemIndex)
+    {
+        // Item names from bg_itemlist — map common Q3 item indices
+        return itemIndex switch
+        {
+            1 => "Armor Shard",
+            2 => "Armor",
+            3 => "Heavy Armor",
+            4 => "5 Health",
+            5 => "25 Health",
+            6 => "50 Health",
+            7 => "Mega Health",
+            8 => "Shotgun",
+            9 => "Grenade Launcher",
+            10 => "Rocket Launcher",
+            11 => "Lightning Gun",
+            12 => "Railgun",
+            13 => "Plasma Gun",
+            14 => "BFG10K",
+            15 => "Shells",
+            16 => "Grenades",
+            17 => "Rockets",
+            18 => "Lightning",
+            19 => "Slugs",
+            20 => "Cells",
+            21 => "BFG Ammo",
+            22 => "Quad Damage",
+            23 => "Battle Suit",
+            24 => "Haste",
+            25 => "Invisibility",
+            26 => "Regeneration",
+            27 => "Flight",
+            28 => "Personal Teleporter",
+            29 => "Medkit",
+            _ => "Item"
+        };
     }
 
     private static void DrawStatusBar()
