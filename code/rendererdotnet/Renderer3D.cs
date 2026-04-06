@@ -201,10 +201,29 @@ public sealed unsafe class Renderer3D : IDisposable
         _gl.Enable(EnableCap.DepthTest);
         _gl.Enable(EnableCap.CullFace);
         _gl.CullFace(TriangleFace.Front); // Q3 uses clockwise winding
-        _gl.Disable(EnableCap.Blend);
+
+        // Enable blending if entity has translucent alpha
+        if (a < 0.999f)
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            _gl.DepthMask(false);
+        }
+        else
+        {
+            _gl.Disable(EnableCap.Blend);
+            _gl.DepthMask(true);
+        }
 
         _gl.DrawElements(PrimitiveType.Triangles,
             (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
+
+        // Restore state
+        if (a < 0.999f)
+        {
+            _gl.DepthMask(true);
+            _gl.Disable(EnableCap.Blend);
+        }
 
         _gl.BindVertexArray(0);
     }

@@ -159,8 +159,15 @@ public sealed unsafe class ShaderScriptParser
         TcMod[]? tcMods = null;
         int stageRgbGen = 0;
         int stageAlphaGen = 0;
+        int stageDepthFunc = 0;
+        bool stageDepthWrite = false;
         int rgbGen = 0;
         int alphaGen = 0;
+        bool polygonOffset = false;
+        int depthFunc = 0; // 0=lequal, 1=equal
+        bool depthWrite = false;
+        int sortKey = 0;
+        var deforms = new List<DeformVertexes>();
 
         while (depth > 0 && tokenizer.HasMore())
         {
@@ -183,6 +190,8 @@ public sealed unsafe class ShaderScriptParser
                     stageTcMods.Clear();
                     stageRgbGen = 0;
                     stageAlphaGen = 0;
+                    stageDepthFunc = 0;
+                    stageDepthWrite = false;
                 }
                 continue;
             }
@@ -228,6 +237,11 @@ public sealed unsafe class ShaderScriptParser
                         rgbGen = stageRgbGen;
                     if (alphaGen == 0 && stageAlphaGen != 0)
                         alphaGen = stageAlphaGen;
+                    // Capture depthFunc/depthWrite from first stage
+                    if (depthFunc == 0 && stageDepthFunc != 0)
+                        depthFunc = stageDepthFunc;
+                    if (!depthWrite && stageDepthWrite)
+                        depthWrite = true;
                 }
 
                 depth--;
@@ -269,6 +283,32 @@ public sealed unsafe class ShaderScriptParser
                         else if (string.Equals(cullToken, "back", StringComparison.OrdinalIgnoreCase) ||
                                  string.Equals(cullToken, "backside", StringComparison.OrdinalIgnoreCase))
                             cullMode = 1;
+                    }
+                }
+                else if (string.Equals(token, "polygonOffset", StringComparison.OrdinalIgnoreCase))
+                {
+                    polygonOffset = true;
+                }
+                else if (string.Equals(token, "deformVertexes", StringComparison.OrdinalIgnoreCase))
+                {
+                    var deform = ParseDeformVertexes(ref tokenizer);
+                    if (deform.HasValue)
+                        deforms.Add(deform.Value);
+                }
+                else if (string.Equals(token, "sort", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? sortToken = tokenizer.NextToken();
+                    if (sortToken != null)
+                    {
+                        if (string.Equals(sortToken, "portal", StringComparison.OrdinalIgnoreCase)) sortKey = 1;
+                        else if (string.Equals(sortToken, "sky", StringComparison.OrdinalIgnoreCase)) sortKey = 2;
+                        else if (string.Equals(sortToken, "opaque", StringComparison.OrdinalIgnoreCase)) sortKey = 3;
+                        else if (string.Equals(sortToken, "decal", StringComparison.OrdinalIgnoreCase)) sortKey = 4;
+                        else if (string.Equals(sortToken, "seeThrough", StringComparison.OrdinalIgnoreCase)) sortKey = 5;
+                        else if (string.Equals(sortToken, "banner", StringComparison.OrdinalIgnoreCase)) sortKey = 6;
+                        else if (string.Equals(sortToken, "additive", StringComparison.OrdinalIgnoreCase)) sortKey = 9;
+                        else if (string.Equals(sortToken, "nearest", StringComparison.OrdinalIgnoreCase)) sortKey = 16;
+                        else if (int.TryParse(sortToken, out int numSort)) sortKey = numSort;
                     }
                 }
             }
@@ -385,6 +425,16 @@ public sealed unsafe class ShaderScriptParser
                             stageAlphaGen = 3;
                     }
                 }
+                else if (string.Equals(token, "depthFunc", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? dfToken = tokenizer.NextToken();
+                    if (dfToken != null && string.Equals(dfToken, "equal", StringComparison.OrdinalIgnoreCase))
+                        stageDepthFunc = 1;
+                }
+                else if (string.Equals(token, "depthWrite", StringComparison.OrdinalIgnoreCase))
+                {
+                    stageDepthWrite = true;
+                }
             }
         }
 
@@ -416,7 +466,12 @@ public sealed unsafe class ShaderScriptParser
             AnimFrequency = animFrequency,
             TcMods = tcMods,
             RgbGen = rgbGen,
-            AlphaGen = alphaGen
+            AlphaGen = alphaGen,
+            PolygonOffset = polygonOffset,
+            DepthFunc = depthFunc,
+            DepthWrite = depthWrite,
+            SortKey = sortKey,
+            Deforms = deforms.Count > 0 ? deforms.ToArray() : null
         };
     }
 
@@ -559,8 +614,95 @@ public sealed unsafe class ShaderScriptParser
         return null;
     }
 
-    /// <summary>
-    /// Simple tokenizer that handles Q3 shader script syntax:
+    private static DeformVertexes? ParseDeformVertexes(ref ShaderTokenizer tokenizer)
+    {
+        string? type = tokenizer.NextToken();
+        if (type == null) return null;
+
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+
+        if (string.Equals(type, "wave", StringComparison.OrdinalIgnoreCase))
+        {
+            string? divS = tokenizer.NextToken();
+            string? funcS = tokenizer.NextToken();
+            string? baseS = tokenizer.NextToken();
+            string? ampS = tokenizer.NextToken();
+            string? phaseS = tokenizer.NextToken();
+            string? freqS = tokenizer.NextToken();
+            float div = 0, ba = 0, am = 0, ph = 0, fr = 0;
+            int func = ParseWaveFunc(funcS);
+            if (divS != null) float.TryParse(divS, ci, out div);
+            if (baseS != null) float.TryParse(baseS, ci, out ba);
+            if (ampS != null) float.TryParse(ampS, ci, out am);
+            if (phaseS != null) float.TryParse(phaseS, ci, out ph);
+            if (freqS != null) float.TryParse(freqS, ci, out fr);
+            return new DeformVertexes { Type = DeformType.Wave, Param0 = div, Param1 = func, Param2 = ba, Param3 = am, Param4 = ph, Param5 = fr };
+        }
+        else if (string.Equals(type, "move", StringComparison.OrdinalIgnoreCase))
+        {
+            string? xS = tokenizer.NextToken();
+            string? yS = tokenizer.NextToken();
+            string? zS = tokenizer.NextToken();
+            string? funcS = tokenizer.NextToken();
+            string? baseS = tokenizer.NextToken();
+            string? ampS = tokenizer.NextToken();
+            string? phaseS = tokenizer.NextToken();
+            string? freqS = tokenizer.NextToken();
+            float x = 0, y = 0, z = 0, ba = 0, am = 0, ph = 0, fr = 0;
+            int func = ParseWaveFunc(funcS);
+            if (xS != null) float.TryParse(xS, ci, out x);
+            if (yS != null) float.TryParse(yS, ci, out y);
+            if (zS != null) float.TryParse(zS, ci, out z);
+            if (baseS != null) float.TryParse(baseS, ci, out ba);
+            if (ampS != null) float.TryParse(ampS, ci, out am);
+            if (phaseS != null) float.TryParse(phaseS, ci, out ph);
+            if (freqS != null) float.TryParse(freqS, ci, out fr);
+            return new DeformVertexes { Type = DeformType.Move, Param0 = x, Param1 = y, Param2 = z, Param4 = func, Param5 = ba, Param6 = am, Param7 = ph, Param8 = fr };
+        }
+        else if (string.Equals(type, "bulge", StringComparison.OrdinalIgnoreCase))
+        {
+            string? wS = tokenizer.NextToken();
+            string? hS = tokenizer.NextToken();
+            string? sS = tokenizer.NextToken();
+            float w = 0, h = 0, s = 0;
+            if (wS != null) float.TryParse(wS, ci, out w);
+            if (hS != null) float.TryParse(hS, ci, out h);
+            if (sS != null) float.TryParse(sS, ci, out s);
+            return new DeformVertexes { Type = DeformType.Bulge, Param0 = w, Param1 = h, Param2 = s };
+        }
+        else if (string.Equals(type, "normal", StringComparison.OrdinalIgnoreCase))
+        {
+            string? aS = tokenizer.NextToken();
+            string? fS = tokenizer.NextToken();
+            float am = 0, fr = 0;
+            if (aS != null) float.TryParse(aS, ci, out am);
+            if (fS != null) float.TryParse(fS, ci, out fr);
+            return new DeformVertexes { Type = DeformType.Normal, Param0 = am, Param1 = fr };
+        }
+        else if (string.Equals(type, "autosprite", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DeformVertexes { Type = DeformType.AutoSprite };
+        }
+        else if (string.Equals(type, "autosprite2", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DeformVertexes { Type = DeformType.AutoSprite2 };
+        }
+
+        return null;
+    }
+
+    private static int ParseWaveFunc(string? name)
+    {
+        if (name == null) return 0;
+        if (string.Equals(name, "sin", StringComparison.OrdinalIgnoreCase)) return 0;
+        if (string.Equals(name, "triangle", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (string.Equals(name, "square", StringComparison.OrdinalIgnoreCase)) return 2;
+        if (string.Equals(name, "sawtooth", StringComparison.OrdinalIgnoreCase)) return 3;
+        if (string.Equals(name, "inverseSawtooth", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(name, "inversesawtooth", StringComparison.OrdinalIgnoreCase)) return 4;
+        if (string.Equals(name, "noise", StringComparison.OrdinalIgnoreCase)) return 5;
+        return 0;
+    }
     /// - Skips C-style comments (// and /* */)
     /// - Handles quoted strings
     /// - Returns individual tokens delimited by whitespace
@@ -704,6 +846,57 @@ public sealed class ShaderDef
 
     /// <summary>Alpha generation mode: 0=identity (default), 1=vertex, 2=entity, 3=wave.</summary>
     public int AlphaGen { get; init; }
+
+    /// <summary>Whether polygonOffset is set for this shader (prevents z-fighting on decals).</summary>
+    public bool PolygonOffset { get; init; }
+
+    /// <summary>Depth function: 0=lequal (default), 1=equal.</summary>
+    public int DepthFunc { get; init; }
+
+    /// <summary>Whether depthWrite is explicitly set on a blended stage.</summary>
+    public bool DepthWrite { get; init; }
+
+    /// <summary>Shader sort key: 0=default (auto), 3=opaque, 4=decal, 5=seeThrough, 6=banner, 8+=blend.</summary>
+    public int SortKey { get; init; }
+
+    /// <summary>deformVertexes operations (null if none).</summary>
+    public DeformVertexes[]? Deforms { get; init; }
+}
+
+/// <summary>
+/// Represents a deformVertexes operation from a Q3 shader script.
+/// </summary>
+public struct DeformVertexes
+{
+    public DeformType Type;
+    /// <summary>Wave: div. Move: x. Bulge: width.</summary>
+    public float Param0;
+    /// <summary>Wave: waveFunc. Move: y. Bulge: height.</summary>
+    public float Param1;
+    /// <summary>Wave: base. Move: z. Bulge: speed.</summary>
+    public float Param2;
+    /// <summary>Wave: amplitude.</summary>
+    public float Param3;
+    /// <summary>Wave: phase. Move: waveFunc.</summary>
+    public float Param4;
+    /// <summary>Wave: frequency. Move: base.</summary>
+    public float Param5;
+    /// <summary>Move: amplitude.</summary>
+    public float Param6;
+    /// <summary>Move: phase.</summary>
+    public float Param7;
+    /// <summary>Move: frequency.</summary>
+    public float Param8;
+}
+
+public enum DeformType
+{
+    Wave,       // deformVertexes wave <div> <func> <base> <amp> <phase> <freq>
+    Move,       // deformVertexes move <x> <y> <z> <func> <base> <amp> <phase> <freq>
+    Bulge,      // deformVertexes bulge <width> <height> <speed>
+    Normal,     // deformVertexes normal <amp> <freq>
+    AutoSprite, // deformVertexes autosprite
+    AutoSprite2 // deformVertexes autosprite2
 }
 
 /// <summary>

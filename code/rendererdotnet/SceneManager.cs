@@ -132,10 +132,21 @@ public sealed unsafe class SceneManager
                 entity.Axis[i] = axis[i];
 
             byte* rgba = entityPtr + 116;
-            entity.R = rgba[0] / 255.0f;
-            entity.G = rgba[1] / 255.0f;
-            entity.B = rgba[2] / 255.0f;
-            entity.A = rgba[3] / 255.0f;
+            // Q3 convention: if all RGBA bytes are 0, treat as uninitialized → white
+            if (rgba[0] == 0 && rgba[1] == 0 && rgba[2] == 0 && rgba[3] == 0)
+            {
+                entity.R = 1.0f;
+                entity.G = 1.0f;
+                entity.B = 1.0f;
+                entity.A = 1.0f;
+            }
+            else
+            {
+                entity.R = rgba[0] / 255.0f;
+                entity.G = rgba[1] / 255.0f;
+                entity.B = rgba[2] / 255.0f;
+                entity.A = rgba[3] / 255.0f;
+            }
 
             _entities.Add(entity);
         }
@@ -351,10 +362,10 @@ public sealed unsafe class SceneManager
                     uint texId = _shaders.GetTextureId(shaderHandle);
                     bool envMap = _shaders.GetHasEnvMap(shaderHandle);
 
-                    float r = ent.R > 0 ? ent.R : 1.0f;
-                    float g = ent.G > 0 ? ent.G : 1.0f;
-                    float b = ent.B > 0 ? ent.B : 1.0f;
-                    float a = ent.A > 0 ? ent.A : 1.0f;
+                    float r = ent.R;
+                    float g = ent.G;
+                    float b = ent.B;
+                    float a = ent.A;
 
                     fixed (float* mvpPtr = mvp)
                     fixed (float* modelPtr = modelMat)

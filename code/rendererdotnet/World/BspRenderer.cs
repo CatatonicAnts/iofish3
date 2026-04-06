@@ -27,6 +27,10 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _tcModCountLoc;
     private int _tcModLoc;
     private int _rgbGenLoc;
+    private int _deformTypeLoc;
+    private int _deformParams0Loc;
+    private int _deformParams1Loc;
+    private int _overbrightScaleLoc;
 
     private uint _vao;
     private uint _vbo;
@@ -43,7 +47,7 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _frameCount;
 
     // Transparent surfaces deferred to second pass
-    private readonly List<(int SurfIdx, BlendMode Blend)> _transparentSurfaces = new(256);
+    private readonly List<(int SurfIdx, BlendMode Blend, int SortKey)> _transparentSurfaces = new(256);
 
     // Current view position, stored per-frame for tcGen environment
     private float _viewX, _viewY, _viewZ;
@@ -66,20 +70,61 @@ public sealed unsafe class BspRenderer : IDisposable
         // tcMod: up to 4 ops, each encoded as vec4(type, p0, p1, p2)
         uniform int uTcModCount;
         uniform vec4 uTcMod[4];
+        // deformVertexes: type(0=wave,1=move), params packed in vec4s
+        uniform int uDeformType; // -1=none, 0=wave, 1=move
+        uniform vec4 uDeformParams0; // wave: div,func,base,amp  move: x,y,z,func
+        uniform vec4 uDeformParams1; // wave: phase,freq,0,0     move: base,amp,phase,freq
 
         out vec2 vUV;
         out vec2 vLmUV;
         out vec3 vNormal;
         out vec4 vColor;
 
+        float evalWaveFunc(int func, float phase) {
+            if (func == 0) return sin(phase * 6.283185);       // sin
+            if (func == 1) {                                    // triangle
+                float f = fract(phase);
+                return f < 0.5 ? f * 4.0 - 1.0 : 3.0 - f * 4.0;
+            }
+            if (func == 2) return fract(phase) < 0.5 ? 1.0 : -1.0; // square
+            if (func == 3) return fract(phase) * 2.0 - 1.0;         // sawtooth
+            if (func == 4) return 1.0 - fract(phase) * 2.0;         // inverseSawtooth
+            return sin(phase * 6.283185);
+        }
+
         void main() {
-            gl_Position = uMVP * vec4(aPos, 1.0);
+            vec3 pos = aPos;
+
+            // Apply deformVertexes
+            if (uDeformType == 0) { // wave
+                float div = uDeformParams0.x;
+                int func = int(uDeformParams0.y);
+                float base_ = uDeformParams0.z;
+                float amp = uDeformParams0.w;
+                float phase = uDeformParams1.x;
+                float freq = uDeformParams1.y;
+                // Per-vertex phase offset based on position
+                float off = (pos.x + pos.y + pos.z) / (div > 0.0 ? div : 100.0);
+                float wave = evalWaveFunc(func, phase + off + uTime * freq);
+                pos += aNormal * (base_ + wave * amp);
+            } else if (uDeformType == 1) { // move
+                vec3 dir = uDeformParams0.xyz;
+                int func = int(uDeformParams0.w);
+                float base_ = uDeformParams1.x;
+                float amp = uDeformParams1.y;
+                float phase = uDeformParams1.z;
+                float freq = uDeformParams1.w;
+                float wave = evalWaveFunc(func, phase + uTime * freq);
+                pos += dir * (base_ + wave * amp);
+            }
+
+            gl_Position = uMVP * vec4(pos, 1.0);
             vLmUV = aLmUV;
             vNormal = aNormal;
             vColor = aColor;
 
             if (uEnvMap != 0) {
-                vec3 viewDir = normalize(aPos - uViewPos);
+                vec3 viewDir = normalize(pos - uViewPos);
                 vec3 n = normalize(aNormal);
                 vec3 reflected = reflect(viewDir, n);
                 vUV = vec2(0.5 + reflected.x * 0.5, 0.5 - reflected.y * 0.5);
@@ -103,11 +148,11 @@ public sealed unsafe class BspRenderer : IDisposable
                         uv = vec2(centered.x * c - centered.y * s,
                                   centered.x * s + centered.y * c) + vec2(0.5);
                     } else if (modType == 3) { // turb
-                        float amp = uTcMod[i].z;
-                        float phase = uTcMod[i].w;
-                        float freq = uTcMod[i].y; // reuse slot for freq
-                        uv.x += amp * sin((aPos.x + aPos.z) * 0.0625 + uTime * freq + phase);
-                        uv.y += amp * sin((aPos.y) * 0.0625 + uTime * freq + phase);
+                        float amp2 = uTcMod[i].z;
+                        float phase2 = uTcMod[i].w;
+                        float freq2 = uTcMod[i].y;
+                        uv.x += amp2 * sin((pos.x + pos.z) * 0.0625 + uTime * freq2 + phase2);
+                        uv.y += amp2 * sin((pos.y) * 0.0625 + uTime * freq2 + phase2);
                     }
                 }
 
@@ -128,6 +173,7 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform vec4 uColor;
         uniform vec3 uLightDir;
         uniform int uUseLightmap;
+        uniform float uOverbrightScale;
         uniform int uAlphaFunc; // 0=none, 1=GT0, 2=LT128, 3=GE128
         uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 4=identityLighting
 
@@ -143,7 +189,7 @@ public sealed unsafe class BspRenderer : IDisposable
 
             if (uUseLightmap != 0) {
                 vec4 lmColor = texture(uTexLightmap, vLmUV);
-                oColor = texColor * lmColor * 2.0;
+                oColor = texColor * lmColor * uOverbrightScale;
             } else if (uRgbGen == 1) {
                 // rgbGen vertex — multiply by vertex color directly
                 oColor = texColor * vColor;
@@ -180,6 +226,10 @@ public sealed unsafe class BspRenderer : IDisposable
         _tcModCountLoc = _gl.GetUniformLocation(_program, "uTcModCount");
         _tcModLoc = _gl.GetUniformLocation(_program, "uTcMod");
         _rgbGenLoc = _gl.GetUniformLocation(_program, "uRgbGen");
+        _deformTypeLoc = _gl.GetUniformLocation(_program, "uDeformType");
+        _deformParams0Loc = _gl.GetUniformLocation(_program, "uDeformParams0");
+        _deformParams1Loc = _gl.GetUniformLocation(_program, "uDeformParams1");
+        _overbrightScaleLoc = _gl.GetUniformLocation(_program, "uOverbrightScale");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -301,6 +351,8 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform3(_viewPosLoc, viewX, viewY, viewZ);
         _gl.Uniform1(_timeLoc, timeSec);
         _gl.Uniform1(_tcModCountLoc, 0);
+        _gl.Uniform1(_deformTypeLoc, -1);
+        _gl.Uniform1(_overbrightScaleLoc, 2.0f);
 
         ExtractFrustumPlanes(mvp);
 
@@ -325,10 +377,13 @@ public sealed unsafe class BspRenderer : IDisposable
         // Second pass: draw transparent surfaces with blending enabled
         if (_transparentSurfaces.Count > 0)
         {
+            // Sort by sort key for correct layering (decals < seeThrough < banner < blend)
+            _transparentSurfaces.Sort((a, b) => a.SortKey.CompareTo(b.SortKey));
+
             _gl.Enable(EnableCap.Blend);
             _gl.DepthMask(false);
 
-            foreach (var (surfIdx, blend) in _transparentSurfaces)
+            foreach (var (surfIdx, blend, _) in _transparentSurfaces)
             {
                 ref var surf = ref _world.Surfaces[surfIdx];
                 _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
@@ -433,7 +488,9 @@ public sealed unsafe class BspRenderer : IDisposable
                 BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
                 if (blend.NeedsBlending)
                 {
-                    _transparentSurfaces.Add((surfIdx, blend));
+                    int sortKey = shaders.GetSortKey(surf.ShaderHandle);
+                    if (sortKey == 0) sortKey = 8; // default transparent sort
+                    _transparentSurfaces.Add((surfIdx, blend, sortKey));
                     return;
                 }
             }
@@ -514,17 +571,64 @@ public sealed unsafe class BspRenderer : IDisposable
             _gl.CullFace(TriangleFace.Back);
         // else cullMode == 0 → front (already set as default)
 
+        // Per-surface polygonOffset
+        bool polyOffset = shaders.GetPolygonOffset(surf.ShaderHandle);
+        if (polyOffset)
+        {
+            _gl.Enable(EnableCap.PolygonOffsetFill);
+            _gl.PolygonOffset(-1f, -1f);
+        }
+
+        // Per-surface depth function
+        int depthFuncVal = shaders.GetDepthFunc(surf.ShaderHandle);
+        if (depthFuncVal == 1)
+            _gl.DepthFunc(DepthFunction.Equal);
+
+        // Per-surface deformVertexes
+        var deforms = shaders.GetDeforms(surf.ShaderHandle);
+        bool hasDeform = false;
+        if (deforms != null && deforms.Length > 0)
+        {
+            // Apply the first wave or move deform (GPU-based)
+            for (int d = 0; d < deforms.Length; d++)
+            {
+                var df = deforms[d];
+                if (df.Type == DeformType.Wave)
+                {
+                    _gl.Uniform1(_deformTypeLoc, 0);
+                    _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, df.Param2, df.Param3);
+                    _gl.Uniform4(_deformParams1Loc, df.Param4, df.Param5, 0f, 0f);
+                    hasDeform = true;
+                    break;
+                }
+                else if (df.Type == DeformType.Move)
+                {
+                    _gl.Uniform1(_deformTypeLoc, 1);
+                    _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, df.Param2, df.Param4);
+                    _gl.Uniform4(_deformParams1Loc, df.Param5, df.Param6, df.Param7, df.Param8);
+                    hasDeform = true;
+                    break;
+                }
+            }
+        }
+
         _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
             (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
             (void*)(surf.FirstIndex * sizeof(int)),
             surf.FirstVertex);
 
-        // Restore default cull state
+        // Restore default state
         if (cullMode != 0)
         {
             _gl.Enable(EnableCap.CullFace);
             _gl.CullFace(TriangleFace.Front);
         }
+        if (polyOffset)
+            _gl.Disable(EnableCap.PolygonOffsetFill);
+        if (depthFuncVal != 0)
+            _gl.DepthFunc(DepthFunction.Lequal);
+        if (hasDeform)
+            _gl.Uniform1(_deformTypeLoc, -1);
     }
 
     /// <summary>

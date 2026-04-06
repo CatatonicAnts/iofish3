@@ -30,19 +30,12 @@ A list of planned features, improvements, and tasks for this project.
 - [ ] **Multi-stage shader rendering** - Q3 shaders have up to 8 stages (e.g. lightmap pass + texture pass + glow pass). We only use the first usable stage's texture/blend. Need to render each stage as a separate draw call with its own blend mode, producing correct multi-pass effects (lightmap×texture, glow overlays, detail textures). `CPX 5`
 - [ ] **Dynamic lighting (AddLightToScene)** - Per-frame point lights from rockets, plasma, railgun, etc. GL2 transforms dlights to surface-local coordinates and accumulates light contribution. Currently stubbed (AddLightToScene/AddAdditiveLightToScene are empty). `CPX 4`
 - [ ] **Fog rendering** - Q3 fog volumes defined via `fogParms` (color, depthForOpaque). Surfaces inside fog fade toward the fog color based on depth. GL2 has per-surface fog adjustment, fog culling, and fog-in-water handling. `CPX 4`
-- [ ] **depthFunc / depthWrite directives** - Parse `depthFunc equal` (for multi-pass lightmap rendering) and `depthWrite` (force depth writes on blended surfaces). Missing `depthFunc equal` causes z-fighting on multi-stage surfaces. `CPX 2`
-- [ ] **Sort order** - Q3 assigns each shader a sort key (portal=1, sky=2, opaque=3, decal=4, seeThrough=5, banner=6, fog=7, blend0-3=8-11, nearest=14). This controls render order. We only have opaque vs transparent. Need proper sort ordering for correct layering of decals, banners, see-through surfaces. `CPX 3`
-- [ ] **deformVertexes** - Vertex deformation effects: `wave` (flag waving), `bulge` (pulsing pipes), `move` (floating items), `normal` (water surface perturbation), `autosprite`/`autosprite2` (always-facing quads). Many world decorations use these. `CPX 3`
-- [ ] **RemapShader** - Runtime shader replacement (e.g. team-colored textures, powerup effects). Currently an empty stub. `CPX 2`
 
 ### Tier 2 — Important Visual Quality
 
 - [ ] **Light grid for entity lighting** - BSP stores a 3D grid of ambient+directed light samples. GL2 uses this to light entities (models, weapons) based on world position. We use a hardcoded directional light (0.57, 0.57, 0.57). `CPX 3`
-- [ ] **Overbright / gamma correction** - Q3 uses overbright bits (`r_mapOverBrightBits`) and gamma tables to adjust brightness. GL2 builds lookup tables and applies them to textures and lightmaps. We multiply lightmaps by 2.0 which is an approximation. `CPX 2`
 - [ ] **Flare rendering** - Light flares (RT_FLARE, MST_FLARE) with depth-based visibility testing and intensity fading. GL2 uses depth reads to check occlusion. We skip MST_FLARE surfaces entirely. `CPX 3`
 - [ ] **Portal / mirror rendering** - Recursive scene rendering through portal surfaces. GL2 detects portal sort, renders the scene from the mirrored viewpoint into an FBO, then composites it. Complex but needed for maps with mirrors/portals. `CPX 5`
-- [ ] **polygonOffset** - Parse `polygonOffset` directive and apply `glPolygonOffset` for decal surfaces to prevent z-fighting. `CPX 1`
-- [ ] **Entity alpha / shader RGBA** - Entity `shaderRGBA[4]` should modulate rendering. Partially working (color extracted but not all paths apply it). Need consistent application in BSP and model rendering. `CPX 2`
 
 ### Tier 3 — GL2-Specific Advanced Features
 
@@ -187,6 +180,13 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Animated textures (animMap) — parse all frames and frequency, lazy-load each frame, time-based cycling
 - [x] tcMod support — scroll, scale, rotate, turb parsed and applied via vertex shader uniforms (up to 4 ops per surface)
 - [x] rgbGen / alphaGen — parse identity/vertex/entity/wave/identityLighting, apply vertex color path in BSP fragment shader
+- [x] polygonOffset — parse directive, apply `glPolygonOffset(-1,-1)` per-surface for decals
+- [x] depthFunc / depthWrite — parse `depthFunc equal` and `depthWrite`, apply per-surface depth state
+- [x] RemapShader — runtime shader handle remapping via dictionary, resolve in GetTextureId
+- [x] Sort order — parse `sort` directive (portal/sky/opaque/decal/seeThrough/banner/additive/nearest + numeric), sort transparent surfaces by key before drawing
+- [x] Entity alpha / shaderRGBA — all-zero detection (uninitialized→white), alpha<1 enables blending on models
+- [x] deformVertexes — parse wave/move/bulge/normal/autosprite/autosprite2 from shader scripts, GPU-based wave and move displacement in BSP vertex shader
+- [x] Overbright scale — configurable lightmap overbright multiplier uniform (replaces hardcoded 2.0)
 
 ### Fixed Bugs
 

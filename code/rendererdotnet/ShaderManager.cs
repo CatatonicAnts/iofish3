@@ -15,6 +15,7 @@ public unsafe class ShaderManager
 {
     private readonly List<ShaderEntry> _shaders = [];
     private readonly Dictionary<string, int> _nameToHandle = new(System.StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<int, int> _remaps = new();
     private Renderer2D? _renderer;
     private ShaderScriptParser? _scriptParser;
 
@@ -46,6 +47,25 @@ public unsafe class ShaderManager
 
     public ShaderScriptParser? GetScriptParser() => _scriptParser;
 
+    /// <summary>
+    /// Remap one shader to another at runtime (e.g. team colors, powerup effects).
+    /// </summary>
+    public void RemapShader(string oldShader, string newShader)
+    {
+        int oldHandle = Register(oldShader);
+        int newHandle = Register(newShader);
+        if (oldHandle > 0 && newHandle > 0 && oldHandle != newHandle)
+            _remaps[oldHandle] = newHandle;
+    }
+
+    /// <summary>
+    /// Resolve a handle through any active remaps.
+    /// </summary>
+    private int ResolveRemap(int handle)
+    {
+        return _remaps.TryGetValue(handle, out int remapped) ? remapped : handle;
+    }
+
     public int Register(byte* namePtr)
     {
         if (namePtr == null) return 0;
@@ -70,6 +90,7 @@ public unsafe class ShaderManager
 
     public uint GetTextureId(int handle)
     {
+        handle = ResolveRemap(handle);
         if (handle <= 0 || handle >= _shaders.Count)
             return WhiteTexture;
 
@@ -184,6 +205,66 @@ public unsafe class ShaderManager
         return entry.RgbGen;
     }
 
+    public bool GetPolygonOffset(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return false;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.PolygonOffset;
+    }
+
+    public int GetDepthFunc(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return 0;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.DepthFunc;
+    }
+
+    public int GetSortKey(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return 0;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.SortKey;
+    }
+
+    public DeformVertexes[]? GetDeforms(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return null;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.Deforms;
+    }
+
     public bool IsTransparent(int handle)
     {
         if (handle <= 0 || handle >= _shaders.Count)
@@ -228,6 +309,11 @@ public unsafe class ShaderManager
             entry.TcMods = def.TcMods;
             entry.RgbGen = def.RgbGen;
             entry.AlphaGen = def.AlphaGen;
+            entry.PolygonOffset = def.PolygonOffset;
+            entry.DepthFunc = def.DepthFunc;
+            entry.DepthWrite = def.DepthWrite;
+            entry.SortKey = def.SortKey;
+            entry.Deforms = def.Deforms;
 
             // Load animated texture frames
             if (def.AnimFrames != null && def.AnimFrames.Length > 1)
@@ -307,5 +393,13 @@ public unsafe class ShaderManager
         public int RgbGen { get; set; }
         /// <summary>0=identity, 1=vertex, 2=entity, 3=wave</summary>
         public int AlphaGen { get; set; }
+        public bool PolygonOffset { get; set; }
+        /// <summary>0=lequal, 1=equal</summary>
+        public int DepthFunc { get; set; }
+        public bool DepthWrite { get; set; }
+        /// <summary>Sort key: 0=auto, 3=opaque, 4=decal, 5=seeThrough, etc.</summary>
+        public int SortKey { get; set; }
+        /// <summary>deformVertexes operations</summary>
+        public DeformVertexes[]? Deforms { get; set; }
     }
 }

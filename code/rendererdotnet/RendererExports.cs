@@ -805,7 +805,16 @@ public static unsafe class RendererExports
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static void RemapShader(byte* oldShader, byte* newShader, byte* offsetTime) { }
+    public static void RemapShader(byte* oldShader, byte* newShader, byte* offsetTime)
+    {
+        if (oldShader == null || newShader == null || _shaders == null) return;
+
+        string oldName = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)oldShader) ?? "";
+        string newName = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)newShader) ?? "";
+
+        if (!string.IsNullOrEmpty(oldName) && !string.IsNullOrEmpty(newName))
+            _shaders.RemapShader(oldName, newName);
+    }
 
     private static int _entityTokenPos;
 
