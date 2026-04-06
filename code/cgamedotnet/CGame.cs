@@ -127,10 +127,13 @@ public static unsafe class CGame
         _entities = new CEntity[MAX_GENTITIES];
 
         Syscalls.Print("[.NET cgame] CG_Init starting...\n");
+        CrashLog.Breadcrumb("Init: allocating buffers");
 
         // Allocate snapshot buffers
         _snapBuffer1 = (byte*)NativeMemory.AllocZeroed((nuint)SnapshotSize);
         _snapBuffer2 = (byte*)NativeMemory.AllocZeroed((nuint)SnapshotSize);
+
+        CrashLog.Breadcrumb("Init: GL config + gamestate");
 
         // Get GL config
         byte* glconfig = stackalloc byte[Q3GlConfig.SIZE];
@@ -146,6 +149,8 @@ public static unsafe class CGame
         // Parse server info
         ParseServerInfo();
 
+        CrashLog.Breadcrumb("Init: loading map");
+
         // Load map
         if (!string.IsNullOrEmpty(_mapName))
         {
@@ -153,6 +158,8 @@ public static unsafe class CGame
             Syscalls.R_LoadWorldMap(_mapName);
             Syscalls.Print($"[.NET cgame] Loaded map: {_mapName}\n");
         }
+
+        CrashLog.Breadcrumb("Init: registering media");
 
         // Register models from config strings
         RegisterGraphics();
@@ -163,12 +170,16 @@ public static unsafe class CGame
         // Register console commands
         InitConsoleCommands();
 
+        CrashLog.Breadcrumb("Init: subsystems");
+
         // Initialize local entity and mark systems
         LocalEntities.Init();
         Marks.Init();
         Scoreboard.Init();
         WeaponEffects.Init();
         Player.Init();
+
+        CrashLog.Breadcrumb("Init: client info");
 
         // Load client info for all players
         for (int i = 0; i < 64; i++)
@@ -183,6 +194,7 @@ public static unsafe class CGame
         _thisFrameTeleport = false;
         Prediction.Reset();
         _initialized = true;
+        CrashLog.Breadcrumb("Init: DONE");
         Syscalls.Print("[.NET cgame] CG_Init complete\n");
     }
 

@@ -43,7 +43,7 @@ public static unsafe class CGameExports
         try
         {
             CrashLog.Breadcrumb($"vmMain cmd={command}");
-            return command switch
+            nint result = command switch
             {
                 CG_INIT => Init(arg0, arg1, arg2),
                 CG_SHUTDOWN => Shutdown(),
@@ -56,6 +56,8 @@ public static unsafe class CGameExports
                 CG_EVENT_HANDLING => EventHandling(arg0),
                 _ => 0,
             };
+            CrashLog.Breadcrumb($"vmMain cmd={command} done");
+            return result;
         }
         catch (Exception ex)
         {
@@ -67,8 +69,10 @@ public static unsafe class CGameExports
 
     private static nint Init(int serverMessageNum, int serverCommandSequence, int clientNum)
     {
+        CrashLog.Breadcrumb("CG_INIT begin");
         Syscalls.Print($"[.NET cgame] CG_Init: serverMsg={serverMessageNum}, cmdSeq={serverCommandSequence}, client={clientNum}\n");
         CGame.Init(serverMessageNum, serverCommandSequence, clientNum);
+        CrashLog.Breadcrumb("CG_INIT complete");
         return 0;
     }
 

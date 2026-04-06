@@ -11,5 +11,6 @@
     <LocalDebuggerWorkingDirectory>E:\Games\Quake3</LocalDebuggerWorkingDirectory>
     <LocalDebuggerCommandArguments>+set cl_renderer dotnet +set cl_cgame dotnet +set sv_pure 0 +set logfile 2</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <LocalDebuggerDebuggerType>NativeWithManagedCore</LocalDebuggerDebuggerType>
   </PropertyGroup>
 </Project>

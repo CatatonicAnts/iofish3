@@ -93,7 +93,7 @@ The cgame DLL interface is:
 - [x] **Weapon effects** — Port CG_AddPlayerWeapon, CG_RegisterWeapon, weapon fire effects (muzzle flash, trails, projectiles, impacts, explosions). All weapon-specific rendering (railgun beam, lightning, BFG, etc.). `CPX 4`
 - [x] **HUD / 2D drawing** — Port CG_Draw2D: health/armor/ammo bars, crosshair, pickup notifications, timer, scores, obituaries, chat overlay, lagometer, speed display. `CPX 4`
 - [x] **Scoreboard** — Port CG_DrawScoreboard: player list with scores, ping, time, spectator info, team scores. `CPX 3`
-- [ ] **Local movement prediction** — Port CG_PredictPlayerState: client-side physics prediction using pmove, command replay for lag compensation. Critical for responsive movement. `CPX 5`
+- [x] **Local movement prediction** — Port CG_PredictPlayerState: client-side physics prediction using pmove, command replay for lag compensation. Critical for responsive movement. `CPX 5`
 - [x] **Event system** — Port CG_EntityEvent: sound triggers, visual effects, item pickups, deaths, jumppads, teleporters, footsteps, pain sounds, weapon switching. `CPX 4`
 - [x] **Console commands** — Port cgame console commands: say, tell, +scores, weapon selection, zoom, team overlay toggles, etc. `CPX 2`
 - [x] **Marks / decals** — Port CG_ImpactMark: bullet holes, explosion scorch marks, blood splatters via MarkFragments API with fade-out timing. `CPX 3`
