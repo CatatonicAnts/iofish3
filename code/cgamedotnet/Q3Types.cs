@@ -521,6 +521,51 @@ public static partial class EntityEvent
     public const int EV_EVENT_BITS = EV_EVENT_BIT1 | EV_EVENT_BIT2;
 }
 
+// Means of death (meansOfDeath_t)
+public static class MeansOfDeath
+{
+    public const int MOD_UNKNOWN = 0;
+    public const int MOD_SHOTGUN = 1;
+    public const int MOD_GAUNTLET = 2;
+    public const int MOD_MACHINEGUN = 3;
+    public const int MOD_GRENADE = 4;
+    public const int MOD_GRENADE_SPLASH = 5;
+    public const int MOD_ROCKET = 6;
+    public const int MOD_ROCKET_SPLASH = 7;
+    public const int MOD_PLASMA = 8;
+    public const int MOD_PLASMA_SPLASH = 9;
+    public const int MOD_RAILGUN = 10;
+    public const int MOD_LIGHTNING = 11;
+    public const int MOD_BFG = 12;
+    public const int MOD_BFG_SPLASH = 13;
+    public const int MOD_WATER = 14;
+    public const int MOD_SLIME = 15;
+    public const int MOD_LAVA = 16;
+    public const int MOD_CRUSH = 17;
+    public const int MOD_TELEFRAG = 18;
+    public const int MOD_FALLING = 19;
+    public const int MOD_SUICIDE = 20;
+    public const int MOD_TARGET_LASER = 21;
+    public const int MOD_TRIGGER_HURT = 22;
+    public const int MOD_GRAPPLE = 23;
+}
+
+// Global team sound events (for EV_GLOBAL_TEAM_SOUND)
+public static class GlobalTeamSound
+{
+    public const int GTS_RED_CAPTURE = 0;
+    public const int GTS_BLUE_CAPTURE = 1;
+    public const int GTS_RED_RETURN = 2;
+    public const int GTS_BLUE_RETURN = 3;
+    public const int GTS_RED_TAKEN = 4;
+    public const int GTS_BLUE_TAKEN = 5;
+    public const int GTS_REDTEAM_SCORED = 8;
+    public const int GTS_BLUETEAM_SCORED = 9;
+    public const int GTS_REDTEAM_TOOK_LEAD = 10;
+    public const int GTS_BLUETEAM_TOOK_LEAD = 11;
+    public const int GTS_TEAMS_ARE_TIED = 12;
+}
+
 // Sound channels
 public static class SoundChannel
 {

@@ -243,6 +243,24 @@ public static unsafe class CGame
 	private static int _sfxGurp1, _sfxGurp2;
 	private static int _sfxDrowning;
 
+	// Powerup sounds
+	private static int _sfxQuadSound, _sfxProtectSound, _sfxRegenSound;
+	private static int _sfxGibSound, _sfxGibBounce1, _sfxGibBounce2, _sfxGibBounce3;
+
+	// Team game sounds
+	private static int _sfxCaptureYourTeam, _sfxCaptureOpponent;
+	private static int _sfxReturnYourTeam, _sfxReturnOpponent;
+	private static int _sfxTakenYourTeam, _sfxTakenOpponent;
+	private static int _sfxRedScoredSound, _sfxBlueScoredSound;
+	private static int _sfxRedLeadsSound, _sfxBlueLeadsSound, _sfxTiedLeadSound;
+	private static int _sfxRedFlagReturned, _sfxBlueFlagReturned;
+
+	// Holdable item sounds
+	private static int _sfxUseMedkit, _sfxUseTeleporter;
+
+	// Score plum shader
+	private static int _scorePlumShader;
+
 	// Last computed view (for crosshair scan)
 	private static float _viewOrgX, _viewOrgY, _viewOrgZ;
 	private static float _viewFwdX, _viewFwdY, _viewFwdZ;
@@ -1072,6 +1090,39 @@ public static unsafe class CGame
 		_sfxGurp2 = Syscalls.S_RegisterSound("sound/player/gurp2.wav", 0);
 		_sfxDrowning = Syscalls.S_RegisterSound("sound/player/gurp1.wav", 0);
 
+		// Powerup sounds
+		_sfxQuadSound = Syscalls.S_RegisterSound("sound/items/damage3.wav", 0);
+		_sfxProtectSound = Syscalls.S_RegisterSound("sound/items/protect3.wav", 0);
+		_sfxRegenSound = Syscalls.S_RegisterSound("sound/items/regen.wav", 0);
+
+		// Gib sounds
+		_sfxGibSound = Syscalls.S_RegisterSound("sound/player/gibsplt1.wav", 0);
+		_sfxGibBounce1 = Syscalls.S_RegisterSound("sound/player/gibimp1.wav", 0);
+		_sfxGibBounce2 = Syscalls.S_RegisterSound("sound/player/gibimp2.wav", 0);
+		_sfxGibBounce3 = Syscalls.S_RegisterSound("sound/player/gibimp3.wav", 0);
+
+		// CTF/team sounds
+		_sfxCaptureYourTeam = Syscalls.S_RegisterSound("sound/teamplay/flagcap_yourteam.wav", 0);
+		_sfxCaptureOpponent = Syscalls.S_RegisterSound("sound/teamplay/flagcap_opponent.wav", 0);
+		_sfxReturnYourTeam = Syscalls.S_RegisterSound("sound/teamplay/flagreturn_yourteam.wav", 0);
+		_sfxReturnOpponent = Syscalls.S_RegisterSound("sound/teamplay/flagreturn_opponent.wav", 0);
+		_sfxTakenYourTeam = Syscalls.S_RegisterSound("sound/teamplay/voc_team_flag.wav", 0);
+		_sfxTakenOpponent = Syscalls.S_RegisterSound("sound/teamplay/voc_enemy_flag.wav", 0);
+		_sfxRedFlagReturned = Syscalls.S_RegisterSound("sound/teamplay/voc_red_returned.wav", 0);
+		_sfxBlueFlagReturned = Syscalls.S_RegisterSound("sound/teamplay/voc_blue_returned.wav", 0);
+		_sfxRedScoredSound = Syscalls.S_RegisterSound("sound/teamplay/voc_red_scores.wav", 0);
+		_sfxBlueScoredSound = Syscalls.S_RegisterSound("sound/teamplay/voc_blue_scores.wav", 0);
+		_sfxRedLeadsSound = Syscalls.S_RegisterSound("sound/teamplay/voc_red_lead.wav", 0);
+		_sfxBlueLeadsSound = Syscalls.S_RegisterSound("sound/teamplay/voc_blue_lead.wav", 0);
+		_sfxTiedLeadSound = Syscalls.S_RegisterSound("sound/teamplay/voc_scores_tied.wav", 0);
+
+		// Holdable item sounds
+		_sfxUseMedkit = Syscalls.S_RegisterSound("sound/items/use_medkit.wav", 0);
+		_sfxUseTeleporter = Syscalls.S_RegisterSound("sound/world/telein.wav", 0);
+
+		// Score plum shader
+		_scorePlumShader = Syscalls.R_RegisterShader("gfx/2d/numbers/eight_32b");
+
 		// Weapon fire sounds
 		_weaponFireSounds[Weapons.WP_GAUNTLET, 0] = Syscalls.S_RegisterSound("sound/weapons/melee/fstatck.wav", 0);
 		_weaponFireSounds[Weapons.WP_MACHINEGUN, 0] = Syscalls.S_RegisterSound("sound/weapons/machinegun/machgf1b.wav", 0);
@@ -1374,6 +1425,49 @@ public static unsafe class CGame
 					Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_VOICE, deathSfx);
 				break;
 			}
+
+			case EntityEvent.EV_OBITUARY:
+				Obituary(ref es);
+				break;
+
+			case EntityEvent.EV_POWERUP_QUAD:
+				Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_ITEM, _sfxQuadSound);
+				break;
+			case EntityEvent.EV_POWERUP_BATTLESUIT:
+				Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_ITEM, _sfxProtectSound);
+				break;
+			case EntityEvent.EV_POWERUP_REGEN:
+				Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_ITEM, _sfxRegenSound);
+				break;
+
+			case EntityEvent.EV_GIB_PLAYER:
+				Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_BODY, _sfxGibSound);
+				break;
+
+			case EntityEvent.EV_ITEM_POP:
+				Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxRespawnSound);
+				break;
+
+			case EntityEvent.EV_SCOREPLUM:
+				ScorePlum(ref es);
+				break;
+
+			case EntityEvent.EV_GLOBAL_TEAM_SOUND:
+				GlobalTeamSoundEvent(eventParm);
+				break;
+
+			// Use item events (EV_USE_ITEM0 through EV_USE_ITEM0+15)
+			default:
+				if (eventType >= EntityEvent.EV_USE_ITEM0 && eventType < EntityEvent.EV_USE_ITEM0 + 16)
+				{
+					int itemIndex = eventType - EntityEvent.EV_USE_ITEM0;
+					// Item 1 = medkit, Item 5 = teleporter
+					if (itemIndex == 1)
+						Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxUseMedkit);
+					else if (itemIndex == 5)
+						Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxUseTeleporter);
+				}
+				break;
 		}
 	}
 
@@ -1402,6 +1496,160 @@ public static unsafe class CGame
 
 		if (sfx != 0)
 			Syscalls.S_StartSound(origin, entNum, SoundChannel.CHAN_VOICE, sfx);
+	}
+
+	/// <summary>Handle EV_OBITUARY — display kill message in console and center print.</summary>
+	private static void Obituary(ref Q3EntityState es)
+	{
+		int target = es.OtherEntityNum;
+		int attacker = es.OtherEntityNum2;
+		int mod = es.EventParm;
+
+		if (target < 0 || target >= MAX_CLIENTS) return;
+
+		string targetName = Player.GetClientName(target);
+		if (string.IsNullOrEmpty(targetName)) targetName = "noname";
+
+		string? message = null;
+		string message2 = "";
+
+		// Self-kills and world kills
+		if (attacker == target)
+		{
+			message = mod switch
+			{
+				MeansOfDeath.MOD_GRENADE_SPLASH => "tripped on own grenade",
+				MeansOfDeath.MOD_ROCKET_SPLASH => "blew up",
+				MeansOfDeath.MOD_PLASMA_SPLASH => "melted",
+				MeansOfDeath.MOD_BFG_SPLASH => "should have used a smaller gun",
+				_ => "killed self",
+			};
+		}
+		else if (attacker < 0 || attacker >= MAX_CLIENTS)
+		{
+			// World kill
+			message = mod switch
+			{
+				MeansOfDeath.MOD_SUICIDE => "suicides",
+				MeansOfDeath.MOD_FALLING => "cratered",
+				MeansOfDeath.MOD_CRUSH => "was squished",
+				MeansOfDeath.MOD_WATER => "sank like a rock",
+				MeansOfDeath.MOD_SLIME => "melted",
+				MeansOfDeath.MOD_LAVA => "does a back flip into the lava",
+				MeansOfDeath.MOD_TARGET_LASER => "saw the light",
+				MeansOfDeath.MOD_TRIGGER_HURT => "was in the wrong place",
+				_ => "died",
+			};
+		}
+
+		if (message != null)
+		{
+			Syscalls.Print($"{targetName} {message}.\n");
+			return;
+		}
+
+		// Player-on-player kill
+		string attackerName = Player.GetClientName(attacker);
+		if (string.IsNullOrEmpty(attackerName)) attackerName = "noname";
+
+		// Update attacker tracking if we were the victim
+		if (target == _clientNum)
+			_attackerTime = _time;
+
+		switch (mod)
+		{
+			case MeansOfDeath.MOD_GAUNTLET: message = "was pummeled by"; break;
+			case MeansOfDeath.MOD_MACHINEGUN: message = "was machinegunned by"; break;
+			case MeansOfDeath.MOD_SHOTGUN: message = "was gunned down by"; break;
+			case MeansOfDeath.MOD_GRENADE: message = "ate"; message2 = "'s grenade"; break;
+			case MeansOfDeath.MOD_GRENADE_SPLASH: message = "was shredded by"; message2 = "'s shrapnel"; break;
+			case MeansOfDeath.MOD_ROCKET: message = "ate"; message2 = "'s rocket"; break;
+			case MeansOfDeath.MOD_ROCKET_SPLASH: message = "almost dodged"; message2 = "'s rocket"; break;
+			case MeansOfDeath.MOD_PLASMA: message = "was melted by"; message2 = "'s plasmagun"; break;
+			case MeansOfDeath.MOD_PLASMA_SPLASH: message = "was melted by"; message2 = "'s plasmagun"; break;
+			case MeansOfDeath.MOD_RAILGUN: message = "was railed by"; break;
+			case MeansOfDeath.MOD_LIGHTNING: message = "was electrocuted by"; break;
+			case MeansOfDeath.MOD_BFG: case MeansOfDeath.MOD_BFG_SPLASH: message = "was blasted by"; message2 = "'s BFG"; break;
+			case MeansOfDeath.MOD_TELEFRAG: message = "tried to invade"; message2 = "'s personal space"; break;
+			default: message = "was killed by"; break;
+		}
+
+		Syscalls.Print($"{targetName} {message} {attackerName}{message2}\n");
+
+		// Center print for our frags
+		if (attacker == _clientNum)
+		{
+			string s = _gametype < GT_TEAM
+				? $"You fragged {targetName}"
+				: $"You fragged {targetName}";
+			_centerPrint = s;
+			_centerPrintTime = _time;
+		}
+	}
+
+	/// <summary>Handle EV_SCOREPLUM — floating damage score numbers.</summary>
+	private static void ScorePlum(ref Q3EntityState es)
+	{
+		// Score plums show "+N" above the victim when you score
+		// Currently log-only; visual rendering requires local entity support
+		int score = es.OtherEntityNum2;
+		if (score < 0) score = 0;
+	}
+
+	/// <summary>Handle EV_GLOBAL_TEAM_SOUND — CTF/team announcements.</summary>
+	private static void GlobalTeamSoundEvent(int parm)
+	{
+		if (_snap == null) return;
+		int team = _snap->Ps.Persistant[Persistant.PERS_TEAM];
+
+		switch (parm)
+		{
+			case GlobalTeamSound.GTS_RED_CAPTURE:
+				Syscalls.S_StartLocalSound(team == Teams.TEAM_RED ? _sfxCaptureYourTeam : _sfxCaptureOpponent,
+					SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_BLUE_CAPTURE:
+				Syscalls.S_StartLocalSound(team == Teams.TEAM_BLUE ? _sfxCaptureYourTeam : _sfxCaptureOpponent,
+					SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_RED_RETURN:
+				Syscalls.S_StartLocalSound(team == Teams.TEAM_RED ? _sfxReturnYourTeam : _sfxReturnOpponent,
+					SoundChannel.CHAN_ANNOUNCER);
+				Syscalls.S_StartLocalSound(_sfxBlueFlagReturned, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_BLUE_RETURN:
+				Syscalls.S_StartLocalSound(team == Teams.TEAM_BLUE ? _sfxReturnYourTeam : _sfxReturnOpponent,
+					SoundChannel.CHAN_ANNOUNCER);
+				Syscalls.S_StartLocalSound(_sfxRedFlagReturned, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_RED_TAKEN:
+				if (team == Teams.TEAM_BLUE)
+					Syscalls.S_StartLocalSound(_sfxTakenOpponent, SoundChannel.CHAN_ANNOUNCER);
+				else if (team == Teams.TEAM_RED)
+					Syscalls.S_StartLocalSound(_sfxTakenYourTeam, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_BLUE_TAKEN:
+				if (team == Teams.TEAM_RED)
+					Syscalls.S_StartLocalSound(_sfxTakenOpponent, SoundChannel.CHAN_ANNOUNCER);
+				else if (team == Teams.TEAM_BLUE)
+					Syscalls.S_StartLocalSound(_sfxTakenYourTeam, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_REDTEAM_SCORED:
+				Syscalls.S_StartLocalSound(_sfxRedScoredSound, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_BLUETEAM_SCORED:
+				Syscalls.S_StartLocalSound(_sfxBlueScoredSound, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_REDTEAM_TOOK_LEAD:
+				Syscalls.S_StartLocalSound(_sfxRedLeadsSound, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_BLUETEAM_TOOK_LEAD:
+				Syscalls.S_StartLocalSound(_sfxBlueLeadsSound, SoundChannel.CHAN_ANNOUNCER);
+				break;
+			case GlobalTeamSound.GTS_TEAMS_ARE_TIED:
+				Syscalls.S_StartLocalSound(_sfxTiedLeadSound, SoundChannel.CHAN_ANNOUNCER);
+				break;
+		}
 	}
 
 	private static void FireWeapon(ref CEntity cent)

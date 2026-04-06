@@ -63,7 +63,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] **Anisotropic filtering** - Hardware anisotropic filtering (up to 16x) auto-detected and applied to mipmapped textures. `CPX 1`
 - [x] **Greyscale mode** - `r_greyscale` cvar for desaturated rendering. Luma-based desaturation in fragment shader. `CPX 1`
 - [x] **Screenshot support** - `/screenshot` command captures framebuffer to TGA via ReadPixels + FS_WriteFile. `CPX 2`
-- [ ] **TakeVideoFrame** - Video frame capture for demo recording. Currently stubbed. `CPX 2`
+- [x] **TakeVideoFrame** - Video frame capture for demo recording. Reads framebuffer as RGBA, converts to BGR with AVI line padding, calls CL_WriteAVIVideoFrame. `CPX 2`
 - [x] **surfaceparm parsing** - Parse `trans`, `nolightmap`, `nodlight`, `nomarks`/`noimpact` surfaceparms. Flags propagated to shader entries for use by dlight pass and mark system. `CPX 2`
 - [ ] **entityMergable** - Allow batching of entities that share shader state. `CPX 2`
 
@@ -124,6 +124,11 @@ The cgame DLL interface is:
 - [x] **Pain/death sounds** — Per-model pain sounds with health-based selection (pain25/50/75/100) and 500ms throttle, per-model death sounds (death1-3). `CPX 3`
 - [x] **Announcer voice** — Frag limit warnings (1/2/3 frags remaining), prepare/fight/countdown sounds, sudden death, time warnings. `CPX 3`
 - [x] **Water/fall sounds** — Gurp sounds on underwater, gasp on surfacing, per-model fall/falling sounds on medium/far falls. `CPX 2`
+- [x] **Kill/obituary messages** — EV_OBITUARY handler with means-of-death messages, self-kills, world kills, and center-print "You fragged X" for frags. Full MOD_ constant set. `CPX 3`
+- [x] **Powerup pickup sounds** — EV_POWERUP_QUAD/BATTLESUIT/REGEN play appropriate item sounds (damage3/protect3/regen). `CPX 1`
+- [x] **Gib sound** — EV_GIB_PLAYER plays gibsplt1 body channel sound. `CPX 1`
+- [x] **CTF/team announcements** — EV_GLOBAL_TEAM_SOUND handler for captures, returns, flag taken, team scoring, lead changes. Team-relative sound selection. `CPX 3`
+- [x] **Use item events** — EV_USE_ITEM0-15 for holdable items (medkit, teleporter) with appropriate sounds. `CPX 1`
 
 ### Notes
 

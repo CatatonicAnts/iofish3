@@ -1026,5 +1026,40 @@ public static unsafe class RendererExports
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static void TakeVideoFrame(int h, int w, byte* captureBuffer,
-        byte* encodeBuffer, int motionJpeg) { }
+        byte* encodeBuffer, int motionJpeg)
+    {
+        if (_gl == null) return;
+
+        const int AVI_LINE_PADDING = 4;
+
+        // Read framebuffer as RGBA (4 bytes per pixel)
+        _gl.ReadPixels(0, 0, (uint)w, (uint)h,
+            Silk.NET.OpenGL.PixelFormat.Rgba,
+            Silk.NET.OpenGL.PixelType.UnsignedByte,
+            captureBuffer);
+
+        // Convert RGBA → BGR with AVI line padding, write to encodeBuffer
+        int aviLineLen = w * 3;
+        int aviPadWidth = (aviLineLen + AVI_LINE_PADDING - 1) & ~(AVI_LINE_PADDING - 1);
+        int aviPadLen = aviPadWidth - aviLineLen;
+
+        byte* src = captureBuffer;
+        byte* dst = encodeBuffer;
+
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                *dst++ = src[2]; // B
+                *dst++ = src[1]; // G
+                *dst++ = src[0]; // R
+                src += 4;        // skip RGBA
+            }
+            for (int p = 0; p < aviPadLen; p++)
+                *dst++ = 0;
+        }
+
+        if (EngineImports.IsInitialized)
+            EngineImports.WriteAVIVideoFrame(encodeBuffer, aviPadWidth * h);
+    }
 }

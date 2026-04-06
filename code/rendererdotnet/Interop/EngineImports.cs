@@ -199,4 +199,17 @@ public static unsafe class EngineImports
             ((delegate* unmanaged[Cdecl]<byte*, void>)_ri.Cmd_RemoveCommand)(namePtr);
         }
     }
+
+    /// <summary>Whether the engine imports have been initialized.</summary>
+    public static bool IsInitialized => _initialized;
+
+    /// <summary>
+    /// Write a video frame to the AVI file being recorded.
+    /// </summary>
+    public static void WriteAVIVideoFrame(byte* data, int size)
+    {
+        if (!_initialized || _ri.CL_WriteAVIVideoFrame == 0)
+            return;
+        ((delegate* unmanaged[Cdecl]<byte*, int, void>)_ri.CL_WriteAVIVideoFrame)(data, size);
+    }
 }
