@@ -91,6 +91,7 @@ public static unsafe class CGameExports
 
     private static nint DrawActiveFrame(int serverTime, int stereoView, int demoPlayback)
     {
+        CrashLog.Breadcrumb($"DAF t={serverTime}");
         CGame.DrawActiveFrame(serverTime, stereoView, demoPlayback != 0);
         return 0;
     }
