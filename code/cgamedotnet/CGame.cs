@@ -106,7 +106,8 @@ public static unsafe class CGame
     private static Q3Snapshot* _nextSnap;
 
     private static readonly int SnapshotSize = sizeof(Q3Snapshot) +
-        (Q3Snapshot.MAX_ENTITIES_IN_SNAPSHOT - 1) * sizeof(Q3EntityState);
+        (Q3Snapshot.MAX_ENTITIES_IN_SNAPSHOT - 1) * sizeof(Q3EntityState) +
+        8; // +8 for numServerCommands + serverCommandSequence after entities
 
     // Entity tracking array
     private static CEntity[] _entities = new CEntity[MAX_GENTITIES];
@@ -244,7 +245,8 @@ public static unsafe class CGame
         Syscalls.S_ClearLoopingSounds(0);
         Syscalls.R_ClearScene();
 
-        ProcessSnapshots();
+        try { ProcessSnapshots(); }
+        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in ProcessSnapshots: {ex.Message}\n"); }
 
         if (_snap == null)
         {
@@ -283,16 +285,22 @@ public static unsafe class CGame
         Q3RefDef refdef = default;
         CalcViewValues(ref refdef);
 
-        AddPacketEntities();
-        LocalEntities.AddToScene(_time);
-        Marks.AddToScene(_time);
+        try { AddPacketEntities(); }
+        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in AddPacketEntities: {ex.Message}\n"); }
+
+        try { LocalEntities.AddToScene(_time); }
+        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in LocalEntities.AddToScene: {ex.Message}\n"); }
+
+        try { Marks.AddToScene(_time); }
+        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in Marks.AddToScene: {ex.Message}\n"); }
 
         refdef.Time = _time;
         for (int i = 0; i < Q3RefDef.MAX_MAP_AREA_BYTES; i++)
             refdef.Areamask[i] = _snap->Areamask[i];
 
         Syscalls.R_RenderScene(&refdef);
-        DrawHud();
+        try { DrawHud(); }
+        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in DrawHud: {ex.Message}\n"); }
     }
 
     public static int CrosshairPlayer() => -1;
