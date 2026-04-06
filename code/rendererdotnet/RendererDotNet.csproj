@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>renderer_dotnet</AssemblyName>
+    <RootNamespace>RendererDotNet</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+
+    <!-- NativeAOT: compile to a native shared library (.dll) -->
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+
+    <!-- Strip unused code for smaller binary -->
+    <IlcTrimMetadata>true</IlcTrimMetadata>
+
+    <!-- Output directly to game directory on publish -->
+    <PublishDir>E:\Games\Quake3\</PublishDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.SDL" Version="2.23.0" />
+  </ItemGroup>
+
+</Project>

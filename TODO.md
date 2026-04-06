@@ -24,7 +24,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### High Priority
 
-- [ ] **Add .NET support to the project** - Integrate .NET into the build pipeline alongside the existing C codebase. Transition from CMake-generated to manually maintained Visual Studio solution. `CPX 5`
+- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. The .NET interop foundation is in place. `CPX 5`
 
 ### Medium Priority
 
@@ -97,6 +97,8 @@ A list of planned features, improvements, and tasks for this project.
 
 - Game installation: `E:\Games\Quake3`
 - Build: `cmake -B build -G "Visual Studio 17 2022"` then `cmake --build build --config Release`
+- .NET renderer: `cd code\rendererdotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
+- Test .NET renderer: launch with `+set cl_renderer dotnet`
 - Project uses internal/bundled libraries by default (`USE_INTERNAL_LIBS=ON`)
 - Most FIXME comments are concentrated in GL2 renderer (~77) and bot AI (~44)
 
@@ -111,6 +113,7 @@ A list of planned features, improvements, and tasks for this project.
 ### Improvements
 
 - [x] Set up CMake build with Visual Studio 2022
+- [x] Add .NET 9 support — NativeAOT C# renderer DLL (`code/rendererdotnet/`) with full `refexport_t`/`refimport_t` interop, stub implementations, and `GetRefAPI` entry point. Loads via `+set cl_renderer dotnet`.
 
 ### Fixed Bugs
 

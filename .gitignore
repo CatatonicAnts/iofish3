@@ -55,3 +55,8 @@ Debug/
 RelWithDebInfo/
 MinSizeRel/
 x64/
+
+# .NET
+####################
+bin/
+obj/
