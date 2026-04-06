@@ -69,6 +69,47 @@ A list of planned features, improvements, and tasks for this project.
 
 ---
 
+## .NET Client Game (cgame_dotnet)
+
+> Reimplement `code/cgame/` (baseq3 cgame) in C# as a NativeAOT DLL, following the same architecture as `code/rendererdotnet/`.
+> The engine loads cgame via `VM_Create("cgame", ...)` → `Sys_LoadGameDll()` which looks for `dllEntry` and `vmMain` exports.
+> Set `vm_cgame 0` to force native DLL loading. To load `cgame_dotnet` by default for debugging, set `vm_cgame 0` and place the compiled DLL as the first cgame DLL found by `FS_FindVM`.
+
+### Architecture
+
+The cgame DLL interface is:
+- **`dllEntry(syscall)`** — Called once at load. Receives a pointer to the engine syscall dispatcher (`intptr_t (*)(intptr_t, ...)`) for ~90 import functions (CG_PRINT, CG_R_REGISTERMODEL, CG_GETSNAPSHOT, etc. — see `cg_public.h`)
+- **`vmMain(command, arg0..arg11)`** — Called by the engine for ~8 export functions: CG_INIT, CG_SHUTDOWN, CG_DRAW_ACTIVE_FRAME, CG_CONSOLE_COMMAND, CG_CROSSHAIR_PLAYER, CG_LAST_ATTACKER, CG_KEY_EVENT, CG_MOUSE_EVENT, CG_EVENT_HANDLING
+
+### Implementation Plan
+
+- [ ] **Project scaffolding** — Create `code/cgamedotnet/` with .csproj targeting net9.0 NativeAOT (same pattern as rendererdotnet). Export `dllEntry` and `vmMain` via `[UnmanagedCallersOnly]`. Publish to game directory as `cgamex86_64.dll`. `CPX 3`
+- [ ] **Engine syscall interop** — Marshal all ~90 `cgameImport_t` syscalls (CG_PRINT through CG_R_INPVS). Wrap engine calls (cvars, filesystem, renderer, sound, collision, input, snapshots) in type-safe C# classes. `CPX 4`
+- [ ] **Core game state** — Port `cg_t`, `cgs_t`, `centity_t`, `cg_weapons_t` structs and CG_Init/CG_Shutdown lifecycle. Handle gamestate parsing, server info, map loading, media registration. `CPX 4`
+- [ ] **Snapshot processing** — Port CG_ProcessSnapshots: snapshot interpolation, entity state transitions (enter/leave PVS), player state prediction, event processing. `CPX 4`
+- [ ] **Entity rendering** — Port CG_AddCEntity: per-entity-type rendering (players, items, missiles, movers, portals), model attachment via tags, animation state machines, shell/powerup effects. `CPX 5`
+- [ ] **Player rendering** — Port CG_Player: multi-part player model (head/torso/legs), team skins, animation blending, weapon attachment, first-person weapon rendering. `CPX 5`
+- [ ] **Weapon effects** — Port CG_AddPlayerWeapon, CG_RegisterWeapon, weapon fire effects (muzzle flash, trails, projectiles, impacts, explosions). All weapon-specific rendering (railgun beam, lightning, BFG, etc.). `CPX 4`
+- [ ] **HUD / 2D drawing** — Port CG_Draw2D: health/armor/ammo bars, crosshair, pickup notifications, timer, scores, obituaries, chat overlay, lagometer, speed display. `CPX 4`
+- [ ] **Scoreboard** — Port CG_DrawScoreboard: player list with scores, ping, time, spectator info, team scores. `CPX 3`
+- [ ] **Local movement prediction** — Port CG_PredictPlayerState: client-side physics prediction using pmove, command replay for lag compensation. Critical for responsive movement. `CPX 5`
+- [ ] **Event system** — Port CG_EntityEvent: sound triggers, visual effects, item pickups, deaths, jumppads, teleporters, footsteps, pain sounds, weapon switching. `CPX 4`
+- [ ] **Console commands** — Port cgame console commands: say, tell, +scores, weapon selection, zoom, team overlay toggles, etc. `CPX 2`
+- [ ] **Marks / decals** — Port CG_ImpactMark: bullet holes, explosion scorch marks, blood splatters via MarkFragments API with fade-out timing. `CPX 3`
+- [ ] **Particle / local entity system** — Port CG_AddLocalEntities: brass casings, debris, blood trails, smoke puffs, sparks with physics simulation. `CPX 3`
+- [ ] **Sound integration** — Port CG_AddLoopingSound, entity sound triggers, positional audio, ambient sounds, announcer voice. `CPX 3`
+- [ ] **Default loading** — Modify engine to prefer `cgame_dotnet` DLL over QVM when `vm_cgame 0` is set. Add a cvar (e.g. `cl_cgame`) to select cgame implementation by name, similar to `cl_renderer` for renderers. `CPX 3`
+
+### Notes
+
+- The cgame communicates with the engine entirely through numbered syscalls (not function pointers like the renderer). The NativeAOT DLL must store the syscall pointer from `dllEntry` and dispatch through it.
+- Unlike the renderer (which has its own OpenGL context), the cgame only calls renderer APIs indirectly via engine syscalls (CG_R_REGISTERMODEL, CG_R_ADDREFENTITYTOSCENE, etc.). It never touches GPU directly.
+- The original cgame source is ~15,000 lines across ~30 files. Full port is a large effort but each subsystem can be implemented incrementally (start with init + basic HUD, add entity rendering, then prediction).
+- `code/cgame/cg_public.h` defines the complete import/export interface — this is the contract between engine and cgame.
+- Player prediction (`pmove`) shares code with server-side physics (`code/game/bg_pmove.c`, `bg_slidemove.c`). This shared code must also be ported to C#.
+
+---
+
 ## Other Features
 
 ### Medium Priority
