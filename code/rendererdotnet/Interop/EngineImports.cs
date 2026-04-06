@@ -126,4 +126,77 @@ public static unsafe class EngineImports
             return;
         ((delegate* unmanaged[Cdecl]<byte**, void>)_ri.FS_FreeFileList)(fileList);
     }
+
+    /// <summary>
+    /// Write data to a file in the engine's writable directory.
+    /// </summary>
+    public static void FS_WriteFile(string path, byte* data, int length)
+    {
+        if (!_initialized || _ri.FS_WriteFile == 0)
+            return;
+        byte[] pathBytes = Encoding.UTF8.GetBytes(path + "\0");
+        fixed (byte* pathPtr = pathBytes)
+        {
+            ((delegate* unmanaged[Cdecl]<byte*, byte*, int, void>)_ri.FS_WriteFile)(pathPtr, data, length);
+        }
+    }
+
+    /// <summary>
+    /// Get an integer cvar value by name.
+    /// </summary>
+    public static int Cvar_VariableIntegerValue(string name)
+    {
+        if (!_initialized || _ri.Cvar_VariableIntegerValue == 0)
+            return 0;
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        fixed (byte* namePtr = nameBytes)
+        {
+            return ((delegate* unmanaged[Cdecl]<byte*, int>)_ri.Cvar_VariableIntegerValue)(namePtr);
+        }
+    }
+
+    /// <summary>
+    /// Register/get a cvar, returning a pointer to the cvar_t struct.
+    /// </summary>
+    public static nint Cvar_Get(string name, string defaultValue, int flags)
+    {
+        if (!_initialized || _ri.Cvar_Get == 0)
+            return 0;
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        byte[] defBytes = Encoding.UTF8.GetBytes(defaultValue + "\0");
+        fixed (byte* namePtr = nameBytes)
+        fixed (byte* defPtr = defBytes)
+        {
+            return (nint)((delegate* unmanaged[Cdecl]<byte*, byte*, int, nint>)_ri.Cvar_Get)(namePtr, defPtr, flags);
+        }
+    }
+
+    /// <summary>
+    /// Add a console command handler.
+    /// </summary>
+    public static void Cmd_AddCommand(string name, delegate* unmanaged[Cdecl]<void> handler)
+    {
+        if (!_initialized || _ri.Cmd_AddCommand == 0)
+            return;
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        fixed (byte* namePtr = nameBytes)
+        {
+            ((delegate* unmanaged[Cdecl]<byte*, delegate* unmanaged[Cdecl]<void>, void>)_ri.Cmd_AddCommand)(
+                namePtr, handler);
+        }
+    }
+
+    /// <summary>
+    /// Remove a console command handler.
+    /// </summary>
+    public static void Cmd_RemoveCommand(string name)
+    {
+        if (!_initialized || _ri.Cmd_RemoveCommand == 0)
+            return;
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        fixed (byte* namePtr = nameBytes)
+        {
+            ((delegate* unmanaged[Cdecl]<byte*, void>)_ri.Cmd_RemoveCommand)(namePtr);
+        }
+    }
 }

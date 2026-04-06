@@ -48,6 +48,9 @@ public static unsafe class RendererExports
     private const int WIDTH = 1280;
     private const int HEIGHT = 720;
 
+    private static int _screenshotCount;
+    private static bool _screenshotPending;
+
     private static void WriteString(byte* dest, string value, int maxLen)
     {
         var bytes = System.Text.Encoding.UTF8.GetBytes(value);
@@ -213,6 +216,15 @@ public static unsafe class RendererExports
         EngineImports.Printf(EngineImports.PRINT_ALL,
             $"[.NET] Window created: {WIDTH}x{HEIGHT}, OpenGL 4.5 Core\n");
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] ----- finished R_Init -----\n");
+
+        // Register screenshot console command
+        EngineImports.Cmd_AddCommand("screenshot", &ScreenshotCmd);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void ScreenshotCmd()
+    {
+        _screenshotPending = true;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -435,11 +447,77 @@ public static unsafe class RendererExports
         // Flush any pending 2D draw calls
         _renderer2D?.Flush();
 
+        // Capture screenshot before swap (front buffer is complete)
+        if (_screenshotPending && _gl != null)
+        {
+            _screenshotPending = false;
+            TakeScreenshot();
+        }
+
         if (_sdl != null && _window != null)
             _sdl.GLSwapWindow(_window);
 
         if (frontEndMsec != null) *frontEndMsec = 0;
         if (backEndMsec != null) *backEndMsec = 0;
+    }
+
+    /// <summary>
+    /// Capture the current framebuffer as a TGA screenshot.
+    /// </summary>
+    private static void TakeScreenshot()
+    {
+        if (_gl == null) return;
+
+        // Find next available filename
+        string fileName;
+        do
+        {
+            fileName = $"screenshots/shot{_screenshotCount:D4}.tga";
+            _screenshotCount++;
+        } while (_screenshotCount < 10000);
+
+        int w = WIDTH, h = HEIGHT;
+        int pixelSize = w * h * 3;
+        byte[] pixels = new byte[pixelSize];
+
+        fixed (byte* p = pixels)
+        {
+            _gl.ReadPixels(0, 0, (uint)w, (uint)h,
+                Silk.NET.OpenGL.PixelFormat.Rgb, Silk.NET.OpenGL.PixelType.UnsignedByte, p);
+        }
+
+        // Build TGA file (18-byte header + pixel data)
+        int tgaSize = 18 + pixelSize;
+        byte[] tga = new byte[tgaSize];
+
+        // TGA header: uncompressed RGB
+        tga[2] = 2;            // image type: uncompressed true-color
+        tga[12] = (byte)(w & 0xFF);
+        tga[13] = (byte)(w >> 8);
+        tga[14] = (byte)(h & 0xFF);
+        tga[15] = (byte)(h >> 8);
+        tga[16] = 24;          // bits per pixel
+        tga[17] = 0;           // image descriptor
+
+        // Copy pixels, converting RGB to BGR (TGA format)
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int srcIdx = (y * w + x) * 3;
+                int dstIdx = 18 + (y * w + x) * 3;
+                tga[dstIdx + 0] = pixels[srcIdx + 2]; // B
+                tga[dstIdx + 1] = pixels[srcIdx + 1]; // G
+                tga[dstIdx + 2] = pixels[srcIdx + 0]; // R
+            }
+        }
+
+        fixed (byte* tgaPtr = tga)
+        {
+            EngineImports.FS_WriteFile(fileName, tgaPtr, tgaSize);
+        }
+
+        EngineImports.Printf(EngineImports.PRINT_ALL, $"[.NET] Screenshot: {fileName}\n");
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

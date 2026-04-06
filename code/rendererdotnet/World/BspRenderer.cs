@@ -32,6 +32,8 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _deformParams1Loc;
     private int _overbrightScaleLoc;
     private int _useLmUVLoc;
+    private int _greyscaleLoc;
+    private float _greyscaleValue; // 0.0=color, 1.0=fully greyscale
 
     private uint _vao;
     private uint _vbo;
@@ -329,6 +331,7 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uAlphaFunc; // 0=none, 1=GT0, 2=LT128, 3=GE128
         uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 4=identityLighting, 5=NDL fallback
         uniform int uUseLmUV;   // 1=sample diffuse with lightmap UVs (for multi-stage lightmap)
+        uniform float uGreyscale; // 0.0=color, 1.0=fully greyscale
 
         out vec4 oColor;
 
@@ -363,6 +366,12 @@ public sealed unsafe class BspRenderer : IDisposable
             }
             oColor *= uColor;
             oColor.a = texColor.a * uColor.a;
+
+            // Greyscale desaturation
+            if (uGreyscale > 0.0) {
+                float luma = dot(oColor.rgb, vec3(0.299, 0.587, 0.114));
+                oColor.rgb = mix(oColor.rgb, vec3(luma), uGreyscale);
+            }
         }
         """;
 
@@ -388,6 +397,10 @@ public sealed unsafe class BspRenderer : IDisposable
         _deformParams1Loc = _gl.GetUniformLocation(_program, "uDeformParams1");
         _overbrightScaleLoc = _gl.GetUniformLocation(_program, "uOverbrightScale");
         _useLmUVLoc = _gl.GetUniformLocation(_program, "uUseLmUV");
+        _greyscaleLoc = _gl.GetUniformLocation(_program, "uGreyscale");
+
+        // Register r_greyscale cvar (0.0 = color, 1.0 = fully grey)
+        EngineImports.Cvar_Get("r_greyscale", "0", 1); // 1 = CVAR_ARCHIVE
 
         // Dlight shader program
         _dlightProgram = CreateDlightProgram();
@@ -563,6 +576,11 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 2.0f);
         _gl.Uniform1(_useLmUVLoc, 0);
+
+        // Read r_greyscale cvar each frame (0 = color, 1 = fully greyscale)
+        int gsInt = EngineImports.Cvar_VariableIntegerValue("r_greyscale");
+        _greyscaleValue = gsInt != 0 ? 1.0f : 0.0f;
+        _gl.Uniform1(_greyscaleLoc, _greyscaleValue);
 
         ExtractFrustumPlanes(mvp);
 
