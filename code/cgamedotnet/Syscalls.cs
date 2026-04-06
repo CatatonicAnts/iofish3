@@ -281,8 +281,14 @@ public static unsafe class Syscalls
     public static int CM_NumInlineModels() => (int)Call(CG_CM_NUMINLINEMODELS);
     public static int CM_InlineModel(int index) => (int)Call(CG_CM_INLINEMODEL, index);
 
+    public static int CM_TempBoxModel(float* mins, float* maxs) =>
+        (int)Call(CG_CM_TEMPBOXMODEL, (nint)mins, (nint)maxs);
+
     public static int CM_PointContents(float* point, int model) =>
         (int)Call(CG_CM_POINTCONTENTS, (nint)point, model);
+
+    public static int CM_TransformedPointContents(float* point, int model, float* origin, float* angles) =>
+        (int)Call(CG_CM_TRANSFORMEDPOINTCONTENTS, (nint)point, model, (nint)origin, (nint)angles);
 
     public static void CM_BoxTrace(void* results, float* start, float* end,
                                     float* mins, float* maxs, int model, int brushmask) =>

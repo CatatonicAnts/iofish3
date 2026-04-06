@@ -95,6 +95,10 @@ public static unsafe class CGame
     private static int _weaponSelect = Weapons.WP_MACHINEGUN;
     private static bool _demoPlayback;
 
+    // Prediction state
+    private static bool _nextFrameTeleport;
+    private static bool _thisFrameTeleport;
+
     // Snapshot state
     private static int _latestSnapshotNum;
     private static int _latestSnapshotTime;
@@ -175,6 +179,9 @@ public static unsafe class CGame
         _levelStartTime = int.TryParse(startTimeStr, out int st) ? st : 0;
 
         _weaponSelect = Weapons.WP_MACHINEGUN;
+        _nextFrameTeleport = false;
+        _thisFrameTeleport = false;
+        Prediction.Reset();
         _initialized = true;
         Syscalls.Print("[.NET cgame] CG_Init complete\n");
     }
@@ -271,6 +278,28 @@ public static unsafe class CGame
         _weaponSelect = newWeapon;
         Syscalls.SetUserCmdValue(_weaponSelect, 1.0f);
 
+        // Run prediction
+        try
+        {
+            int team = _snap->Ps.Persistant[Persistant.PERS_TEAM];
+            bool hasNext = _nextSnap != null;
+            Q3PlayerState* nextPs = hasNext ? &_nextSnap->Ps : null;
+            Prediction.PredictPlayerState(
+                &_snap->Ps,
+                nextPs,
+                hasNext,
+                _snap->ServerTime,
+                hasNext ? _nextSnap->ServerTime : 0,
+                _time, _oldTime,
+                _demoPlayback,
+                _snap->Ps.PmFlags,
+                _nextFrameTeleport, _thisFrameTeleport,
+                noPredict: false, synchronousClients: false,
+                dmflags: 0, pmoveFixed: 0, pmoveMsec: 8,
+                team: team);
+        }
+        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in PredictPlayerState: {ex.Message}\n"); }
+
         // Calculate frame interpolation factor
         if (_nextSnap != null)
         {
@@ -302,12 +331,15 @@ public static unsafe class CGame
         // First-person view weapon
         try
         {
-            Player.AddViewWeapon(&_snap->Ps, _time,
-                refdef.ViewOrgX, refdef.ViewOrgY, refdef.ViewOrgZ,
-                refdef.Axis0X, refdef.Axis0Y, refdef.Axis0Z,
-                refdef.Axis1X, refdef.Axis1Y, refdef.Axis1Z,
-                refdef.Axis2X, refdef.Axis2Y, refdef.Axis2Z,
-                (int)refdef.FovX);
+            fixed (Q3PlayerState* pps = &Prediction.PredictedPlayerState)
+            {
+                Player.AddViewWeapon(pps, _time,
+                    refdef.ViewOrgX, refdef.ViewOrgY, refdef.ViewOrgZ,
+                    refdef.Axis0X, refdef.Axis0Y, refdef.Axis0Z,
+                    refdef.Axis1X, refdef.Axis1Y, refdef.Axis1Z,
+                    refdef.Axis2X, refdef.Axis2Y, refdef.Axis2Z,
+                    (int)refdef.FovX);
+            }
         }
         catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in AddViewWeapon: {ex.Message}\n"); }
 
@@ -489,6 +521,20 @@ public static unsafe class CGame
     {
         _nextSnap = snap;
 
+        // Detect player teleport between snapshots
+        if (_snap != null &&
+            ((_snap->Ps.EFlags ^ snap->Ps.EFlags) & EF_TELEPORT_BIT) != 0)
+        {
+            _nextFrameTeleport = true;
+        }
+        else
+        {
+            _nextFrameTeleport = false;
+        }
+
+        // Build solid entity list for prediction on each new snapshot
+        BuildSolidList();
+
         // Set up interpolation state for entities in nextSnap
         for (int i = 0; i < snap->NumEntities; i++)
         {
@@ -511,6 +557,10 @@ public static unsafe class CGame
 
     private static void TransitionSnapshot()
     {
+        // Shift teleport flags forward
+        _thisFrameTeleport = _nextFrameTeleport;
+        _nextFrameTeleport = false;
+
         // Mark all old snap entities as invalid
         for (int i = 0; i < _snap->NumEntities; i++)
         {
@@ -546,6 +596,57 @@ public static unsafe class CGame
             // Check events on transitioned entities
             CheckEvents(ref cent);
         }
+    }
+
+    /// <summary>
+    /// Build the solid entity list from the current snapshot for prediction.
+    /// Matches CG_BuildSolidList from cg_predict.c.
+    /// </summary>
+    private static void BuildSolidList()
+    {
+        if (_snap == null) return;
+
+        // Use the next snap if available, otherwise current
+        var snap = _nextSnap != null ? _nextSnap : _snap;
+
+        var solids = new Prediction.SolidEntity[256];
+        int solidCount = 0;
+        var triggers = new int[256];
+        int triggerCount = 0;
+
+        for (int i = 0; i < snap->NumEntities; i++)
+        {
+            ref var es = ref snap->GetEntity(i);
+            ref var cent = ref _entities[es.Number];
+
+            if (es.EType == EntityType.ET_ITEM || es.EType == EntityType.ET_PUSH_TRIGGER ||
+                es.EType == EntityType.ET_TELEPORT_TRIGGER)
+            {
+                if (triggerCount < 256)
+                    triggers[triggerCount++] = es.Number;
+                continue;
+            }
+
+            if (cent.CurrentState.Solid == 0) continue;
+
+            if (solidCount < 256)
+            {
+                ref var se = ref solids[solidCount];
+                se.Number = es.Number;
+                se.Solid = cent.CurrentState.Solid;
+                se.ModelIndex = cent.CurrentState.ModelIndex;
+                se.OriginX = cent.LerpOriginX;
+                se.OriginY = cent.LerpOriginY;
+                se.OriginZ = cent.LerpOriginZ;
+                se.AnglesX = cent.LerpAnglesX;
+                se.AnglesY = cent.LerpAnglesY;
+                se.AnglesZ = cent.LerpAnglesZ;
+                solidCount++;
+            }
+        }
+
+        Prediction.SetSolidEntities(solids, solidCount);
+        Prediction.SetTriggerEntities(triggers, triggerCount);
     }
 
     private static void DrainServerCommands()
@@ -944,27 +1045,23 @@ public static unsafe class CGame
 
     private static void CalcViewValues(ref Q3RefDef refdef)
     {
-        ref var ps = ref _snap->Ps;
+        ref var ps = ref Prediction.PredictedPlayerState;
 
         refdef.X = 0;
         refdef.Y = 0;
         refdef.Width = _screenWidth;
         refdef.Height = _screenHeight;
 
-        // View origin — player origin + viewheight
+        // View origin — from predicted player state
         refdef.ViewOrgX = ps.OriginX;
         refdef.ViewOrgY = ps.OriginY;
         refdef.ViewOrgZ = ps.OriginZ + ps.ViewHeight;
 
-        // Interpolate between snapshots
-        if (_nextSnap != null && _snap->ServerTime != _nextSnap->ServerTime)
-        {
-            ref var nextPs = ref _nextSnap->Ps;
-            float f = _frameInterpolation;
-            refdef.ViewOrgX = ps.OriginX + f * (nextPs.OriginX - ps.OriginX);
-            refdef.ViewOrgY = ps.OriginY + f * (nextPs.OriginY - ps.OriginY);
-            refdef.ViewOrgZ = ps.OriginZ + f * (nextPs.OriginZ - ps.OriginZ) + ps.ViewHeight;
-        }
+        // Apply prediction error smoothing
+        Prediction.GetPredictionError(out float errX, out float errY, out float errZ, _time);
+        refdef.ViewOrgX += errX;
+        refdef.ViewOrgY += errY;
+        refdef.ViewOrgZ += errZ;
 
         // View angles → axis
         float pitch = ps.ViewAnglesX * MathF.PI / 180.0f;

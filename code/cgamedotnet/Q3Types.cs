@@ -133,6 +133,38 @@ public unsafe struct Q3PlayerState
     public const int MAX_WEAPONS = 16;
 }
 
+// usercmd_t — 24 bytes
+[StructLayout(LayoutKind.Sequential)]
+public struct Q3UserCmd
+{
+    public int ServerTime;
+    public int Angle0, Angle1, Angle2;
+    public int Buttons;
+    public byte Weapon;
+    public sbyte ForwardMove;
+    public sbyte RightMove;
+    public sbyte UpMove;
+}
+
+// trace_t — 56 bytes (with embedded cplane_t)
+[StructLayout(LayoutKind.Sequential)]
+public struct Q3Trace
+{
+    public int AllSolid;       // qboolean
+    public int StartSolid;     // qboolean
+    public float Fraction;
+    public float EndPosX, EndPosY, EndPosZ;
+    // cplane_t (20 bytes)
+    public float PlaneNormalX, PlaneNormalY, PlaneNormalZ;
+    public float PlaneDist;
+    public byte PlaneType;
+    public byte PlaneSignBits;
+    public byte PlanePad0, PlanePad1;
+    public int SurfaceFlags;
+    public int Contents;
+    public int EntityNum;
+}
+
 // snapshot_t — ~53772 bytes
 // Note: The entities[256] array can't be represented as a fixed array of structs in C#.
 // We use a single _entity0 placeholder and read entities via pointer arithmetic.
@@ -430,7 +462,7 @@ public static class EntityNum
 }
 
 // Event types (entity_event_t from bg_public.h)
-public static class EntityEvent
+public static partial class EntityEvent
 {
     public const int EV_NONE = 0;
     public const int EV_FOOTSTEP = 1;
