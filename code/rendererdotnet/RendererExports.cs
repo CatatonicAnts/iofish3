@@ -75,6 +75,7 @@ public static unsafe class RendererExports
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] Renderer shutdown\n");
 
         // Always clean up subsystems
+        _scene?.DestroyPortalFbo();
         _scene = null;
         _models = null;
         _skins = null;

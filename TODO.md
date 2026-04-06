@@ -35,7 +35,7 @@ A list of planned features, improvements, and tasks for this project.
 
 - [x] **Light grid for entity lighting** - BSP stores a 3D grid of ambient+directed light samples. Trilinear interpolation samples the grid at entity position. Ambient + directed lighting with per-entity light direction replaces hardcoded uniform light. Supports RF_LIGHTING_ORIGIN for multi-part models. `CPX 3`
 - [x] **Flare rendering** - Light flares (RT_FLARE, MST_FLARE) with depth-based visibility testing and intensity fading. GL2 uses depth reads to check occlusion. We skip MST_FLARE surfaces entirely. `CPX 3`
-- [ ] **Portal / mirror rendering** - Recursive scene rendering through portal surfaces. GL2 detects portal sort, renders the scene from the mirrored viewpoint into an FBO, then composites it. Complex but needed for maps with mirrors/portals. `CPX 5`
+- [x] **Portal / mirror rendering** - FBO-based recursive scene rendering through portal surfaces. Detects portal sort, renders scene from mirrored viewpoint into FBO with screen-space UV projection, composites portal texture. Includes mirror face culling reversal, RT_PORTALSURFACE entity matching, and fallback to environment mapping. `CPX 5`
 
 ### Tier 3 — GL2-Specific Advanced Features
 

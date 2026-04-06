@@ -41,6 +41,8 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _parallaxScaleLoc;
     private int _texDeluxeMapLoc;
     private int _useDeluxeMapLoc;
+    private int _portalMapLoc;
+    private int _screenSizeLoc;
     private float _greyscaleValue; // 0.0=color, 1.0=fully greyscale
 
     private uint _vao;
@@ -107,6 +109,10 @@ public sealed unsafe class BspRenderer : IDisposable
 
     // Surfaces drawn this frame (for dlight reuse)
     private readonly List<int> _visibleSurfaceIndices = new(4096);
+
+    // Portal rendering: collected portal surface info and portal texture
+    private uint _portalTexture;  // Set by SceneManager before Render()
+    private int _portalSurfIdx = -1;  // First visible portal surface index
 
     private const string DlightVertSrc = """
         #version 450 core
@@ -377,6 +383,8 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uUseParallax;
         uniform float uParallaxScale; // height scale (default 0.05)
         uniform int uUseDeluxeMap;
+        uniform int uPortalMap;   // 1=use screen-space UVs from gl_FragCoord
+        uniform vec2 uScreenSize; // viewport size for portal mapping
 
         out vec4 oColor;
 
@@ -414,6 +422,13 @@ public sealed unsafe class BspRenderer : IDisposable
         }
 
         void main() {
+            // Portal map: sample texture using screen-space coordinates
+            if (uPortalMap != 0) {
+                vec2 screenUV = gl_FragCoord.xy / uScreenSize;
+                oColor = texture(uTexDiffuse, screenUV);
+                return;
+            }
+
             vec2 uv = vUV;
 
             // Parallax offset (modifies UVs before all sampling)
@@ -531,6 +546,8 @@ public sealed unsafe class BspRenderer : IDisposable
         _parallaxScaleLoc = _gl.GetUniformLocation(_program, "uParallaxScale");
         _texDeluxeMapLoc = _gl.GetUniformLocation(_program, "uTexDeluxeMap");
         _useDeluxeMapLoc = _gl.GetUniformLocation(_program, "uUseDeluxeMap");
+        _portalMapLoc = _gl.GetUniformLocation(_program, "uPortalMap");
+        _screenSizeLoc = _gl.GetUniformLocation(_program, "uScreenSize");
 
         // Set texture unit bindings (static)
         _gl.UseProgram(_program);
@@ -728,6 +745,53 @@ public sealed unsafe class BspRenderer : IDisposable
     /// <summary>
     /// Render the world using BSP tree traversal for visibility.
     /// Renders opaque surfaces first, then transparent surfaces in a second pass.
+    /// <summary>Set the portal texture ID for this frame's portal surface rendering.</summary>
+    public void SetPortalTexture(uint texId) => _portalTexture = texId;
+
+    /// <summary>
+    /// Get the plane of the first visible portal surface from the last frame.
+    /// Returns false if no portal surface was visible.
+    /// </summary>
+    public bool GetPortalSurface(out float normalX, out float normalY, out float normalZ,
+        out float dist, out float centerX, out float centerY, out float centerZ)
+    {
+        normalX = normalY = normalZ = dist = centerX = centerY = centerZ = 0;
+        if (_portalSurfIdx < 0 || _world == null) return false;
+
+        ref var surf = ref _world.Surfaces[_portalSurfIdx];
+        if (surf.NumVertices < 3) return false;
+
+        // Compute plane from first 3 vertices
+        ref var v0 = ref _world.Vertices[surf.FirstVertex];
+        ref var v1 = ref _world.Vertices[surf.FirstVertex + 1];
+        ref var v2 = ref _world.Vertices[surf.FirstVertex + 2];
+
+        float e1x = v1.X - v0.X, e1y = v1.Y - v0.Y, e1z = v1.Z - v0.Z;
+        float e2x = v2.X - v0.X, e2y = v2.Y - v0.Y, e2z = v2.Z - v0.Z;
+        normalX = e1y * e2z - e1z * e2y;
+        normalY = e1z * e2x - e1x * e2z;
+        normalZ = e1x * e2y - e1y * e2x;
+        float len = MathF.Sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+        if (len < 0.001f) return false;
+        normalX /= len; normalY /= len; normalZ /= len;
+        dist = normalX * v0.X + normalY * v0.Y + normalZ * v0.Z;
+
+        // Center = average of all vertices
+        float cx = 0, cy = 0, cz = 0;
+        for (int i = 0; i < surf.NumVertices; i++)
+        {
+            ref var v = ref _world.Vertices[surf.FirstVertex + i];
+            cx += v.X; cy += v.Y; cz += v.Z;
+        }
+        centerX = cx / surf.NumVertices;
+        centerY = cy / surf.NumVertices;
+        centerZ = cz / surf.NumVertices;
+        return true;
+    }
+
+    /// <summary>
+    /// Main BSP rendering entry point. Walks the BSP tree, collects visible surfaces,
+    /// and renders them in shader-sorted batches.
     /// </summary>
     public void Render(float* mvp, float viewX, float viewY, float viewZ,
                        ShaderManager shaders, float timeSec,
@@ -739,6 +803,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _transparentSurfaces.Clear();
         _visibleSurfaceIndices.Clear();
         _visibleFlares.Clear();
+        _portalSurfIdx = -1;
         _viewX = viewX;
         _viewY = viewY;
         _viewZ = viewZ;
@@ -759,6 +824,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_useLmUVLoc, 0);
         _gl.Uniform1(_useNormalMapLoc, 0);
         _gl.Uniform1(_useSpecularMapLoc, 0);
+        _gl.Uniform1(_portalMapLoc, 0);
 
         // Read r_greyscale cvar each frame (0 = color, 1 = fully greyscale)
         int gsInt = EngineImports.Cvar_VariableIntegerValue("r_greyscale");
@@ -1012,12 +1078,19 @@ public sealed unsafe class BspRenderer : IDisposable
             if ((sFlags & SurfaceFlags.SURF_SKY) != 0)
                 return;
 
-            // Portal/mirror surfaces (sort key 1): render with environment mapping
-            // as an approximation since full portal rendering is not yet implemented.
+            // Portal/mirror surfaces (sort key 1): use portal FBO texture if available,
+            // fall back to environment mapping if no portal render was performed.
             int sortKey0 = shaders.GetSortKey(surf.ShaderHandle);
             if (sortKey0 == 1)
             {
-                DrawSurfacePortal(ref surf, shaders);
+                // Record the first portal surface for the next frame's portal render
+                if (_portalSurfIdx < 0)
+                    _portalSurfIdx = surfIdx;
+
+                if (_portalTexture != 0)
+                    DrawSurfacePortalFbo(ref surf, shaders);
+                else
+                    DrawSurfacePortal(ref surf, shaders);
                 return;
             }
 
@@ -1198,6 +1271,43 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.DepthFunc(depthFuncVal == 1 ? DepthFunction.Equal : DepthFunction.Lequal);
 
         ApplyDeforms(shaders.GetDeforms(surf.ShaderHandle));
+    }
+
+    /// <summary>
+    /// Render a portal/mirror surface using the portal FBO texture with screen-space UVs.
+    /// </summary>
+    private void DrawSurfacePortalFbo(ref BspSurface surf, ShaderManager shaders)
+    {
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, _portalTexture);
+
+        _gl.Uniform1(_useLightmapLoc, 0);
+        _gl.Uniform1(_alphaFuncLoc, 0);
+        _gl.Uniform1(_rgbGenLoc, 0); // identity
+        _gl.Uniform1(_envMapLoc, 0);
+        _gl.Uniform1(_useNormalMapLoc, 0);
+        _gl.Uniform1(_useSpecularMapLoc, 0);
+        SetTcModUniforms(null);
+        _gl.Uniform1(_deformTypeLoc, -1);
+
+        // Enable portal map mode — shader will use gl_FragCoord for UVs
+        _gl.Uniform1(_portalMapLoc, 1);
+        Span<int> vp = stackalloc int[4];
+        _gl.GetInteger(GLEnum.Viewport, vp);
+        _gl.Uniform2(_screenSizeLoc, (float)vp[2], (float)vp[3]);
+
+        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+        ApplyCullMode(cullMode);
+
+        _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
+            (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
+            (void*)(surf.FirstIndex * sizeof(int)),
+            surf.FirstVertex);
+
+        RestoreCullMode(cullMode);
+
+        // Disable portal map mode
+        _gl.Uniform1(_portalMapLoc, 0);
     }
 
     /// <summary>

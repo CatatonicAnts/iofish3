@@ -212,4 +212,39 @@ public static unsafe class EngineImports
             return;
         ((delegate* unmanaged[Cdecl]<byte*, int, void>)_ri.CL_WriteAVIVideoFrame)(data, size);
     }
+
+    /// <summary>
+    /// Start cinematic playback. Returns a handle, or -1 on failure.
+    /// </summary>
+    public static int CIN_PlayCinematic(string name, int x, int y, int w, int h, int flags)
+    {
+        if (!_initialized || _ri.CIN_PlayCinematic == 0)
+            return -1;
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        fixed (byte* namePtr = nameBytes)
+        {
+            return ((delegate* unmanaged[Cdecl]<byte*, int, int, int, int, int, int>)_ri.CIN_PlayCinematic)(
+                namePtr, x, y, w, h, flags);
+        }
+    }
+
+    /// <summary>
+    /// Advance the cinematic by one frame. Returns status.
+    /// </summary>
+    public static int CIN_RunCinematic(int handle)
+    {
+        if (!_initialized || _ri.CIN_RunCinematic == 0)
+            return 0;
+        return ((delegate* unmanaged[Cdecl]<int, int>)_ri.CIN_RunCinematic)(handle);
+    }
+
+    /// <summary>
+    /// Upload current cinematic frame data to the renderer.
+    /// </summary>
+    public static void CIN_UploadCinematic(int handle)
+    {
+        if (!_initialized || _ri.CIN_UploadCinematic == 0)
+            return;
+        ((delegate* unmanaged[Cdecl]<int, void>)_ri.CIN_UploadCinematic)(handle);
+    }
 }

@@ -47,6 +47,15 @@ public sealed unsafe class SceneManager
     private const int RT_RAIL_CORE = 4;
     private const int RT_RAIL_RINGS = 5;
     private const int RT_LIGHTNING = 6;
+    private const int RT_PORTALSURFACE = 7;
+
+    // Portal rendering state
+    private uint _portalFbo;
+    private uint _portalColorTex;
+    private uint _portalDepthRbo;
+    private int _portalTexW;
+    private int _portalTexH;
+    private bool _isPortalPass;  // Prevent recursion
 
     public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
                      Renderer3D renderer3D, World.BspRenderer bspRenderer,
@@ -261,6 +270,32 @@ public sealed unsafe class SceneManager
 
             _entities.Add(entity);
         }
+        else if (reType == RT_PORTALSURFACE)
+        {
+            // Portal surface entity: origin = portal position, oldorigin = camera target
+            float* origin = (float*)(entityPtr + 68);
+            float* oldorigin = (float*)(entityPtr + 84);
+            float* axis = (float*)(entityPtr + 28);
+
+            var entity = new SceneEntity
+            {
+                ReType = reType,
+                Renderfx = renderfx,
+                OriginX = origin[0],
+                OriginY = origin[1],
+                OriginZ = origin[2],
+                OldOriginX = oldorigin[0],
+                OldOriginY = oldorigin[1],
+                OldOriginZ = oldorigin[2],
+                Frame = *(int*)(entityPtr + 80),
+                OldFrame = *(int*)(entityPtr + 96),
+                CustomSkin = *(int*)(entityPtr + 104), // skinNum for rotation
+            };
+            for (int i = 0; i < 9; i++)
+                entity.Axis[i] = axis[i];
+
+            _entities.Add(entity);
+        }
     }
 
     /// <summary>
@@ -340,6 +375,18 @@ public sealed unsafe class SceneManager
         bool hasEntities = _entities.Count > 0;
         bool hasPolys = _polys.Count > 0;
         if (!hasWorld && !hasEntities && !hasPolys) return;
+
+        // Portal/mirror rendering pass (before main scene)
+        uint portalTexture = 0;
+        if (hasWorld && !_isPortalPass)
+        {
+            portalTexture = TryRenderPortal(viewOrg, viewAxis, fovX, fovY,
+                x, y, width, height, time, rdflags);
+            if (portalTexture != 0)
+                _bspRenderer!.SetPortalTexture(portalTexture);
+            else
+                _bspRenderer!.SetPortalTexture(0);
+        }
 
         // Bind scene FBO for post-processing (only for world scenes)
         bool usePostProcess = hasWorld && _postProcess != null && _postProcess.IsEnabled;
@@ -888,6 +935,315 @@ public sealed unsafe class SceneManager
         _gl.Disable(EnableCap.Blend);
         _gl.BindVertexArray(0);
     }
+
+    #region Portal / Mirror Rendering
+
+    /// <summary>Ensure the portal FBO exists and matches the given dimensions.</summary>
+    private void EnsurePortalFbo(int width, int height)
+    {
+        if (_gl == null) return;
+        if (_portalFbo != 0 && _portalTexW == width && _portalTexH == height)
+            return;
+
+        DestroyPortalFbo();
+
+        _portalFbo = _gl.GenFramebuffer();
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _portalFbo);
+
+        _portalColorTex = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.Texture2D, _portalColorTex);
+        _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8,
+            (uint)width, (uint)height, 0,
+            Silk.NET.OpenGL.PixelFormat.Rgba, Silk.NET.OpenGL.PixelType.UnsignedByte, null);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
+        _gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0,
+            TextureTarget.Texture2D, _portalColorTex, 0);
+
+        _portalDepthRbo = _gl.GenRenderbuffer();
+        _gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, _portalDepthRbo);
+        _gl.RenderbufferStorage(RenderbufferTarget.Renderbuffer, InternalFormat.DepthComponent24,
+            (uint)width, (uint)height);
+        _gl.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment,
+            RenderbufferTarget.Renderbuffer, _portalDepthRbo);
+
+        _portalTexW = width;
+        _portalTexH = height;
+
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+    }
+
+    public void DestroyPortalFbo()
+    {
+        if (_gl == null) return;
+        if (_portalColorTex != 0) { _gl.DeleteTexture(_portalColorTex); _portalColorTex = 0; }
+        if (_portalDepthRbo != 0) { _gl.DeleteRenderbuffer(_portalDepthRbo); _portalDepthRbo = 0; }
+        if (_portalFbo != 0) { _gl.DeleteFramebuffer(_portalFbo); _portalFbo = 0; }
+        _portalTexW = 0;
+        _portalTexH = 0;
+    }
+
+    /// <summary>
+    /// Attempt to render a portal/mirror scene. Returns the portal texture ID,
+    /// or 0 if portal rendering was not possible.
+    /// </summary>
+    private uint TryRenderPortal(
+        float* viewOrg, float* viewAxis,
+        float fovX, float fovY,
+        int x, int y, int width, int height,
+        int time, int rdflags)
+    {
+        if (_isPortalPass || _bspRenderer == null || _bspWorld == null || _gl == null || _shaders == null)
+            return 0;
+
+        // Get portal surface info from BspRenderer
+        if (!_bspRenderer.GetPortalSurface(out float pnX, out float pnY, out float pnZ, out float pDist,
+                out float pcX, out float pcY, out float pcZ))
+            return 0;
+
+        // Find matching RT_PORTALSURFACE entity
+        bool isMirror = false;
+        float camX = 0, camY = 0, camZ = 0;
+
+        bool foundEntity = false;
+        foreach (var ent in _entities)
+        {
+            if (ent.ReType != RT_PORTALSURFACE) continue;
+
+            // Check distance from entity to portal plane
+            float d = pnX * ent.OriginX + pnY * ent.OriginY + pnZ * ent.OriginZ - pDist;
+            if (d > 64 || d < -64) continue;
+
+            foundEntity = true;
+
+            // Mirror: origin == oldorigin
+            if (ent.OriginX == ent.OldOriginX &&
+                ent.OriginY == ent.OldOriginY &&
+                ent.OriginZ == ent.OldOriginZ)
+            {
+                isMirror = true;
+            }
+            else
+            {
+                // Portal: camera at oldorigin
+                camX = ent.OldOriginX;
+                camY = ent.OldOriginY;
+                camZ = ent.OldOriginZ;
+            }
+            break;
+        }
+
+        if (!foundEntity)
+        {
+            // No portal entity found — treat as mirror (common case for q3dm0)
+            isMirror = true;
+        }
+
+        // Compute mirrored/portal view
+        Span<float> newViewOrg = stackalloc float[3];
+        Span<float> newViewAxis = stackalloc float[9];
+
+        if (isMirror)
+        {
+            // Reflect camera position across the portal plane
+            float dot = viewOrg[0] * pnX + viewOrg[1] * pnY + viewOrg[2] * pnZ - pDist;
+            newViewOrg[0] = viewOrg[0] - 2 * dot * pnX;
+            newViewOrg[1] = viewOrg[1] - 2 * dot * pnY;
+            newViewOrg[2] = viewOrg[2] - 2 * dot * pnZ;
+
+            // Reflect each view axis across the portal plane
+            for (int a = 0; a < 3; a++)
+            {
+                float ax = viewAxis[a * 3 + 0];
+                float ay = viewAxis[a * 3 + 1];
+                float az = viewAxis[a * 3 + 2];
+                float d = ax * pnX + ay * pnY + az * pnZ;
+                newViewAxis[a * 3 + 0] = ax - 2 * d * pnX;
+                newViewAxis[a * 3 + 1] = ay - 2 * d * pnY;
+                newViewAxis[a * 3 + 2] = az - 2 * d * pnZ;
+            }
+        }
+        else
+        {
+            // Portal: use camera position and reflect view axes
+            // Build surface coordinate frame
+            float s0x = pnX, s0y = pnY, s0z = pnZ; // surface normal
+            // Perpendicular vector
+            float s1x, s1y, s1z;
+            if (MathF.Abs(s0z) > 0.9f)
+            {
+                s1x = 1; s1y = 0; s1z = 0;
+            }
+            else
+            {
+                s1x = 0; s1y = 0; s1z = 1;
+            }
+            // s1 = s1 - (s1·s0)*s0
+            float ds = s1x * s0x + s1y * s0y + s1z * s0z;
+            s1x -= ds * s0x; s1y -= ds * s0y; s1z -= ds * s0z;
+            float len = MathF.Sqrt(s1x * s1x + s1y * s1y + s1z * s1z);
+            if (len > 0.001f) { s1x /= len; s1y /= len; s1z /= len; }
+            // s2 = cross(s0, s1)
+            float s2x = s0y * s1z - s0z * s1y;
+            float s2y = s0z * s1x - s0x * s1z;
+            float s2z = s0x * s1y - s0y * s1x;
+
+            newViewOrg[0] = camX;
+            newViewOrg[1] = camY;
+            newViewOrg[2] = camZ;
+
+            // Mirror each view axis through surface → camera
+            for (int a = 0; a < 3; a++)
+            {
+                float ax = viewAxis[a * 3 + 0];
+                float ay = viewAxis[a * 3 + 1];
+                float az = viewAxis[a * 3 + 2];
+                float d0 = ax * s0x + ay * s0y + az * s0z;
+                float d1 = ax * s1x + ay * s1y + az * s1z;
+                float d2 = ax * s2x + ay * s2y + az * s2z;
+                // Negate d0 component (camera faces opposite direction through portal)
+                newViewAxis[a * 3 + 0] = -d0 * s0x + d1 * s1x + d2 * s2x;
+                newViewAxis[a * 3 + 1] = -d0 * s0y + d1 * s1y + d2 * s2y;
+                newViewAxis[a * 3 + 2] = -d0 * s0z + d1 * s1z + d2 * s2z;
+            }
+        }
+
+        // Create/resize portal FBO
+        EnsurePortalFbo(width, height);
+        if (_portalFbo == 0) return 0;
+
+        // Render portal scene to FBO
+        _isPortalPass = true;
+
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _portalFbo);
+        _gl.Viewport(0, 0, (uint)width, (uint)height);
+        _gl.Enable(EnableCap.ScissorTest);
+        _gl.Scissor(0, 0, (uint)width, (uint)height);
+        _gl.ClearColor(0, 0, 0, 1);
+        _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+
+        // Build portal view+projection matrices
+        Span<float> pView = stackalloc float[16];
+        Span<float> pProj = stackalloc float[16];
+        Span<float> pVp = stackalloc float[16];
+
+        fixed (float* newOrgPtr = newViewOrg)
+        fixed (float* newAxisPtr = newViewAxis)
+        {
+            BuildViewMatrix(newOrgPtr, newAxisPtr, pView);
+        }
+        BuildPerspective(fovX, fovY, 1.0f, 8192.0f, pProj);
+        MatMul(pProj, pView, pVp);
+
+        float timeSec = time / 1000.0f;
+
+        // Mirror: flip face culling
+        if (isMirror)
+            _gl.FrontFace(FrontFaceDirection.CW);
+
+        // Render skybox
+        if (_skyboxRenderer != null && _skyboxRenderer.IsLoaded)
+        {
+            fixed (float* vpPtr = pVp)
+                _skyboxRenderer.Render(vpPtr, newViewOrg[0], newViewOrg[1], newViewOrg[2]);
+        }
+
+        // Render world BSP (skip portal surfaces in portal pass)
+        fixed (float* vpPtr = pVp)
+        {
+            _bspRenderer.Render(vpPtr, newViewOrg[0], newViewOrg[1], newViewOrg[2],
+                _shaders, timeSec, _dlights);
+        }
+
+        // Render entities (skip portal surface entities and RF_THIRD_PERSON)
+        Span<float> modelMat = stackalloc float[16];
+        Span<float> mvp = stackalloc float[16];
+
+        foreach (var ent in _entities)
+        {
+            if (ent.ReType == RT_PORTALSURFACE) continue;
+            if ((ent.Renderfx & RF_THIRD_PERSON) != 0) continue;
+
+            if (ent.ReType == RT_MODEL && _models != null)
+            {
+                if (_models.IsBspModel(ent.ModelHandle))
+                {
+                    int bspIdx = _models.GetBspModelIndex(ent.ModelHandle);
+                    BuildModelMatrix(ent, modelMat);
+                    MatMul(pVp, modelMat, mvp);
+                    fixed (float* mvpPtr = mvp)
+                        _bspRenderer.RenderSubmodel(bspIdx, mvpPtr, _shaders, timeSec);
+                    continue;
+                }
+
+                var model = _models.GetModel(ent.ModelHandle);
+                if (model == null) continue;
+
+                BuildModelMatrix(ent, modelMat);
+                MatMul(pVp, modelMat, mvp);
+
+                float ambR = 0.5f, ambG = 0.5f, ambB = 0.5f;
+                float dLR = 0.5f, dLG = 0.5f, dLB = 0.5f;
+                float ldX = 0.577f, ldY = 0.577f, ldZ = 0.577f;
+                if (_bspWorld.LightGridData != null)
+                {
+                    _bspWorld.SampleLightGrid(
+                        ent.LightOriginX, ent.LightOriginY, ent.LightOriginZ,
+                        out ambR, out ambG, out ambB,
+                        out dLR, out dLG, out dLB,
+                        out ldX, out ldY, out ldZ);
+                    float tlx = ent.Axis[0] * ldX + ent.Axis[1] * ldY + ent.Axis[2] * ldZ;
+                    float tly = ent.Axis[3] * ldX + ent.Axis[4] * ldY + ent.Axis[5] * ldZ;
+                    float tlz = ent.Axis[6] * ldX + ent.Axis[7] * ldY + ent.Axis[8] * ldZ;
+                    ldX = tlx; ldY = tly; ldZ = tlz;
+                }
+
+                foreach (var surface in model.Surfaces)
+                {
+                    int shaderHandle = surface.ShaderHandle;
+                    if (ent.CustomShader > 0) shaderHandle = ent.CustomShader;
+                    else if (ent.CustomSkin > 0 && _skins != null)
+                    {
+                        int skinSh = _skins.GetSurfaceShader(ent.CustomSkin, surface.Name);
+                        if (skinSh > 0) shaderHandle = skinSh;
+                    }
+                    uint texId = _shaders.GetTextureId(shaderHandle);
+                    bool envMap = _shaders.GetHasEnvMap(shaderHandle);
+                    BlendMode blend = _shaders.GetBlendMode(shaderHandle);
+
+                    fixed (float* mvpPtr = mvp)
+                    fixed (float* modelPtr = modelMat)
+                    {
+                        _renderer3D!.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
+                            mvpPtr, modelPtr, texId, ent.R, ent.G, ent.B, ent.A,
+                            envMap, newViewOrg[0], newViewOrg[1], newViewOrg[2], blend,
+                            ambR, ambG, ambB, dLR, dLG, dLB, ldX, ldY, ldZ);
+                    }
+                }
+            }
+            else if (ent.ReType == RT_SPRITE)
+            {
+                fixed (float* vpPtr = pVp)
+                fixed (float* axPtr = newViewAxis)
+                {
+                    DrawSprite(ent, axPtr, new ReadOnlySpan<float>(vpPtr, 16));
+                }
+            }
+        }
+
+        // Restore state
+        if (isMirror)
+            _gl.FrontFace(FrontFaceDirection.Ccw);
+
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+        _isPortalPass = false;
+
+        return _portalColorTex;
+    }
+
+    #endregion
 }
 
 /// <summary>
