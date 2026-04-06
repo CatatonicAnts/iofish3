@@ -26,6 +26,7 @@ public static unsafe class CGame
         public bool Interpolate;  // nextState valid for interpolation
         public bool CurrentValid; // currentState is valid
         public int SnapShotTime; // last time found in snapshot
+        public int PreviousEvent; // last processed event (for dedup)
 
         // Interpolated values (computed each frame)
         public float LerpOriginX, LerpOriginY, LerpOriginZ;
@@ -48,10 +49,34 @@ public static unsafe class CGame
     private static int _levelStartTime;
     private static string _mapName = "";
 
+    // HUD constants (640x480 virtual coords)
+    private const int SCREEN_WIDTH = 640;
+    private const int SCREEN_HEIGHT = 480;
+    private const int CHAR_WIDTH = 32;   // status bar number width
+    private const int CHAR_HEIGHT = 48;  // status bar number height
+    private const int BIGCHAR_WIDTH = 16;
+    private const int BIGCHAR_HEIGHT = 16;
+    private const int ICON_SIZE = 48;
+    private const int TEXT_ICON_SPACE = 4;
+    private const int STAT_MINUS = 10;
+    private const int NUM_CROSSHAIRS = 10;
+    private const int FPS_FRAMES = 4;
+
     // Media handles
     private static int _charsetShader;
     private static int _whiteShader;
-    private static int _crosshairShader;
+    private static int _selectShader;
+    private static int _noammoShader;
+    private static readonly int[] _crosshairShaders = new int[NUM_CROSSHAIRS];
+    private static readonly int[] _numberShaders = new int[11]; // 0-9 + minus
+
+    // FPS tracking
+    private static readonly int[] _fpsFrameTimes = new int[FPS_FRAMES];
+    private static int _fpsIndex;
+    private static int _fpsPreviousTime;
+
+    // Weapon icons (per weapon type)
+    private static readonly int[] _weaponIcons = new int[Weapons.WP_NUM_WEAPONS];
 
     // Registered models/sounds from config strings
     private static readonly int[] _gameModels = new int[MAX_MODELS];
@@ -126,6 +151,12 @@ public static unsafe class CGame
         // Register models from config strings
         RegisterGraphics();
 
+        // Register event sounds
+        RegisterEventSounds();
+
+        // Register console commands
+        InitConsoleCommands();
+
         // Read level start time
         string startTimeStr = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_LEVEL_START_TIME);
         _levelStartTime = int.TryParse(startTimeStr, out int st) ? st : 0;
@@ -147,7 +178,31 @@ public static unsafe class CGame
         _nextSnap = null;
     }
 
-    public static bool ConsoleCommand() => false;
+    public static bool ConsoleCommand()
+    {
+        string cmd = Syscalls.Argv(0);
+        // All cgame commands are forwarded to the server
+        // No local-only commands yet
+        return false;
+    }
+
+    // ── Console Commands ──
+
+    private static readonly string[] _serverCommands = new[]
+    {
+        "kill", "say", "say_team", "tell",
+        "give", "god", "notarget", "noclip", "where",
+        "team", "follow", "follownext", "followprev",
+        "addbot", "setviewpos", "callvote", "vote",
+        "callteamvote", "teamvote", "stats", "teamtask",
+        "loaddefered"
+    };
+
+    private static void InitConsoleCommands()
+    {
+        foreach (string cmd in _serverCommands)
+            Syscalls.AddCommand(cmd);
+    }
 
     // ── DrawActiveFrame — main per-frame entry point ──
     public static void DrawActiveFrame(int serverTime, int stereoView, bool demoPlayback)
@@ -169,8 +224,12 @@ public static unsafe class CGame
         if (_snap == null) return;
         if ((_snap->SnapFlags & SnapFlags.SNAPFLAG_NOT_ACTIVE) != 0) return;
 
+        // Track weapon changes for weapon select display (before updating)
+        int newWeapon = _snap->Ps.Weapon;
+        if (newWeapon != _weaponSelect)
+            _weaponSelectTime = _time;
+        _weaponSelect = newWeapon;
         Syscalls.SetUserCmdValue(_weaponSelect, 1.0f);
-        _weaponSelect = _snap->Ps.Weapon;
 
         // Calculate frame interpolation factor
         if (_nextSnap != null)
@@ -213,7 +272,41 @@ public static unsafe class CGame
     {
         _charsetShader = Syscalls.R_RegisterShader("gfx/2d/bigchars");
         _whiteShader = Syscalls.R_RegisterShader("white");
-        _crosshairShader = Syscalls.R_RegisterShader("gfx/2d/crosshaire");
+        _selectShader = Syscalls.R_RegisterShader("gfx/2d/select");
+        _noammoShader = Syscalls.R_RegisterShader("icons/noammo");
+
+        // Number shaders (0-9 + minus)
+        string[] numNames = {
+            "gfx/2d/numbers/zero_32b", "gfx/2d/numbers/one_32b",
+            "gfx/2d/numbers/two_32b", "gfx/2d/numbers/three_32b",
+            "gfx/2d/numbers/four_32b", "gfx/2d/numbers/five_32b",
+            "gfx/2d/numbers/six_32b", "gfx/2d/numbers/seven_32b",
+            "gfx/2d/numbers/eight_32b", "gfx/2d/numbers/nine_32b",
+            "gfx/2d/numbers/minus_32b"
+        };
+        for (int i = 0; i < 11; i++)
+            _numberShaders[i] = Syscalls.R_RegisterShader(numNames[i]);
+
+        // Crosshair shaders (a-j)
+        for (int i = 0; i < NUM_CROSSHAIRS; i++)
+            _crosshairShaders[i] = Syscalls.R_RegisterShader($"gfx/2d/crosshair{(char)('a' + i)}");
+
+        // Weapon icons
+        string[] weaponIconPaths = {
+            "", // WP_NONE
+            "icons/iconw_gauntlet", // WP_GAUNTLET
+            "icons/iconw_machinegun", // WP_MACHINEGUN
+            "icons/iconw_shotgun", // WP_SHOTGUN
+            "icons/iconw_grenade", // WP_GRENADE_LAUNCHER
+            "icons/iconw_rocket", // WP_ROCKET_LAUNCHER
+            "icons/iconw_lightning", // WP_LIGHTNING
+            "icons/iconw_railgun", // WP_RAILGUN
+            "icons/iconw_plasma", // WP_PLASMAGUN
+            "icons/iconw_bfg", // WP_BFG
+            "icons/iconw_grapple" // WP_GRAPPLING_HOOK
+        };
+        for (int i = 1; i < weaponIconPaths.Length && i < Weapons.WP_NUM_WEAPONS; i++)
+            _weaponIcons[i] = Syscalls.R_RegisterShaderNoMip(weaponIconPaths[i]);
 
         // Register inline BSP models
         int numInlineModels = Syscalls.CM_NumInlineModels();
@@ -324,6 +417,7 @@ public static unsafe class CGame
                 out cent.LerpOriginX, out cent.LerpOriginY, out cent.LerpOriginZ);
             EvaluateTrajectory(ref es.APos, snap->ServerTime,
                 out cent.LerpAnglesX, out cent.LerpAnglesY, out cent.LerpAnglesZ);
+            CheckEvents(ref cent);
         }
 
         DrainServerCommands();
@@ -386,6 +480,9 @@ public static unsafe class CGame
             }
 
             cent.Interpolate = false;
+
+            // Check events on transitioned entities
+            CheckEvents(ref cent);
         }
     }
 
@@ -396,6 +493,157 @@ public static unsafe class CGame
         {
             _serverCommandSequence++;
             Syscalls.GetServerCommand(_serverCommandSequence);
+        }
+    }
+
+    // ── Event System (cg_event.c equivalent) ──
+
+    // Registered event sounds
+    private static int _sfxLandSound;
+    private static int _sfxJumpSound;
+    private static int _sfxNoAmmoSound;
+    private static int _sfxTeleportIn;
+    private static int _sfxTeleportOut;
+    private static int _sfxRespawnSound;
+    private static int _sfxGrenBounce1;
+    private static int _sfxGrenBounce2;
+    private static int _sfxRocketExplosion;
+    private static int _sfxPlasmaExplosion;
+
+    private static void RegisterEventSounds()
+    {
+        _sfxLandSound = Syscalls.S_RegisterSound("sound/player/land1.wav", 0);
+        _sfxJumpSound = Syscalls.S_RegisterSound("sound/player/jump1.wav", 0);
+        _sfxNoAmmoSound = Syscalls.S_RegisterSound("sound/weapons/noammo.wav", 0);
+        _sfxTeleportIn = Syscalls.S_RegisterSound("sound/world/telein.wav", 0);
+        _sfxTeleportOut = Syscalls.S_RegisterSound("sound/world/teleout.wav", 0);
+        _sfxRespawnSound = Syscalls.S_RegisterSound("sound/items/respawn1.wav", 0);
+        _sfxGrenBounce1 = Syscalls.S_RegisterSound("sound/weapons/grenade/hgrenb1a.wav", 0);
+        _sfxGrenBounce2 = Syscalls.S_RegisterSound("sound/weapons/grenade/hgrenb2a.wav", 0);
+        _sfxRocketExplosion = Syscalls.S_RegisterSound("sound/weapons/rocket/rocklx1a.wav", 0);
+        _sfxPlasmaExplosion = Syscalls.S_RegisterSound("sound/weapons/plasma/plasmx1a.wav", 0);
+        Syscalls.Print("[.NET cgame] Registered event sounds\n");
+    }
+
+    private static void CheckEvents(ref CEntity cent)
+    {
+        ref var es = ref cent.CurrentState;
+
+        // Event-only entities (eType >= ET_EVENTS)
+        if (es.EType > EntityType.ET_EVENTS)
+        {
+            if (cent.PreviousEvent != 0) return; // already fired
+            cent.PreviousEvent = 1;
+            int eventType = es.EType - EntityType.ET_EVENTS;
+            HandleEntityEvent(ref cent, eventType, es.EventParm);
+            return;
+        }
+
+        // Regular entity events
+        if (es.Event == cent.PreviousEvent) return;
+        cent.PreviousEvent = es.Event;
+        int ev = es.Event & ~EntityEvent.EV_EVENT_BITS;
+        if (ev == 0) return;
+        HandleEntityEvent(ref cent, ev, es.EventParm);
+    }
+
+    private static void HandleEntityEvent(ref CEntity cent, int eventType, int eventParm)
+    {
+        ref var es = ref cent.CurrentState;
+        float* origin = stackalloc float[3];
+        origin[0] = cent.LerpOriginX;
+        origin[1] = cent.LerpOriginY;
+        origin[2] = cent.LerpOriginZ;
+
+        switch (eventType)
+        {
+            case EntityEvent.EV_FOOTSTEP:
+            case EntityEvent.EV_FOOTSTEP_METAL:
+            case EntityEvent.EV_FOOTSPLASH:
+            case EntityEvent.EV_FOOTWADE:
+            case EntityEvent.EV_SWIM:
+                // Footstep sounds — use land sound as fallback
+                Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_BODY, _sfxLandSound);
+                break;
+
+            case EntityEvent.EV_FALL_SHORT:
+                Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxLandSound);
+                break;
+
+            case EntityEvent.EV_JUMP:
+                Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, _sfxJumpSound);
+                break;
+
+            case EntityEvent.EV_JUMP_PAD:
+                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_VOICE, _sfxJumpSound);
+                break;
+
+            case EntityEvent.EV_ITEM_PICKUP:
+            case EntityEvent.EV_GLOBAL_ITEM_PICKUP:
+                // Play item pickup sound (eventParm = item index)
+                if (eventParm > 0 && eventParm < MAX_SOUNDS && _gameSounds[eventParm] != 0)
+                    Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_AUTO, _gameSounds[eventParm]);
+                else
+                    Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_AUTO, _sfxRespawnSound);
+                break;
+
+            case EntityEvent.EV_NOAMMO:
+                Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_AUTO, _sfxNoAmmoSound);
+                break;
+
+            case EntityEvent.EV_CHANGE_WEAPON:
+                // Weapon change — no sound by default
+                break;
+
+            case EntityEvent.EV_FIRE_WEAPON:
+                // Weapon fire sounds handled elsewhere (weapon effects system)
+                break;
+
+            case EntityEvent.EV_ITEM_RESPAWN:
+                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRespawnSound);
+                break;
+
+            case EntityEvent.EV_PLAYER_TELEPORT_IN:
+                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxTeleportIn);
+                break;
+
+            case EntityEvent.EV_PLAYER_TELEPORT_OUT:
+                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxTeleportOut);
+                break;
+
+            case EntityEvent.EV_GRENADE_BOUNCE:
+                if ((Random.Shared.Next() & 1) != 0)
+                    Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxGrenBounce1);
+                else
+                    Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxGrenBounce2);
+                break;
+
+            case EntityEvent.EV_GENERAL_SOUND:
+                // eventParm = sound index from config strings
+                if (eventParm > 0 && eventParm < MAX_SOUNDS && _gameSounds[eventParm] != 0)
+                    Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_VOICE, _gameSounds[eventParm]);
+                break;
+
+            case EntityEvent.EV_GLOBAL_SOUND:
+                if (eventParm > 0 && eventParm < MAX_SOUNDS && _gameSounds[eventParm] != 0)
+                    Syscalls.S_StartSound(null, -1, SoundChannel.CHAN_AUTO, _gameSounds[eventParm]);
+                break;
+
+            case EntityEvent.EV_MISSILE_HIT:
+                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
+                break;
+
+            case EntityEvent.EV_MISSILE_MISS:
+            case EntityEvent.EV_MISSILE_MISS_METAL:
+                Syscalls.S_StartSound(origin, -1, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
+                break;
+
+            case EntityEvent.EV_PAIN:
+            case EntityEvent.EV_DEATH1:
+            case EntityEvent.EV_DEATH2:
+            case EntityEvent.EV_DEATH3:
+                // Pain/death sounds — would need player-specific sounds
+                break;
         }
     }
 
@@ -743,57 +991,314 @@ public static unsafe class CGame
         rent.ShaderRGBA_B = b; rent.ShaderRGBA_A = a;
     }
 
-    // ── 2D HUD ──
+    // ── 2D HUD (cg_draw.c CG_Draw2D equivalent) ──
 
     private static void DrawHud()
     {
         if (_snap == null) return;
 
         ref var ps = ref _snap->Ps;
+
+        // Status bar (bottom)
+        DrawStatusBar();
+
+        // Crosshair (center)
+        DrawCrosshair();
+
+        // Weapon select overlay
+        DrawWeaponSelect();
+
+        // Upper right: FPS + Timer
+        float y = 0;
+        y = DrawFPS(y);
+        y = DrawTimer(y);
+
+        // .NET cgame indicator (top right)
+        DrawString(SCREEN_WIDTH - 82, (int)y + 2, ".NET CG", 1.0f, 0.0f, 1.0f, 0.6f);
+
+        Syscalls.R_SetColor(null);
+    }
+
+    private static void DrawStatusBar()
+    {
+        ref var ps = ref _snap->Ps;
         int health = ps.Stats[Stats.STAT_HEALTH];
         int armor = ps.Stats[Stats.STAT_ARMOR];
 
-        // Crosshair
-        if (_crosshairShader != 0)
+        // Color scheme matching Q3
+        // colors[0] = gold/normal, [1] = red/low, [2] = grey/firing, [3] = white/over100
+        float* color = stackalloc float[4];
+
+        // ── Ammo ──
+        int weapon = ps.Weapon;
+        if (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS)
         {
-            float* xhairColor = stackalloc float[4];
-            xhairColor[0] = 1; xhairColor[1] = 1; xhairColor[2] = 1; xhairColor[3] = 0.8f;
-            Syscalls.R_SetColor(xhairColor);
-            float size = 24;
-            Syscalls.R_DrawStretchPic(320 - size / 2, 240 - size / 2, size, size,
-                0, 0, 1, 1, _crosshairShader);
+            int ammo = ps.Ammo[weapon];
+            if (ammo > -1)
+            {
+                // Gold for normal, red for low, grey when firing
+                if (ammo <= 0) { color[0] = 1; color[1] = 0.2f; color[2] = 0.2f; }
+                else { color[0] = 1; color[1] = 0.69f; color[2] = 0; }
+                color[3] = 1;
+                Syscalls.R_SetColor(color);
+                DrawField(0, 432, 3, ammo);
+                Syscalls.R_SetColor(null);
+
+                // Weapon icon next to ammo
+                if (_weaponIcons[weapon] != 0)
+                    DrawPic(CHAR_WIDTH * 3 + TEXT_ICON_SPACE, 432, ICON_SIZE, ICON_SIZE, _weaponIcons[weapon]);
+            }
         }
 
-        // Background bar
-        float* bgColor = stackalloc float[4];
-        bgColor[0] = 0; bgColor[1] = 0; bgColor[2] = 0; bgColor[3] = 0.5f;
-        Syscalls.R_SetColor(bgColor);
-        Syscalls.R_DrawStretchPic(0, 440, 640, 40, 0, 0, 1, 1, _whiteShader);
+        // ── Health ──
+        if (health > 100) { color[0] = 1; color[1] = 1; color[2] = 1; }
+        else if (health > 25) { color[0] = 1; color[1] = 0.69f; color[2] = 0; }
+        else if (health > 0) {
+            // Flash between gold and red
+            if ((_time >> 8 & 1) != 0) { color[0] = 1; color[1] = 0.2f; color[2] = 0.2f; }
+            else { color[0] = 1; color[1] = 0.69f; color[2] = 0; }
+        }
+        else { color[0] = 1; color[1] = 0.2f; color[2] = 0.2f; }
+        color[3] = 1;
+        Syscalls.R_SetColor(color);
+        DrawField(185, 432, 3, health);
 
-        // Health
-        float* hpColor = stackalloc float[4];
-        if (health > 50) { hpColor[0] = 0; hpColor[1] = 1; hpColor[2] = 0; }
-        else if (health > 25) { hpColor[0] = 1; hpColor[1] = 1; hpColor[2] = 0; }
-        else { hpColor[0] = 1; hpColor[1] = 0; hpColor[2] = 0; }
-        hpColor[3] = 1;
-        Syscalls.R_SetColor(hpColor);
-        float hpWidth = MathF.Max(0, MathF.Min(health, 200)) / 200.0f * 200.0f;
-        Syscalls.R_DrawStretchPic(20, 450, hpWidth, 20, 0, 0, 1, 1, _whiteShader);
-
-        // Armor
-        float* armorColor = stackalloc float[4];
-        armorColor[0] = 0.3f; armorColor[1] = 0.5f; armorColor[2] = 1; armorColor[3] = 1;
-        Syscalls.R_SetColor(armorColor);
-        float armorWidth = MathF.Max(0, MathF.Min(armor, 200)) / 200.0f * 200.0f;
-        Syscalls.R_DrawStretchPic(420, 450, armorWidth, 20, 0, 0, 1, 1, _whiteShader);
-
-        // .NET indicator
-        float* greenColor = stackalloc float[4];
-        greenColor[0] = 0; greenColor[1] = 1; greenColor[2] = 0.5f; greenColor[3] = 0.6f;
-        Syscalls.R_SetColor(greenColor);
-        Syscalls.R_DrawStretchPic(590, 4, 46, 12, 0, 0, 1, 1, _whiteShader);
+        // ── Armor ──
+        if (armor > 0)
+        {
+            color[0] = 1; color[1] = 0.69f; color[2] = 0; color[3] = 1;
+            Syscalls.R_SetColor(color);
+            DrawField(370, 432, 3, armor);
+        }
 
         Syscalls.R_SetColor(null);
+    }
+
+    private static void DrawField(int x, int y, int width, int value)
+    {
+        if (width < 1) return;
+        if (width > 5) width = 5;
+
+        // Clamp value to fit width
+        int maxVal = 1, minVal = 0;
+        for (int i = 0; i < width; i++) maxVal *= 10;
+        maxVal--;
+        for (int i = 0; i < width - 1; i++) minVal = minVal * 10 + 9;
+        minVal = -minVal;
+        if (value > maxVal) value = maxVal;
+        if (value < minVal) value = minVal;
+
+        // Convert to string and draw right-aligned
+        string num = value.ToString();
+        int len = num.Length;
+        if (len > width) len = width;
+
+        x += 2 + CHAR_WIDTH * (width - len);
+
+        for (int i = 0; i < len; i++)
+        {
+            char c = num[i];
+            int frame = (c == '-') ? STAT_MINUS : (c - '0');
+            if (frame >= 0 && frame < 11)
+                DrawPic(x, y, CHAR_WIDTH, CHAR_HEIGHT, _numberShaders[frame]);
+            x += CHAR_WIDTH;
+        }
+    }
+
+    private static void DrawCrosshair()
+    {
+        if (_snap == null) return;
+        ref var ps = ref _snap->Ps;
+        if (ps.Stats[Stats.STAT_HEALTH] <= 0) return;
+
+        // Use crosshair 'e' (index 4) as default — the classic Q3 crosshair
+        int crosshairIdx = 4;
+        int shader = _crosshairShaders[crosshairIdx % NUM_CROSSHAIRS];
+        if (shader == 0) return;
+
+        float size = 24;
+        float x = 320 - size / 2;
+        float y = 240 - size / 2;
+
+        float* color = stackalloc float[4];
+        color[0] = 1; color[1] = 1; color[2] = 1; color[3] = 0.8f;
+        Syscalls.R_SetColor(color);
+        Syscalls.R_DrawStretchPic(x, y, size, size, 0, 0, 1, 1, shader);
+        Syscalls.R_SetColor(null);
+    }
+
+    // Weapon select display — shows weapon bar when weapon is changed
+    private static int _weaponSelectTime;
+
+    private static void DrawWeaponSelect()
+    {
+        ref var ps = ref _snap->Ps;
+
+        // Track weapon changes
+        if (ps.Weapon != _weaponSelect)
+        {
+            _weaponSelectTime = _time;
+            _weaponSelect = ps.Weapon;
+        }
+
+        // Show for 1400ms after weapon change
+        int elapsed = _time - _weaponSelectTime;
+        if (elapsed > 1400) return;
+
+        // Fade out
+        float alpha = 1.0f;
+        if (elapsed > 1000)
+            alpha = 1.0f - (elapsed - 1000) / 400.0f;
+        if (alpha <= 0) return;
+
+        // Count weapons the player has
+        int weaponBits = ps.Stats[Stats.STAT_WEAPONS];
+        int count = 0;
+        for (int i = 1; i < Weapons.WP_NUM_WEAPONS; i++)
+            if ((weaponBits & (1 << i)) != 0) count++;
+
+        if (count == 0) return;
+
+        // Draw weapon bar centered
+        int startX = 320 - count * 20;
+        int y = 380;
+        int drawX = startX;
+
+        float* color = stackalloc float[4];
+
+        for (int i = 1; i < Weapons.WP_NUM_WEAPONS; i++)
+        {
+            if ((weaponBits & (1 << i)) == 0) continue;
+
+            // Selection highlight
+            if (i == ps.Weapon)
+            {
+                color[0] = 1; color[1] = 1; color[2] = 1; color[3] = alpha;
+                Syscalls.R_SetColor(color);
+                DrawPic(drawX - 4, y - 4, 40, 40, _selectShader);
+            }
+
+            // Weapon icon
+            if (_weaponIcons[i] != 0)
+            {
+                if (ps.Ammo[i] <= 0 && i != Weapons.WP_GAUNTLET)
+                {
+                    // Dim if no ammo
+                    color[0] = 1; color[1] = 1; color[2] = 1; color[3] = alpha * 0.3f;
+                }
+                else
+                {
+                    color[0] = 1; color[1] = 1; color[2] = 1; color[3] = alpha;
+                }
+                Syscalls.R_SetColor(color);
+                DrawPic(drawX, y, 32, 32, _weaponIcons[i]);
+            }
+
+            drawX += 40;
+        }
+
+        // Weapon name below
+        string[] weaponNames = {
+            "", "Gauntlet", "Machinegun", "Shotgun", "Grenade Launcher",
+            "Rocket Launcher", "Lightning Gun", "Railgun", "Plasma Gun",
+            "BFG10K", "Grappling Hook"
+        };
+        if (ps.Weapon > 0 && ps.Weapon < weaponNames.Length)
+        {
+            string name = weaponNames[ps.Weapon];
+            int textW = name.Length * BIGCHAR_WIDTH;
+            DrawString(320 - textW / 2, 358, name, 1, 1, 1, alpha);
+        }
+
+        Syscalls.R_SetColor(null);
+    }
+
+    private static float DrawFPS(float y)
+    {
+        int t = Syscalls.Milliseconds();
+        int frameTime = t - _fpsPreviousTime;
+        _fpsPreviousTime = t;
+
+        _fpsFrameTimes[_fpsIndex % FPS_FRAMES] = frameTime;
+        _fpsIndex++;
+
+        if (_fpsIndex > FPS_FRAMES)
+        {
+            int total = 0;
+            for (int i = 0; i < FPS_FRAMES; i++) total += _fpsFrameTimes[i];
+            if (total == 0) total = 1;
+            int fps = 1000 * FPS_FRAMES / total;
+            string s = $"{fps}fps";
+            int w = s.Length * BIGCHAR_WIDTH;
+            DrawString(635 - w, (int)y + 2, s, 1, 1, 1, 1);
+        }
+        return y + BIGCHAR_HEIGHT + 4;
+    }
+
+    private static float DrawTimer(float y)
+    {
+        int msec = _time - _levelStartTime;
+        int seconds = msec / 1000;
+        int mins = seconds / 60;
+        seconds -= mins * 60;
+        int tens = seconds / 10;
+        seconds -= tens * 10;
+
+        string s = $"{mins}:{tens}{seconds}";
+        int w = s.Length * BIGCHAR_WIDTH;
+        DrawString(635 - w, (int)y + 2, s, 1, 1, 1, 1);
+
+        return y + BIGCHAR_HEIGHT + 4;
+    }
+
+    // ── Character Drawing (bigchars charset — 16x16 grid of glyphs) ──
+
+    private static void DrawChar(float x, float y, int charWidth, int charHeight, int ch)
+    {
+        if (ch == ' ') return;
+        ch &= 255;
+        if (ch == 0) return;
+
+        int row = ch >> 4;
+        int col = ch & 15;
+        float frow = row * 0.0625f;
+        float fcol = col * 0.0625f;
+        float size = 0.0625f;
+
+        Syscalls.R_DrawStretchPic(x, y, charWidth, charHeight,
+            fcol, frow, fcol + size, frow + size, _charsetShader);
+    }
+
+    private static void DrawString(int x, int y, string text, float r, float g, float b, float a)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        // Shadow pass
+        float* shadowColor = stackalloc float[4];
+        shadowColor[0] = 0; shadowColor[1] = 0; shadowColor[2] = 0; shadowColor[3] = a;
+        Syscalls.R_SetColor(shadowColor);
+        int xx = x;
+        for (int i = 0; i < text.Length; i++)
+        {
+            DrawChar(xx + 2, y + 2, BIGCHAR_WIDTH, BIGCHAR_HEIGHT, text[i]);
+            xx += BIGCHAR_WIDTH;
+        }
+
+        // Text pass
+        float* textColor = stackalloc float[4];
+        textColor[0] = r; textColor[1] = g; textColor[2] = b; textColor[3] = a;
+        Syscalls.R_SetColor(textColor);
+        xx = x;
+        for (int i = 0; i < text.Length; i++)
+        {
+            DrawChar(xx, y, BIGCHAR_WIDTH, BIGCHAR_HEIGHT, text[i]);
+            xx += BIGCHAR_WIDTH;
+        }
+    }
+
+    private static void DrawPic(float x, float y, float w, float h, int shader)
+    {
+        Syscalls.R_DrawStretchPic(x, y, w, h, 0, 0, 1, 1, shader);
     }
 
     // ── Helpers ──

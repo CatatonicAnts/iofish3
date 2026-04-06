@@ -428,3 +428,76 @@ public static class EntityNum
     public const int MAX_GENTITIES = 1024;
     public const int MAX_CLIENTS = 64;
 }
+
+// Event types (entity_event_t from bg_public.h)
+public static class EntityEvent
+{
+    public const int EV_NONE = 0;
+    public const int EV_FOOTSTEP = 1;
+    public const int EV_FOOTSTEP_METAL = 2;
+    public const int EV_FOOTSPLASH = 3;
+    public const int EV_FOOTWADE = 4;
+    public const int EV_SWIM = 5;
+    public const int EV_STEP_4 = 6;
+    public const int EV_STEP_8 = 7;
+    public const int EV_STEP_12 = 8;
+    public const int EV_STEP_16 = 9;
+    public const int EV_FALL_SHORT = 10;
+    public const int EV_FALL_MEDIUM = 11;
+    public const int EV_FALL_FAR = 12;
+    public const int EV_JUMP_PAD = 13;
+    public const int EV_JUMP = 14;
+    public const int EV_WATER_TOUCH = 15;
+    public const int EV_WATER_LEAVE = 16;
+    public const int EV_WATER_UNDER = 17;
+    public const int EV_WATER_CLEAR = 18;
+    public const int EV_ITEM_PICKUP = 19;
+    public const int EV_GLOBAL_ITEM_PICKUP = 20;
+    public const int EV_NOAMMO = 21;
+    public const int EV_CHANGE_WEAPON = 22;
+    public const int EV_FIRE_WEAPON = 23;
+    public const int EV_USE_ITEM0 = 24;
+    public const int EV_ITEM_RESPAWN = 40;
+    public const int EV_ITEM_POP = 41;
+    public const int EV_PLAYER_TELEPORT_IN = 42;
+    public const int EV_PLAYER_TELEPORT_OUT = 43;
+    public const int EV_GRENADE_BOUNCE = 44;
+    public const int EV_GENERAL_SOUND = 45;
+    public const int EV_GLOBAL_SOUND = 46;
+    public const int EV_GLOBAL_TEAM_SOUND = 47;
+    public const int EV_BULLET_HIT_FLESH = 48;
+    public const int EV_BULLET_HIT_WALL = 49;
+    public const int EV_MISSILE_HIT = 50;
+    public const int EV_MISSILE_MISS = 51;
+    public const int EV_MISSILE_MISS_METAL = 52;
+    public const int EV_RAILTRAIL = 53;
+    public const int EV_SHOTGUN = 54;
+    public const int EV_BULLET = 55;
+    public const int EV_PAIN = 56;
+    public const int EV_DEATH1 = 57;
+    public const int EV_DEATH2 = 58;
+    public const int EV_DEATH3 = 59;
+    public const int EV_OBITUARY = 60;
+    public const int EV_POWERUP_QUAD = 61;
+    public const int EV_POWERUP_BATTLESUIT = 62;
+    public const int EV_POWERUP_REGEN = 63;
+    public const int EV_GIB_PLAYER = 64;
+    public const int EV_SCOREPLUM = 65;
+
+    public const int EV_EVENT_BIT1 = 0x00000100;
+    public const int EV_EVENT_BIT2 = 0x00000200;
+    public const int EV_EVENT_BITS = EV_EVENT_BIT1 | EV_EVENT_BIT2;
+}
+
+// Sound channels
+public static class SoundChannel
+{
+    public const int CHAN_AUTO = 0;
+    public const int CHAN_LOCAL = 1;
+    public const int CHAN_WEAPON = 2;
+    public const int CHAN_VOICE = 3;
+    public const int CHAN_ITEM = 4;
+    public const int CHAN_BODY = 5;
+    public const int CHAN_LOCAL_SOUND = 6;
+    public const int CHAN_ANNOUNCER = 7;
+}

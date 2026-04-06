@@ -86,16 +86,16 @@ The cgame DLL interface is:
 
 - [x] **Project scaffolding** — Create `code/cgamedotnet/` with .csproj targeting net9.0 NativeAOT (same pattern as rendererdotnet). Export `dllEntry` and `vmMain` via `[UnmanagedCallersOnly]`. Publish to game directory as `cgamex86_64.dll`. `CPX 3`
 - [x] **Engine syscall interop** — Marshal all ~90 `cgameImport_t` syscalls (CG_PRINT through CG_R_INPVS). Wrap engine calls (cvars, filesystem, renderer, sound, collision, input, snapshots) in type-safe C# classes. `CPX 4`
-- [ ] **Core game state** — Port `cg_t`, `cgs_t`, `centity_t`, `cg_weapons_t` structs and CG_Init/CG_Shutdown lifecycle. Handle gamestate parsing, server info, map loading, media registration. `CPX 4`
-- [ ] **Snapshot processing** — Port CG_ProcessSnapshots: snapshot interpolation, entity state transitions (enter/leave PVS), player state prediction, event processing. `CPX 4`
-- [ ] **Entity rendering** — Port CG_AddCEntity: per-entity-type rendering (players, items, missiles, movers, portals), model attachment via tags, animation state machines, shell/powerup effects. `CPX 5`
+- [x] **Core game state** — Port `cg_t`, `cgs_t`, `centity_t`, `cg_weapons_t` structs and CG_Init/CG_Shutdown lifecycle. Handle gamestate parsing, server info, map loading, media registration. `CPX 4`
+- [x] **Snapshot processing** — Port CG_ProcessSnapshots: snapshot interpolation, entity state transitions (enter/leave PVS), player state prediction, event processing. `CPX 4`
+- [x] **Entity rendering** — Port CG_AddCEntity: per-entity-type rendering (players, items, missiles, movers, portals), model attachment via tags, animation state machines, shell/powerup effects. `CPX 5`
 - [ ] **Player rendering** — Port CG_Player: multi-part player model (head/torso/legs), team skins, animation blending, weapon attachment, first-person weapon rendering. `CPX 5`
 - [ ] **Weapon effects** — Port CG_AddPlayerWeapon, CG_RegisterWeapon, weapon fire effects (muzzle flash, trails, projectiles, impacts, explosions). All weapon-specific rendering (railgun beam, lightning, BFG, etc.). `CPX 4`
-- [ ] **HUD / 2D drawing** — Port CG_Draw2D: health/armor/ammo bars, crosshair, pickup notifications, timer, scores, obituaries, chat overlay, lagometer, speed display. `CPX 4`
+- [x] **HUD / 2D drawing** — Port CG_Draw2D: health/armor/ammo bars, crosshair, pickup notifications, timer, scores, obituaries, chat overlay, lagometer, speed display. `CPX 4`
 - [ ] **Scoreboard** — Port CG_DrawScoreboard: player list with scores, ping, time, spectator info, team scores. `CPX 3`
 - [ ] **Local movement prediction** — Port CG_PredictPlayerState: client-side physics prediction using pmove, command replay for lag compensation. Critical for responsive movement. `CPX 5`
-- [ ] **Event system** — Port CG_EntityEvent: sound triggers, visual effects, item pickups, deaths, jumppads, teleporters, footsteps, pain sounds, weapon switching. `CPX 4`
-- [ ] **Console commands** — Port cgame console commands: say, tell, +scores, weapon selection, zoom, team overlay toggles, etc. `CPX 2`
+- [x] **Event system** — Port CG_EntityEvent: sound triggers, visual effects, item pickups, deaths, jumppads, teleporters, footsteps, pain sounds, weapon switching. `CPX 4`
+- [x] **Console commands** — Port cgame console commands: say, tell, +scores, weapon selection, zoom, team overlay toggles, etc. `CPX 2`
 - [ ] **Marks / decals** — Port CG_ImpactMark: bullet holes, explosion scorch marks, blood splatters via MarkFragments API with fade-out timing. `CPX 3`
 - [ ] **Particle / local entity system** — Port CG_AddLocalEntities: brass casings, debris, blood trails, smoke puffs, sparks with physics simulation. `CPX 3`
 - [ ] **Sound integration** — Port CG_AddLoopingSound, entity sound triggers, positional audio, ambient sounds, announcer voice. `CPX 3`
