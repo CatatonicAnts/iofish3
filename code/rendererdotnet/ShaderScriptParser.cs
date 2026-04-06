@@ -71,6 +71,20 @@ public sealed unsafe class ShaderScriptParser
     }
 
     /// <summary>
+    /// Find the first shader with a skyparms outerbox definition.
+    /// Returns the sky box texture base name, or null if none found.
+    /// </summary>
+    public string? FindSkyBoxName()
+    {
+        foreach (var def in _shaders.Values)
+        {
+            if (def.SkyBox != null)
+                return def.SkyBox;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Parse all shader definitions from a single .shader file's text content.
     /// Format:
     ///   shaderName
@@ -120,6 +134,7 @@ public sealed unsafe class ShaderScriptParser
         bool clamp = false;
         BlendMode blend = BlendMode.Opaque;
         bool foundUsableStage = false;
+        string? skyBox = null;
 
         // Per-stage tracking
         string? stageImage = null;
@@ -158,6 +173,20 @@ public sealed unsafe class ShaderScriptParser
                 continue;
             }
 
+            // Parse global shader directives (depth == 1)
+            if (depth == 1)
+            {
+                if (string.Equals(token, "skyparms", StringComparison.OrdinalIgnoreCase))
+                {
+                    // skyparms <outerbox> <cloudheight> <innerbox>
+                    string? outerBox = tokenizer.NextToken();
+                    tokenizer.NextToken(); // cloudheight
+                    tokenizer.NextToken(); // innerbox
+                    if (outerBox != null && outerBox != "-")
+                        skyBox = outerBox;
+                }
+            }
+
             // Parse directives inside stages (depth == 2)
             if (depth == 2)
             {
@@ -188,6 +217,13 @@ public sealed unsafe class ShaderScriptParser
                 {
                     stageBlend = ParseBlendFunc(ref tokenizer);
                 }
+                else if (string.Equals(token, "tcGen", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? tcGenToken = tokenizer.NextToken();
+                    // Skip stages with environment mapping — they don't provide the actual model texture
+                    if (tcGenToken != null && string.Equals(tcGenToken, "environment", StringComparison.OrdinalIgnoreCase))
+                        stageImage = null;
+                }
             }
         }
 
@@ -196,7 +232,8 @@ public sealed unsafe class ShaderScriptParser
             Name = name,
             ImagePath = imagePath,
             Clamp = clamp,
-            Blend = blend
+            Blend = blend,
+            SkyBox = skyBox
         };
     }
 
@@ -362,6 +399,9 @@ public sealed class ShaderDef
 
     /// <summary>Blend mode from the first stage's blendFunc directive.</summary>
     public BlendMode Blend { get; init; }
+
+    /// <summary>Skybox outer box texture base name from skyparms directive (e.g. "env/tim_dm14/dm14").</summary>
+    public string? SkyBox { get; init; }
 }
 
 /// <summary>

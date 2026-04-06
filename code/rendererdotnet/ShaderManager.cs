@@ -41,6 +41,8 @@ public unsafe class ShaderManager
         _scriptParser.LoadAllShaders();
     }
 
+    public ShaderScriptParser? GetScriptParser() => _scriptParser;
+
     public int Register(byte* namePtr)
     {
         if (namePtr == null) return 0;

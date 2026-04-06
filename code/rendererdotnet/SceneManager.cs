@@ -19,6 +19,7 @@ public sealed unsafe class SceneManager
     private SkinManager? _skins;
     private Renderer3D? _renderer3D;
     private World.BspRenderer? _bspRenderer;
+    private World.SkyboxRenderer? _skyboxRenderer;
     private World.BspWorld? _bspWorld;
     private GL? _gl;
     private int _screenW;
@@ -41,6 +42,7 @@ public sealed unsafe class SceneManager
 
     public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
                      Renderer3D renderer3D, World.BspRenderer bspRenderer,
+                     World.SkyboxRenderer skyboxRenderer,
                      GL gl, int screenW, int screenH)
     {
         _models = models;
@@ -48,6 +50,7 @@ public sealed unsafe class SceneManager
         _skins = skins;
         _renderer3D = renderer3D;
         _bspRenderer = bspRenderer;
+        _skyboxRenderer = skyboxRenderer;
         _gl = gl;
         _screenW = screenW;
         _screenH = screenH;
@@ -253,7 +256,16 @@ public sealed unsafe class SceneManager
         Span<float> vp = stackalloc float[16];
         MatMul(proj, view, vp);
 
-        // Render world geometry (BSP) first
+        // Render skybox before world geometry
+        if (hasWorld && _skyboxRenderer != null && _skyboxRenderer.IsLoaded)
+        {
+            fixed (float* vpPtr = vp)
+            {
+                _skyboxRenderer.Render(vpPtr, viewOrg[0], viewOrg[1], viewOrg[2]);
+            }
+        }
+
+        // Render world geometry (BSP)
         if (hasWorld)
         {
             fixed (float* vpPtr = vp)

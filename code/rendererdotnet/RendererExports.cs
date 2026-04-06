@@ -42,6 +42,7 @@ public static unsafe class RendererExports
     private static SceneManager? _scene;
     private static World.BspRenderer? _bspRenderer;
     private static World.BspWorld? _bspWorld;
+    private static World.SkyboxRenderer? _skyboxRenderer;
 
     private const int WIDTH = 1280;
     private const int HEIGHT = 720;
@@ -69,6 +70,8 @@ public static unsafe class RendererExports
         _bspRenderer?.Dispose();
         _bspRenderer = null;
         _bspWorld = null;
+        _skyboxRenderer?.Dispose();
+        _skyboxRenderer = null;
         _renderer3D?.Dispose();
         _renderer3D = null;
         _renderer2D?.Dispose();
@@ -174,8 +177,12 @@ public static unsafe class RendererExports
         _bspRenderer.Init(_gl!);
         _bspWorld = null;
 
+        _skyboxRenderer?.Dispose();
+        _skyboxRenderer = new World.SkyboxRenderer();
+        _skyboxRenderer.Init(_gl!);
+
         _scene = new SceneManager();
-        _scene.Init(_models, _shaders, _skins, _renderer3D, _bspRenderer, _gl!, WIDTH, HEIGHT);
+        _scene.Init(_models, _shaders, _skins, _renderer3D, _bspRenderer, _skyboxRenderer, _gl!, WIDTH, HEIGHT);
 
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;
@@ -258,6 +265,34 @@ public static unsafe class RendererExports
 
         _bspRenderer.LoadWorld(_bspWorld);
         _scene?.SetWorld(_bspWorld);
+
+        // Load skybox textures from shader scripts
+        if (_skyboxRenderer != null && _renderer2D != null)
+        {
+            // Find sky shader from BSP shader entries
+            string? skyBoxName = null;
+            var parser = _shaders.GetScriptParser();
+            if (parser != null)
+            {
+                foreach (var shader in _bspWorld.Shaders)
+                {
+                    if ((shader.SurfaceFlags & World.SurfaceFlags.SURF_SKY) != 0)
+                    {
+                        var def = parser.GetShaderDef(shader.Name);
+                        if (def?.SkyBox != null)
+                        {
+                            skyBoxName = def.SkyBox;
+                            break;
+                        }
+                    }
+                }
+                // Fallback: search all parsed shaders for any skyparms
+                skyBoxName ??= parser.FindSkyBoxName();
+            }
+
+            if (skyBoxName != null)
+                _skyboxRenderer.LoadSkyTextures(skyBoxName, _renderer2D);
+        }
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
