@@ -13,6 +13,10 @@
     <PublishAot>true</PublishAot>
     <NativeLib>Shared</NativeLib>
 
+    <!-- Debugging: enable stack traces and debugger attach in NativeAOT -->
+    <StackTraceSupport>true</StackTraceSupport>
+    <DebuggerSupport>true</DebuggerSupport>
+
     <!-- Strip unused code for smaller binary -->
     <IlcTrimMetadata>true</IlcTrimMetadata>
 

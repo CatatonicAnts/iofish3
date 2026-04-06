@@ -25,6 +25,8 @@ public static unsafe class CGameExports
     [UnmanagedCallersOnly(EntryPoint = "dllEntry")]
     public static void DllEntry(nint syscallPtr)
     {
+        CrashLog.Init();
+        CrashLog.Breadcrumb("dllEntry");
         Syscalls.Init(syscallPtr);
         Syscalls.Print("[.NET cgame] dllEntry called\n");
     }
@@ -40,6 +42,7 @@ public static unsafe class CGameExports
     {
         try
         {
+            CrashLog.Breadcrumb($"vmMain cmd={command}");
             return command switch
             {
                 CG_INIT => Init(arg0, arg1, arg2),
@@ -56,7 +59,8 @@ public static unsafe class CGameExports
         }
         catch (Exception ex)
         {
-            Syscalls.Print($"[.NET cgame] Exception in vmMain({command}): {ex.Message}\n");
+            CrashLog.LogException($"vmMain({command})", ex);
+            Syscalls.Print($"[.NET cgame] Exception in vmMain({command}): {ex.Message}\n{ex.StackTrace}\n");
             return 0;
         }
     }
@@ -72,6 +76,7 @@ public static unsafe class CGameExports
     {
         Syscalls.Print("[.NET cgame] CG_Shutdown\n");
         CGame.Shutdown();
+        CrashLog.Shutdown();
         return 0;
     }
 

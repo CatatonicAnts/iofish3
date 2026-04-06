@@ -247,6 +247,8 @@ public static unsafe class CGame
         if (_frameCount <= 3)
             Syscalls.Print($"[.NET cgame] DrawActiveFrame #{_frameCount}: serverTime={serverTime}\n");
 
+        CrashLog.Breadcrumb($"DrawActiveFrame #{_frameCount} t={serverTime}");
+
         _oldTime = _time;
         _time = serverTime;
         _demoPlayback = demoPlayback;
@@ -257,8 +259,9 @@ public static unsafe class CGame
         Syscalls.S_ClearLoopingSounds(0);
         Syscalls.R_ClearScene();
 
+        CrashLog.Breadcrumb("ProcessSnapshots");
         try { ProcessSnapshots(); }
-        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in ProcessSnapshots: {ex.Message}\n"); }
+        catch (Exception ex) { CrashLog.LogException("ProcessSnapshots", ex); Syscalls.Print($"[.NET cgame] ERROR in ProcessSnapshots: {ex.Message}\n"); }
 
         if (_snap == null)
         {
@@ -279,6 +282,7 @@ public static unsafe class CGame
         Syscalls.SetUserCmdValue(_weaponSelect, 1.0f);
 
         // Run prediction
+        CrashLog.Breadcrumb("PredictPlayerState");
         try
         {
             int team = _snap->Ps.Persistant[Persistant.PERS_TEAM];
@@ -298,7 +302,7 @@ public static unsafe class CGame
                 dmflags: 0, pmoveFixed: 0, pmoveMsec: 8,
                 team: team);
         }
-        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in PredictPlayerState: {ex.Message}\n"); }
+        catch (Exception ex) { CrashLog.LogException("PredictPlayerState", ex); Syscalls.Print($"[.NET cgame] ERROR in PredictPlayerState: {ex.Message}\n"); }
 
         // Calculate frame interpolation factor
         if (_nextSnap != null)
@@ -317,18 +321,23 @@ public static unsafe class CGame
         }
 
         Q3RefDef refdef = default;
+        CrashLog.Breadcrumb("CalcViewValues");
         CalcViewValues(ref refdef);
 
+        CrashLog.Breadcrumb("AddPacketEntities");
         try { AddPacketEntities(); }
-        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in AddPacketEntities: {ex.Message}\n"); }
+        catch (Exception ex) { CrashLog.LogException("AddPacketEntities", ex); Syscalls.Print($"[.NET cgame] ERROR in AddPacketEntities: {ex.Message}\n"); }
 
+        CrashLog.Breadcrumb("LocalEntities");
         try { LocalEntities.AddToScene(_time); }
-        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in LocalEntities.AddToScene: {ex.Message}\n"); }
+        catch (Exception ex) { CrashLog.LogException("LocalEntities", ex); Syscalls.Print($"[.NET cgame] ERROR in LocalEntities.AddToScene: {ex.Message}\n"); }
 
+        CrashLog.Breadcrumb("Marks");
         try { Marks.AddToScene(_time); }
-        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in Marks.AddToScene: {ex.Message}\n"); }
+        catch (Exception ex) { CrashLog.LogException("Marks", ex); Syscalls.Print($"[.NET cgame] ERROR in Marks.AddToScene: {ex.Message}\n"); }
 
         // First-person view weapon
+        CrashLog.Breadcrumb("AddViewWeapon");
         try
         {
             fixed (Q3PlayerState* pps = &Prediction.PredictedPlayerState)
@@ -341,8 +350,9 @@ public static unsafe class CGame
                     (int)refdef.FovX);
             }
         }
-        catch (Exception ex) { Syscalls.Print($"[.NET cgame] ERROR in AddViewWeapon: {ex.Message}\n"); }
+        catch (Exception ex) { CrashLog.LogException("AddViewWeapon", ex); Syscalls.Print($"[.NET cgame] ERROR in AddViewWeapon: {ex.Message}\n"); }
 
+        CrashLog.Breadcrumb("RenderScene");
         refdef.Time = _time;
         for (int i = 0; i < Q3RefDef.MAX_MAP_AREA_BYTES; i++)
             refdef.Areamask[i] = _snap->Areamask[i];
