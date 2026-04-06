@@ -118,7 +118,7 @@ public unsafe class ShaderManager
     public BlendMode GetBlendMode(int handle)
     {
         if (handle <= 0 || handle >= _shaders.Count)
-            return BlendMode.Alpha;
+            return BlendMode.Opaque;
 
         var entry = _shaders[handle];
         if (!entry.Loaded)
@@ -465,7 +465,7 @@ public unsafe class ShaderManager
         public uint TextureId { get; set; }
         public bool Loaded { get; set; }
         public bool Clamp { get; set; }
-        public BlendMode Blend { get; set; } = BlendMode.Alpha;
+        public BlendMode Blend { get; set; } = BlendMode.Opaque;
         public bool IsTransparent { get; set; }
         /// <summary>0=none, 1=GT0, 2=LT128, 3=GE128</summary>
         public int AlphaFunc { get; set; }

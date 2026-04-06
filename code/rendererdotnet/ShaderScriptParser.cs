@@ -516,6 +516,16 @@ public sealed unsafe class ShaderScriptParser
         if (imagePath == null && stageCount > 0 && allStagesEnvMap)
             imagePath = name;
 
+        // For multi-stage shaders, the shader-level blend determines opaque vs transparent
+        // sorting. Use stage 0's blend mode: if stage 0 is opaque (lightmap, no blendfunc),
+        // the shader is opaque regardless of later stages' compositing blend modes.
+        // This prevents lightmap×texture shaders (GL_DST_COLOR GL_ZERO in stage 1)
+        // from being incorrectly classified as transparent.
+        if (allStages.Count > 1)
+        {
+            blend = allStages[0].Blend;
+        }
+
         return new ShaderDef
         {
             Name = name,
