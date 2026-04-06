@@ -226,6 +226,23 @@ public static unsafe class CGame
 	// Previous player state (for reward detection)
 	private static Q3PlayerState _oldPlayerState;
 
+	// Footstep sounds: [footstepType][variant] — 4 variants per type
+	private static readonly int[,] _footstepSounds = new int[Player.FOOTSTEP_TOTAL, 4];
+
+	// Announcer sounds
+	private static int _countPrepareSound, _countFightSound;
+	private static int _count3Sound, _count2Sound, _count1Sound;
+	private static int _oneFragSound, _twoFragSound, _threeFragSound;
+	private static int _oneMinuteSound, _fiveMinuteSound, _suddenDeathSound;
+
+	// Frag/time limit warning flags (prevent duplicate announcements)
+	private static int _fraglimitWarnings;
+	private static int _timelimitWarnings;
+
+	// Gurp sounds (underwater pain)
+	private static int _sfxGurp1, _sfxGurp2;
+	private static int _sfxDrowning;
+
 	// Last computed view (for crosshair scan)
 	private static float _viewOrgX, _viewOrgY, _viewOrgZ;
 	private static float _viewFwdX, _viewFwdY, _viewFwdZ;
@@ -337,6 +354,7 @@ public static unsafe class CGame
 		_chatIndex = 0; _pickupName = ""; _pickupTime = 0;
 		_rewardStack = 0; _rewardTime = 0;
 		_lagFrameCount = 0; _lagSnapshotCount = 0;
+		_fraglimitWarnings = 0; _timelimitWarnings = 0;
 		// Zero sentinel so CheckLocalSounds skips first snapshot
 		_oldPlayerState.CommandTime = 0;
 		_thirdPerson = false; _thirdPersonRange = 80.0f; _thirdPersonAngle = 0.0f;
@@ -1024,6 +1042,36 @@ public static unsafe class CGame
 		_hitSound = Syscalls.S_RegisterSound("sound/feedback/hit.wav", 0);
 		_hitTeamSound = Syscalls.S_RegisterSound("sound/feedback/hit_teammate.wav", 0);
 
+		// Footstep sounds (4 variants each)
+		for (int i = 0; i < 4; i++)
+		{
+			_footstepSounds[Player.FOOTSTEP_NORMAL, i] = Syscalls.S_RegisterSound($"sound/player/footsteps/step{i + 1}.wav", 0);
+			_footstepSounds[Player.FOOTSTEP_BOOT, i] = Syscalls.S_RegisterSound($"sound/player/footsteps/boot{i + 1}.wav", 0);
+			_footstepSounds[Player.FOOTSTEP_FLESH, i] = Syscalls.S_RegisterSound($"sound/player/footsteps/flesh{i + 1}.wav", 0);
+			_footstepSounds[Player.FOOTSTEP_MECH, i] = Syscalls.S_RegisterSound($"sound/player/footsteps/mech{i + 1}.wav", 0);
+			_footstepSounds[Player.FOOTSTEP_ENERGY, i] = Syscalls.S_RegisterSound($"sound/player/footsteps/energy{i + 1}.wav", 0);
+			_footstepSounds[Player.FOOTSTEP_METAL, i] = Syscalls.S_RegisterSound($"sound/player/footsteps/clank{i + 1}.wav", 0);
+			_footstepSounds[Player.FOOTSTEP_SPLASH, i] = Syscalls.S_RegisterSound($"sound/player/footsteps/splash{i + 1}.wav", 0);
+		}
+
+		// Announcer sounds
+		_countPrepareSound = Syscalls.S_RegisterSound("sound/feedback/prepare.wav", 0);
+		_countFightSound = Syscalls.S_RegisterSound("sound/feedback/fight.wav", 0);
+		_count3Sound = Syscalls.S_RegisterSound("sound/feedback/three.wav", 0);
+		_count2Sound = Syscalls.S_RegisterSound("sound/feedback/two.wav", 0);
+		_count1Sound = Syscalls.S_RegisterSound("sound/feedback/one.wav", 0);
+		_oneFragSound = Syscalls.S_RegisterSound("sound/feedback/1_frag.wav", 0);
+		_twoFragSound = Syscalls.S_RegisterSound("sound/feedback/2_frags.wav", 0);
+		_threeFragSound = Syscalls.S_RegisterSound("sound/feedback/3_frags.wav", 0);
+		_oneMinuteSound = Syscalls.S_RegisterSound("sound/feedback/1_minute.wav", 0);
+		_fiveMinuteSound = Syscalls.S_RegisterSound("sound/feedback/5_minute.wav", 0);
+		_suddenDeathSound = Syscalls.S_RegisterSound("sound/feedback/sudden_death.wav", 0);
+
+		// Gurp/drown sounds (for underwater pain/death)
+		_sfxGurp1 = Syscalls.S_RegisterSound("sound/player/gurp1.wav", 0);
+		_sfxGurp2 = Syscalls.S_RegisterSound("sound/player/gurp2.wav", 0);
+		_sfxDrowning = Syscalls.S_RegisterSound("sound/player/gurp1.wav", 0);
+
 		// Weapon fire sounds
 		_weaponFireSounds[Weapons.WP_GAUNTLET, 0] = Syscalls.S_RegisterSound("sound/weapons/melee/fstatck.wav", 0);
 		_weaponFireSounds[Weapons.WP_MACHINEGUN, 0] = Syscalls.S_RegisterSound("sound/weapons/machinegun/machgf1b.wav", 0);
@@ -1075,13 +1123,29 @@ public static unsafe class CGame
 		switch (eventType)
 		{
 			case EntityEvent.EV_FOOTSTEP:
+			{
+				int fsType = Player.GetFootstepType(es.ClientNum);
+				int variant = _frameCount & 3; // random-ish variant
+				int sfx = _footstepSounds[fsType, variant];
+				if (sfx != 0) Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_BODY, sfx);
+				break;
+			}
 			case EntityEvent.EV_FOOTSTEP_METAL:
+			{
+				int variant = _frameCount & 3;
+				int sfx = _footstepSounds[Player.FOOTSTEP_METAL, variant];
+				if (sfx != 0) Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_BODY, sfx);
+				break;
+			}
 			case EntityEvent.EV_FOOTSPLASH:
 			case EntityEvent.EV_FOOTWADE:
 			case EntityEvent.EV_SWIM:
-				// Footstep sounds — use land sound as fallback
-				Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_BODY, _sfxLandSound);
+			{
+				int variant = _frameCount & 3;
+				int sfx = _footstepSounds[Player.FOOTSTEP_SPLASH, variant];
+				if (sfx != 0) Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_BODY, sfx);
 				break;
+			}
 
 			case EntityEvent.EV_FALL_SHORT:
 				Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxLandSound);
@@ -1093,22 +1157,34 @@ public static unsafe class CGame
 				break;
 
 			case EntityEvent.EV_FALL_MEDIUM:
+			{
+				// Medium fall — play landing sound + per-model fall sound
 				Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxLandSound);
+				int fallSfx = Player.CustomSound(es.Number, "*fall1.wav");
+				if (fallSfx != 0)
+					Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, fallSfx);
 				if (es.Number == _snap->Ps.ClientNum)
 				{
 					_landChange = -16;
 					_landTime = _time;
 				}
 				break;
+			}
 
 			case EntityEvent.EV_FALL_FAR:
+			{
+				// Far fall — play landing sound + per-model falling sound (big damage)
 				Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, _sfxLandSound);
+				int fallingSfx = Player.CustomSound(es.Number, "*falling1.wav");
+				if (fallingSfx != 0)
+					Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, fallingSfx);
 				if (es.Number == _snap->Ps.ClientNum)
 				{
 					_landChange = -24;
 					_landTime = _time;
 				}
 				break;
+			}
 
 			case EntityEvent.EV_STEP_4:
 			case EntityEvent.EV_STEP_8:
@@ -1129,8 +1205,14 @@ public static unsafe class CGame
 				break;
 
 			case EntityEvent.EV_JUMP:
-				Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, _sfxJumpSound);
+			{
+				int jumpSfx = Player.CustomSound(es.Number, "*jump1.wav");
+				if (jumpSfx != 0)
+					Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, jumpSfx);
+				else
+					Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, _sfxJumpSound);
 				break;
+			}
 
 			case EntityEvent.EV_JUMP_PAD:
 				Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_VOICE, _sfxJumpSound);
@@ -1174,6 +1256,33 @@ public static unsafe class CGame
 			case EntityEvent.EV_PLAYER_TELEPORT_OUT:
 				Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxTeleportOut);
 				break;
+
+			case EntityEvent.EV_WATER_TOUCH:
+			{
+				int variant = _frameCount & 3;
+				int sfx = _footstepSounds[Player.FOOTSTEP_SPLASH, variant];
+				if (sfx != 0) Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, sfx);
+				break;
+			}
+			case EntityEvent.EV_WATER_LEAVE:
+			{
+				int variant = _frameCount & 3;
+				int sfx = _footstepSounds[Player.FOOTSTEP_SPLASH, variant];
+				if (sfx != 0) Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_AUTO, sfx);
+				break;
+			}
+			case EntityEvent.EV_WATER_UNDER:
+				Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_BODY,
+					(_frameCount & 1) != 0 ? _sfxGurp1 : _sfxGurp2);
+				break;
+
+			case EntityEvent.EV_WATER_CLEAR:
+			{
+				int gaspSfx = Player.CustomSound(es.Number, "*gasp.wav");
+				if (gaspSfx != 0)
+					Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_VOICE, gaspSfx);
+				break;
+			}
 
 			case EntityEvent.EV_GRENADE_BOUNCE:
 				if ((Random.Shared.Next() & 1) != 0)
@@ -1252,12 +1361,47 @@ public static unsafe class CGame
 				}
 
 			case EntityEvent.EV_PAIN:
+				PainEvent(ref cent, eventParm);
+				break;
+
 			case EntityEvent.EV_DEATH1:
 			case EntityEvent.EV_DEATH2:
 			case EntityEvent.EV_DEATH3:
-				// Pain/death sounds — would need player-specific sounds
+			{
+				int deathVariant = eventType - EntityEvent.EV_DEATH1 + 1;
+				int deathSfx = Player.CustomSound(es.Number, $"*death{deathVariant}.wav");
+				if (deathSfx != 0)
+					Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_VOICE, deathSfx);
 				break;
+			}
 		}
+	}
+
+	/// <summary>Handle EV_PAIN — play health-appropriate pain sound.</summary>
+	private static void PainEvent(ref CEntity cent, int health)
+	{
+		int entNum = cent.CurrentState.Number;
+
+		// Throttle: don't play pain sounds more than once per 500ms
+		if (_time - Player.GetPainTime(entNum) < 500) return;
+		Player.SetPainTime(entNum, _time);
+
+		// Select sound based on health
+		string soundName;
+		if (health < 25) soundName = "*pain25_1.wav";
+		else if (health < 50) soundName = "*pain50_1.wav";
+		else if (health < 75) soundName = "*pain75_1.wav";
+		else soundName = "*pain100_1.wav";
+
+		int sfx = Player.CustomSound(entNum, soundName);
+
+		float* origin = stackalloc float[3];
+		origin[0] = cent.LerpOriginX;
+		origin[1] = cent.LerpOriginY;
+		origin[2] = cent.LerpOriginZ;
+
+		if (sfx != 0)
+			Syscalls.S_StartSound(origin, entNum, SoundChannel.CHAN_VOICE, sfx);
 	}
 
 	private static void FireWeapon(ref CEntity cent)
@@ -1434,6 +1578,13 @@ public static unsafe class CGame
 	private const int LAND_RETURN_TIME = 300;
 	private const int ZOOM_TIME = 150;
 	private const int PMF_DUCKED = 1;
+	private const int PMF_FOLLOW = 4096;
+	private const int PMF_SCOREBOARD = 8192;
+
+	// Game type constants
+	private const int GT_FFA = 0;
+	private const int GT_TOURNAMENT = 1;
+	private const int GT_TEAM = 3;
 
 	private static void CalcViewValues(ref Q3RefDef refdef)
 	{
@@ -2217,18 +2368,26 @@ public static unsafe class CGame
 		if (_snap == null) return;
 
 		ref var ps = ref _snap->Ps;
+		bool isSpectator = ps.Persistant[Persistant.PERS_TEAM] == Teams.TEAM_SPECTATOR;
 
-		// Status bar (bottom)
-		DrawStatusBar();
-
-		// Crosshair (center)
-		DrawCrosshair();
-
-		// Crosshair target name
-		DrawCrosshairNames();
-
-		// Weapon select overlay
-		DrawWeaponSelect();
+		if (isSpectator)
+		{
+			DrawSpectator();
+			DrawCrosshair();
+			DrawCrosshairNames();
+		}
+		else
+		{
+			// Don't draw status if dead or scoreboard is showing
+			if (!Scoreboard.IsShowing && ps.Stats[Stats.STAT_HEALTH] > 0)
+			{
+				DrawStatusBar();
+				DrawCrosshair();
+				DrawCrosshairNames();
+				DrawWeaponSelect();
+				DrawReward();
+			}
+		}
 
 		// Center print message (objectives, notifications)
 		DrawCenterString();
@@ -2244,23 +2403,76 @@ public static unsafe class CGame
 		y = DrawFPS(y);
 		y = DrawTimer(y);
 		y = DrawAttacker(y);
-		y = DrawPowerups(y);
+		if (!isSpectator) y = DrawPowerups(y);
 
 		// .NET cgame indicator (top right)
 		DrawString(SCREEN_WIDTH - 82, (int)y + 2, ".NET CG", 1.0f, 0.0f, 1.0f, 0.6f);
 
-		// Warmup countdown
-		DrawWarmup();
-
-		// Reward medals
-		DrawReward();
-
 		// Lagometer
 		DrawLagometer();
 
+		// Follow mode or warmup
+		if (!DrawFollow())
+			DrawWarmup();
+
 		// Scoreboard overlay
-		if (Scoreboard.IsShowing || _snap->Ps.PmType >= 4) // PM_DEAD=4, PM_INTERMISSION=5
+		if (Scoreboard.IsShowing || ps.PmType >= 4) // PM_DEAD=4, PM_INTERMISSION=5
 			Scoreboard.Draw(_time, _clientNum, _gametype);
+
+		Syscalls.R_SetColor(null);
+	}
+
+	/// <summary>Show "SPECTATOR" text and instruction for spectators.</summary>
+	private static void DrawSpectator()
+	{
+		DrawBigString(320 - 9 * 8, 440, "SPECTATOR");
+		if (_gametype == GT_TOURNAMENT)
+			DrawBigString(320 - 15 * 8, 460, "waiting to play");
+		else if (_gametype >= GT_TEAM)
+			DrawBigString(320 - 25 * 8, 460, "press ESC and use the JOIN menu to play");
+	}
+
+	/// <summary>Show "following" + player name when in follow mode.</summary>
+	private static bool DrawFollow()
+	{
+		if (_snap == null) return false;
+		if ((_snap->Ps.PmFlags & PMF_FOLLOW) == 0) return false;
+
+		DrawBigString(320 - 9 * 8, 24, "following");
+
+		string name = Player.GetClientName(_snap->Ps.ClientNum);
+		if (!string.IsNullOrEmpty(name))
+		{
+			int nameLen = name.Length;
+			float x = 0.5f * (SCREEN_WIDTH - 32 * nameLen); // GIANT_WIDTH=32
+			DrawStringScaled((int)x, 40, name, 1.0f, 1.0f, 1.0f, 1.0f, 32, 48); // GIANT size
+		}
+
+		return true;
+	}
+
+	/// <summary>Draw text using BIGCHAR_WIDTH (16x16) characters.</summary>
+	private static void DrawBigString(int x, int y, string text)
+	{
+		DrawStringScaled(x, y, text, 1.0f, 1.0f, 1.0f, 1.0f, BIGCHAR_WIDTH, BIGCHAR_HEIGHT);
+	}
+
+	/// <summary>Draw text at given position with custom character size.</summary>
+	private static void DrawStringScaled(int x, int y, string text, float r, float g, float b, float a, int charW, int charH)
+	{
+		float* color = stackalloc float[4];
+		color[0] = r; color[1] = g; color[2] = b; color[3] = a;
+		Syscalls.R_SetColor(color);
+
+		float fx = x;
+		for (int i = 0; i < text.Length; i++)
+		{
+			char c = text[i];
+			if (c == ' ') { fx += charW; continue; }
+
+			DrawChar(fx, y, charW, charH, c);
+			fx += charW;
+		}
 
 		Syscalls.R_SetColor(null);
 	}
@@ -2763,6 +2975,36 @@ public static unsafe class CGame
 				Syscalls.S_StartLocalSound(_deniedSound, SoundChannel.CHAN_ANNOUNCER);
 			else if ((newEvents & PLAYEREVENT_GAUNTLETREWARD) != (oldEvents & PLAYEREVENT_GAUNTLETREWARD))
 				Syscalls.S_StartLocalSound(_humiliationSound, SoundChannel.CHAN_ANNOUNCER);
+		}
+
+		// Frag limit warnings
+		CheckFragWarnings(ps);
+	}
+
+	/// <summary>Check score vs fraglimit and play "X frags remaining" announcements.</summary>
+	private static void CheckFragWarnings(Q3PlayerState* ps)
+	{
+		// Read fraglimit from serverinfo
+		string serverInfo = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_SERVERINFO);
+		int fragLimit = InfoInt(serverInfo, "fraglimit");
+		if (fragLimit <= 0) return;
+
+		int score = ps->Persistant[Persistant.PERS_SCORE];
+
+		if (score == fragLimit - 1 && (_fraglimitWarnings & 1) == 0)
+		{
+			_fraglimitWarnings |= 1;
+			Syscalls.S_StartLocalSound(_oneFragSound, SoundChannel.CHAN_ANNOUNCER);
+		}
+		else if (score == fragLimit - 2 && (_fraglimitWarnings & 2) == 0)
+		{
+			_fraglimitWarnings |= 2;
+			Syscalls.S_StartLocalSound(_twoFragSound, SoundChannel.CHAN_ANNOUNCER);
+		}
+		else if (score == fragLimit - 3 && (_fraglimitWarnings & 4) == 0)
+		{
+			_fraglimitWarnings |= 4;
+			Syscalls.S_StartLocalSound(_threeFragSound, SoundChannel.CHAN_ANNOUNCER);
 		}
 	}
 

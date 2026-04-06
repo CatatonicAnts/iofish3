@@ -15,6 +15,27 @@ public static unsafe class Player
     private const int MAX_CLIENTS = 64;
     private const int MAX_GENTITIES = 1024;
     private const int ANIM_TOGGLEBIT = 128;
+    private const int MAX_CUSTOM_SOUNDS = 13;
+
+    // Footstep types
+    public const int FOOTSTEP_NORMAL = 0;
+    public const int FOOTSTEP_BOOT = 1;
+    public const int FOOTSTEP_FLESH = 2;
+    public const int FOOTSTEP_MECH = 3;
+    public const int FOOTSTEP_ENERGY = 4;
+    public const int FOOTSTEP_METAL = 5;
+    public const int FOOTSTEP_SPLASH = 6;
+    public const int FOOTSTEP_TOTAL = 7;
+
+    // Custom sound names matching Q3's cg_customSoundNames
+    private static readonly string[] CustomSoundNames =
+    [
+        "*death1.wav", "*death2.wav", "*death3.wav",
+        "*jump1.wav",
+        "*pain25_1.wav", "*pain50_1.wav", "*pain75_1.wav", "*pain100_1.wav",
+        "*falling1.wav", "*gasp.wav", "*drown.wav",
+        "*fall1.wav", "*taunt.wav"
+    ];
 
     // ── Animation number constants (animNumber_t) ──
     public const int BOTH_DEATH1 = 0;
@@ -134,6 +155,12 @@ public static unsafe class Player
         public string HeadSkinName = "default";
 
         public bool NewAnims;
+
+        // Per-model custom sounds (death, pain, jump, etc.)
+        public int[] Sounds = new int[MAX_CUSTOM_SOUNDS];
+
+        // Footstep type from animation.cfg
+        public int Footsteps = FOOTSTEP_NORMAL;
     }
 
     // ── Static state ──
@@ -167,6 +194,44 @@ public static unsafe class Player
         if (clientNum < 0 || clientNum >= MAX_CLIENTS) return "";
         var ci = _clientInfo[clientNum];
         return ci.InfoValid ? ci.Name : "";
+    }
+
+    /// <summary>Look up a per-model custom sound by name (e.g. "*death1.wav").</summary>
+    public static int CustomSound(int clientNum, string soundName)
+    {
+        if (string.IsNullOrEmpty(soundName) || soundName[0] != '*')
+            return Syscalls.S_RegisterSound(soundName, 0);
+
+        if (clientNum < 0 || clientNum >= MAX_CLIENTS) clientNum = 0;
+        var ci = _clientInfo[clientNum];
+
+        for (int i = 0; i < CustomSoundNames.Length; i++)
+        {
+            if (soundName == CustomSoundNames[i])
+                return ci.Sounds[i];
+        }
+        return 0;
+    }
+
+    /// <summary>Get the last pain time for throttling pain sounds.</summary>
+    public static int GetPainTime(int entityNum)
+    {
+        if (entityNum < 0 || entityNum >= MAX_GENTITIES) return 0;
+        return _playerEntities[entityNum].PainTime;
+    }
+
+    /// <summary>Set the last pain time for throttling pain sounds.</summary>
+    public static void SetPainTime(int entityNum, int time)
+    {
+        if (entityNum < 0 || entityNum >= MAX_GENTITIES) return;
+        _playerEntities[entityNum].PainTime = time;
+    }
+
+    /// <summary>Get the footstep type for a client.</summary>
+    public static int GetFootstepType(int clientNum)
+    {
+        if (clientNum < 0 || clientNum >= MAX_CLIENTS) return FOOTSTEP_NORMAL;
+        return _clientInfo[clientNum].Footsteps;
     }
 
     // ── Info string parsing ──
@@ -254,6 +319,7 @@ public static unsafe class Player
         ci.Team = int.TryParse(teamStr, out int t) ? t : 0;
 
         RegisterClientModel(ci);
+        RegisterClientSounds(ci);
         ParseAnimationFile(ci);
 
         ci.InfoValid = ci.LegsModel != 0 && ci.TorsoModel != 0 && ci.HeadModel != 0;
@@ -303,6 +369,26 @@ public static unsafe class Player
         ci.NewAnims = Syscalls.R_LerpTag(&tag, ci.TorsoModel, 0, 0, 0, "tag_flag") >= 0;
     }
 
+    /// <summary>Register per-model custom sounds (death, pain, jump, etc.).</summary>
+    private static void RegisterClientSounds(ClientInfo ci)
+    {
+        const string DEFAULT_MODEL = "sarge";
+
+        for (int i = 0; i < CustomSoundNames.Length; i++)
+        {
+            string s = CustomSoundNames[i];
+            // Strip the leading '*' for file path
+            string fileName = s[1..];
+
+            // Try model-specific sound first
+            ci.Sounds[i] = Syscalls.S_RegisterSound($"sound/player/{ci.ModelName}/{fileName}", 0);
+
+            // Fall back to default model
+            if (ci.Sounds[i] == 0)
+                ci.Sounds[i] = Syscalls.S_RegisterSound($"sound/player/{DEFAULT_MODEL}/{fileName}", 0);
+        }
+    }
+
     // ── ParseAnimationFile ──
 
     private static void ParseAnimationFile(ClientInfo ci)
@@ -341,7 +427,22 @@ public static unsafe class Player
             if (line.Length == 0 || line[0] == '/' || line[0] == '#') continue;
             if (line.StartsWith("sex", StringComparison.OrdinalIgnoreCase)) continue;
             if (line.StartsWith("headoffset", StringComparison.OrdinalIgnoreCase)) continue;
-            if (line.StartsWith("footsteps", StringComparison.OrdinalIgnoreCase)) continue;
+            if (line.StartsWith("footsteps", StringComparison.OrdinalIgnoreCase))
+            {
+                string[] fsParts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (fsParts.Length >= 2)
+                {
+                    ci.Footsteps = fsParts[1].ToLowerInvariant() switch
+                    {
+                        "boot" => FOOTSTEP_BOOT,
+                        "flesh" => FOOTSTEP_FLESH,
+                        "mech" => FOOTSTEP_MECH,
+                        "energy" => FOOTSTEP_ENERGY,
+                        _ => FOOTSTEP_NORMAL
+                    };
+                }
+                continue;
+            }
 
             // Parse: firstFrame numFrames loopFrames fps [...]
             string[] parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
