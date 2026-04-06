@@ -24,7 +24,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### High Priority
 
-- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline and 3D model rendering (MD3) complete. Skin loading and viewport management working. Next: BSP world loading, lighting, shader blending modes. `CPX 5`
+- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline, 3D model rendering (MD3), BSP world loading with lightmaps and PVS all working. Next: patch surfaces, shader blending modes, dynamic lighting. `CPX 5`
 
 ### Medium Priority
 
@@ -123,6 +123,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Add scene management — ClearScene/AddRefEntityToScene/RenderScene pipeline with proper viewport/scissor from refdef_t, Q3→OpenGL coordinate conversion.
 - [x] Add skin loading (SkinManager) — parses `.skin` files mapping surface names to shader handles, customSkin/customShader priority in rendering.
 - [x] Fix window duplication — reuse existing SDL window/GL context on renderer re-init instead of spawning new windows.
+- [x] Implement BSP map loading — binary BSP v46 parser (vertices, indices, surfaces, nodes, leafs, planes, lightmaps, PVS), static GPU upload, BSP tree walk with PVS culling, dual-texture lightmap rendering.
 
 ### Fixed Bugs
 
