@@ -168,6 +168,10 @@ public sealed unsafe class ShaderScriptParser
         bool depthWrite = false;
         int sortKey = 0;
         var deforms = new List<DeformVertexes>();
+        bool stageIsLightmap = false;
+        bool stageIsWhiteImage = false;
+        string? stageMapRaw = null; // raw map token including $lightmap/$whiteimage
+        var allStages = new List<ShaderStage>();
 
         while (depth > 0 && tokenizer.HasMore())
         {
@@ -192,6 +196,9 @@ public sealed unsafe class ShaderScriptParser
                     stageAlphaGen = 0;
                     stageDepthFunc = 0;
                     stageDepthWrite = false;
+                    stageIsLightmap = false;
+                    stageIsWhiteImage = false;
+                    stageMapRaw = null;
                 }
                 continue;
             }
@@ -242,6 +249,29 @@ public sealed unsafe class ShaderScriptParser
                         depthFunc = stageDepthFunc;
                     if (!depthWrite && stageDepthWrite)
                         depthWrite = true;
+
+                    // Collect full stage data for multi-pass rendering
+                    if (stageImage != null || stageIsLightmap || stageIsWhiteImage ||
+                        stageAnimFrames != null)
+                    {
+                        allStages.Add(new ShaderStage
+                        {
+                            ImagePath = stageImage,
+                            IsLightmap = stageIsLightmap,
+                            IsWhiteImage = stageIsWhiteImage,
+                            Clamp = stageClamp,
+                            Blend = stageBlend,
+                            AlphaFunc = stageAlphaFunc,
+                            HasEnvMap = stageHasEnvMap,
+                            AnimFrames = stageAnimFrames,
+                            AnimFrequency = stageAnimFrequency,
+                            TcMods = stageTcMods.Count > 0 ? stageTcMods.ToArray() : null,
+                            RgbGen = stageRgbGen,
+                            AlphaGen = stageAlphaGen,
+                            DepthFunc = stageDepthFunc,
+                            DepthWrite = stageDepthWrite,
+                        });
+                    }
                 }
 
                 depth--;
@@ -319,8 +349,16 @@ public sealed unsafe class ShaderScriptParser
                 if (string.Equals(token, "map", StringComparison.OrdinalIgnoreCase))
                 {
                     string? mapToken = tokenizer.NextToken();
-                    if (mapToken != null && !IsSpecialMap(mapToken) && stageImage == null)
-                        stageImage = mapToken;
+                    if (mapToken != null)
+                    {
+                        stageMapRaw = mapToken;
+                        if (string.Equals(mapToken, "$lightmap", StringComparison.OrdinalIgnoreCase))
+                            stageIsLightmap = true;
+                        else if (string.Equals(mapToken, "$whiteimage", StringComparison.OrdinalIgnoreCase))
+                            stageIsWhiteImage = true;
+                        else if (!IsSpecialMap(mapToken) && stageImage == null)
+                            stageImage = mapToken;
+                    }
                 }
                 else if (string.Equals(token, "clampMap", StringComparison.OrdinalIgnoreCase))
                 {
@@ -498,7 +536,8 @@ public sealed unsafe class ShaderScriptParser
             DepthFunc = depthFunc,
             DepthWrite = depthWrite,
             SortKey = sortKey,
-            Deforms = deforms.Count > 0 ? deforms.ToArray() : null
+            Deforms = deforms.Count > 0 ? deforms.ToArray() : null,
+            Stages = allStages.Count > 0 ? allStages.ToArray() : null
         };
     }
 
@@ -900,6 +939,9 @@ public sealed class ShaderDef
 
     /// <summary>deformVertexes operations (null if none).</summary>
     public DeformVertexes[]? Deforms { get; init; }
+
+    /// <summary>All parsed shader stages (null if no stages or single-stage fallback).</summary>
+    public ShaderStage[]? Stages { get; init; }
 }
 
 /// <summary>
@@ -990,4 +1032,54 @@ public struct BlendMode : System.IEquatable<BlendMode>
     public override int GetHashCode() => System.HashCode.Combine(SrcFactor, DstFactor);
     public static bool operator ==(BlendMode a, BlendMode b) => a.Equals(b);
     public static bool operator !=(BlendMode a, BlendMode b) => !a.Equals(b);
+}
+
+/// <summary>
+/// Represents a single stage within a Q3 shader script.
+/// Q3 shaders can have up to 8 stages, each rendered as a separate draw call
+/// with its own texture, blend mode, texcoord generation, and color generation.
+/// </summary>
+public sealed class ShaderStage
+{
+    /// <summary>Image path (null for $lightmap or $whiteimage).</summary>
+    public string? ImagePath { get; init; }
+
+    /// <summary>True if this is a $lightmap stage.</summary>
+    public bool IsLightmap { get; init; }
+
+    /// <summary>True if this is a $whiteimage stage.</summary>
+    public bool IsWhiteImage { get; init; }
+
+    /// <summary>Whether to clamp texture coordinates.</summary>
+    public bool Clamp { get; init; }
+
+    /// <summary>Blend mode for this stage.</summary>
+    public BlendMode Blend { get; init; }
+
+    /// <summary>Alpha test function: 0=none, 1=GT0, 2=LT128, 3=GE128.</summary>
+    public int AlphaFunc { get; init; }
+
+    /// <summary>Whether this stage uses tcGen environment.</summary>
+    public bool HasEnvMap { get; init; }
+
+    /// <summary>Animation frame paths (null if not animated).</summary>
+    public string[]? AnimFrames { get; init; }
+
+    /// <summary>Animation frequency in fps.</summary>
+    public float AnimFrequency { get; init; }
+
+    /// <summary>tcMod operations for this stage.</summary>
+    public TcMod[]? TcMods { get; init; }
+
+    /// <summary>RGB generation: 0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting.</summary>
+    public int RgbGen { get; init; }
+
+    /// <summary>Alpha generation: 0=identity, 1=vertex, 2=entity, 3=wave.</summary>
+    public int AlphaGen { get; init; }
+
+    /// <summary>Depth function: 0=lequal, 1=equal.</summary>
+    public int DepthFunc { get; init; }
+
+    /// <summary>Whether depthWrite is explicitly set.</summary>
+    public bool DepthWrite { get; init; }
 }

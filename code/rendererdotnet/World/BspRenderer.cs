@@ -49,6 +49,9 @@ public sealed unsafe class BspRenderer : IDisposable
     // Transparent surfaces deferred to second pass
     private readonly List<(int SurfIdx, BlendMode Blend, int SortKey)> _transparentSurfaces = new(256);
 
+    // Current frame time for multi-stage animation
+    private float _currentTimeSec;
+
     // Current view position, stored per-frame for tcGen environment
     private float _viewX, _viewY, _viewZ;
 
@@ -193,8 +196,8 @@ public sealed unsafe class BspRenderer : IDisposable
             } else if (uRgbGen == 1) {
                 // rgbGen vertex — multiply by vertex color directly
                 oColor = texColor * vColor;
-            } else {
-                // Default or identity — use directional lighting
+            } else if (uRgbGen == 5) {
+                // rgbGen default with NDL lighting fallback (single-stage path)
                 float vcSum = vColor.r + vColor.g + vColor.b;
                 if (vcSum > 0.01) {
                     oColor = texColor * vColor;
@@ -203,6 +206,9 @@ public sealed unsafe class BspRenderer : IDisposable
                     float light = 0.3 + 0.7 * ndl;
                     oColor = texColor * vec4(vec3(light), 1.0);
                 }
+            } else {
+                // rgbGen identity (0) or identityLighting (4) — pass through
+                oColor = texColor;
             }
             oColor *= uColor;
             oColor.a = texColor.a * uColor.a;
@@ -350,6 +356,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_envMapLoc, 0);
         _gl.Uniform3(_viewPosLoc, viewX, viewY, viewZ);
         _gl.Uniform1(_timeLoc, timeSec);
+        _currentTimeSec = timeSec;
         _gl.Uniform1(_tcModCountLoc, 0);
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 2.0f);
@@ -387,7 +394,7 @@ public sealed unsafe class BspRenderer : IDisposable
             {
                 ref var surf = ref _world.Surfaces[surfIdx];
                 _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
-                DrawSurfaceGeometry(ref surf, shaders, 0);
+                DrawSurfaceGeometry(ref surf, shaders, 0, isTransparentPass: true);
             }
 
             _gl.DepthMask(true);
@@ -417,6 +424,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_envMapLoc, 0);
         _gl.Uniform3(_viewPosLoc, _viewX, _viewY, _viewZ);
         _gl.Uniform1(_timeLoc, timeSec);
+        _currentTimeSec = timeSec;
         _gl.Uniform1(_tcModCountLoc, 0);
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 2.0f);
@@ -474,7 +482,7 @@ public sealed unsafe class BspRenderer : IDisposable
             {
                 ref var surf = ref _world.Surfaces[surfIdx];
                 _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
-                DrawSurfaceGeometry(ref surf, shaders, 0);
+                DrawSurfaceGeometry(ref surf, shaders, 0, isTransparentPass: true);
             }
 
             _gl.DepthMask(true);
@@ -589,7 +597,22 @@ public sealed unsafe class BspRenderer : IDisposable
 
     private const int CONTENTS_TRANSLUCENT = 0x20000000;
 
-    private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders, int alphaFunc)
+    private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders, int alphaFunc,
+        bool isTransparentPass = false)
+    {
+        // Check for multi-stage rendering
+        var stages = shaders.GetStages(surf.ShaderHandle);
+        if (stages != null && stages.Length > 1)
+        {
+            DrawSurfaceMultiStage(ref surf, shaders, stages, alphaFunc, isTransparentPass);
+            return;
+        }
+
+        // Single-stage path (fallback)
+        DrawSurfaceSingleStage(ref surf, shaders, alphaFunc);
+    }
+
+    private void DrawSurfaceSingleStage(ref BspSurface surf, ShaderManager shaders, int alphaFunc)
     {
         // Bind diffuse texture
         uint texId = shaders.GetTextureId(surf.ShaderHandle);
@@ -608,8 +631,9 @@ public sealed unsafe class BspRenderer : IDisposable
         // Set alpha test mode
         _gl.Uniform1(_alphaFuncLoc, alphaFunc);
 
-        // Per-surface rgbGen
+        // Per-surface rgbGen — use 5 (NDL fallback) for single-stage when no explicit rgbGen
         int rgbGen = shaders.GetRgbGen(surf.ShaderHandle);
+        if (rgbGen == 0) rgbGen = 5; // default to NDL fallback for single-stage
         _gl.Uniform1(_rgbGenLoc, rgbGen);
 
         // Per-surface environment mapping
@@ -617,7 +641,180 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
 
         // Per-surface tcMod
-        TcMod[]? tcMods = shaders.GetTcMods(surf.ShaderHandle);
+        SetTcModUniforms(shaders.GetTcMods(surf.ShaderHandle));
+
+        // Per-surface cull mode
+        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+        ApplyCullMode(cullMode);
+
+        // Per-surface polygonOffset
+        bool polyOffset = shaders.GetPolygonOffset(surf.ShaderHandle);
+        if (polyOffset)
+        {
+            _gl.Enable(EnableCap.PolygonOffsetFill);
+            _gl.PolygonOffset(-1f, -1f);
+        }
+
+        // Per-surface depth function
+        int depthFuncVal = shaders.GetDepthFunc(surf.ShaderHandle);
+        if (depthFuncVal == 1)
+            _gl.DepthFunc(DepthFunction.Equal);
+
+        // Per-surface deformVertexes
+        bool hasDeform = ApplyDeforms(shaders.GetDeforms(surf.ShaderHandle));
+
+        _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
+            (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
+            (void*)(surf.FirstIndex * sizeof(int)),
+            surf.FirstVertex);
+
+        // Restore default state
+        RestoreCullMode(cullMode);
+        if (polyOffset)
+            _gl.Disable(EnableCap.PolygonOffsetFill);
+        if (depthFuncVal != 0)
+            _gl.DepthFunc(DepthFunction.Lequal);
+        if (hasDeform)
+            _gl.Uniform1(_deformTypeLoc, -1);
+    }
+
+    /// <summary>
+    /// Multi-stage rendering: draw the same geometry once per stage with
+    /// different textures, blend modes, and state. Each stage composites
+    /// on top of the previous one (lightmap × texture, glow overlays, etc.)
+    /// </summary>
+    private void DrawSurfaceMultiStage(ref BspSurface surf, ShaderManager shaders,
+        ShaderManager.RuntimeStage[] stages, int alphaFunc, bool isTransparentPass)
+    {
+        // Per-surface state (shared across stages)
+        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+        ApplyCullMode(cullMode);
+
+        bool polyOffset = shaders.GetPolygonOffset(surf.ShaderHandle);
+        if (polyOffset)
+        {
+            _gl.Enable(EnableCap.PolygonOffsetFill);
+            _gl.PolygonOffset(-1f, -1f);
+        }
+
+        bool hasDeform = ApplyDeforms(shaders.GetDeforms(surf.ShaderHandle));
+
+        float timeSec = _currentTimeSec;
+
+        for (int si = 0; si < stages.Length; si++)
+        {
+            var stage = stages[si];
+
+            // Bind texture for this stage
+            if (stage.IsLightmap)
+            {
+                // Lightmap stage: bind lightmap texture as diffuse
+                if (surf.LightmapIndex >= 0 && surf.LightmapIndex < _lightmapTextures.Length)
+                {
+                    _gl.ActiveTexture(TextureUnit.Texture0);
+                    _gl.BindTexture(TextureTarget.Texture2D, _lightmapTextures[surf.LightmapIndex]);
+                }
+                else
+                {
+                    _gl.ActiveTexture(TextureUnit.Texture0);
+                    _gl.BindTexture(TextureTarget.Texture2D, shaders.WhiteTexture);
+                }
+                _gl.Uniform1(_useLightmapLoc, 0);
+                // Apply overbright scaling to lightmap stage via uColor
+                _gl.Uniform4(_colorLoc, 2.0f, 2.0f, 2.0f, 1f);
+            }
+            else
+            {
+                // Regular texture stage
+                uint stageTexId = shaders.GetStageTextureId(stage, timeSec);
+                _gl.ActiveTexture(TextureUnit.Texture0);
+                _gl.BindTexture(TextureTarget.Texture2D, stageTexId);
+                _gl.Uniform1(_useLightmapLoc, 0);
+                _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);
+            }
+
+            // Per-stage alpha test (only first stage typically)
+            _gl.Uniform1(_alphaFuncLoc, si == 0 ? alphaFunc : stage.AlphaFunc);
+
+            // Per-stage rgbGen
+            _gl.Uniform1(_rgbGenLoc, stage.RgbGen);
+
+            // Per-stage env map
+            _gl.Uniform1(_envMapLoc, stage.HasEnvMap ? 1 : 0);
+
+            // Per-stage tcMod
+            SetTcModUniforms(stage.TcMods);
+
+            // Per-stage blend and depth handling
+            if (isTransparentPass)
+            {
+                // Transparent pass: blend already on, depth mask already off
+                _gl.BlendFunc((BlendingFactor)stage.Blend.SrcFactor,
+                              (BlendingFactor)stage.Blend.DstFactor);
+            }
+            else if (si == 0)
+            {
+                // First stage in opaque pass
+                if (stage.Blend.NeedsBlending)
+                {
+                    _gl.Enable(EnableCap.Blend);
+                    _gl.BlendFunc((BlendingFactor)stage.Blend.SrcFactor,
+                                  (BlendingFactor)stage.Blend.DstFactor);
+                }
+
+                if (stage.DepthFunc == 1)
+                    _gl.DepthFunc(DepthFunction.Equal);
+            }
+            else
+            {
+                // Subsequent stages in opaque pass: blend on top, no depth write
+                _gl.Enable(EnableCap.Blend);
+                _gl.BlendFunc((BlendingFactor)stage.Blend.SrcFactor,
+                              (BlendingFactor)stage.Blend.DstFactor);
+                _gl.DepthMask(false);
+
+                if (stage.DepthFunc == 1)
+                    _gl.DepthFunc(DepthFunction.Equal);
+                else
+                    _gl.DepthFunc(DepthFunction.Lequal);
+            }
+
+            _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
+                (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
+                (void*)(surf.FirstIndex * sizeof(int)),
+                surf.FirstVertex);
+
+            // Restore per-stage state
+            if (!isTransparentPass && si > 0)
+            {
+                _gl.DepthMask(true);
+            }
+            if (!isTransparentPass && stage.Blend.NeedsBlending && si == 0)
+            {
+                _gl.Disable(EnableCap.Blend);
+            }
+            if (stage.DepthFunc != 0)
+                _gl.DepthFunc(DepthFunction.Lequal);
+        }
+
+        // Restore state
+        if (!isTransparentPass)
+            _gl.Disable(EnableCap.Blend);
+
+        // Restore uColor to default
+        _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);
+
+        // Restore shared state
+        RestoreCullMode(cullMode);
+        if (polyOffset)
+            _gl.Disable(EnableCap.PolygonOffsetFill);
+        if (hasDeform)
+            _gl.Uniform1(_deformTypeLoc, -1);
+    }
+
+    /// <summary>Set tcMod uniforms from an array of TcMod operations.</summary>
+    private void SetTcModUniforms(TcMod[]? tcMods)
+    {
         if (tcMods != null && tcMods.Length > 0)
         {
             int count = Math.Min(tcMods.Length, 4);
@@ -625,7 +822,6 @@ public sealed unsafe class BspRenderer : IDisposable
             for (int i = 0; i < count; i++)
             {
                 ref var m = ref tcMods[i];
-                float typeF = (float)m.Type;
                 switch (m.Type)
                 {
                     case TcModType.Scroll:
@@ -650,73 +846,49 @@ public sealed unsafe class BspRenderer : IDisposable
         {
             _gl.Uniform1(_tcModCountLoc, 0);
         }
+    }
 
-        // Per-surface cull mode
-        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+    private void ApplyCullMode(int cullMode)
+    {
         if (cullMode == 2) // none/twosided
             _gl.Disable(EnableCap.CullFace);
         else if (cullMode == 1) // back
             _gl.CullFace(TriangleFace.Back);
-        // else cullMode == 0 → front (already set as default)
+    }
 
-        // Per-surface polygonOffset
-        bool polyOffset = shaders.GetPolygonOffset(surf.ShaderHandle);
-        if (polyOffset)
-        {
-            _gl.Enable(EnableCap.PolygonOffsetFill);
-            _gl.PolygonOffset(-1f, -1f);
-        }
-
-        // Per-surface depth function
-        int depthFuncVal = shaders.GetDepthFunc(surf.ShaderHandle);
-        if (depthFuncVal == 1)
-            _gl.DepthFunc(DepthFunction.Equal);
-
-        // Per-surface deformVertexes
-        var deforms = shaders.GetDeforms(surf.ShaderHandle);
-        bool hasDeform = false;
-        if (deforms != null && deforms.Length > 0)
-        {
-            // Apply the first wave or move deform (GPU-based)
-            for (int d = 0; d < deforms.Length; d++)
-            {
-                var df = deforms[d];
-                if (df.Type == DeformType.Wave)
-                {
-                    _gl.Uniform1(_deformTypeLoc, 0);
-                    _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, df.Param2, df.Param3);
-                    _gl.Uniform4(_deformParams1Loc, df.Param4, df.Param5, 0f, 0f);
-                    hasDeform = true;
-                    break;
-                }
-                else if (df.Type == DeformType.Move)
-                {
-                    _gl.Uniform1(_deformTypeLoc, 1);
-                    _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, df.Param2, df.Param4);
-                    _gl.Uniform4(_deformParams1Loc, df.Param5, df.Param6, df.Param7, df.Param8);
-                    hasDeform = true;
-                    break;
-                }
-            }
-        }
-
-        _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
-            (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
-            (void*)(surf.FirstIndex * sizeof(int)),
-            surf.FirstVertex);
-
-        // Restore default state
+    private void RestoreCullMode(int cullMode)
+    {
         if (cullMode != 0)
         {
             _gl.Enable(EnableCap.CullFace);
             _gl.CullFace(TriangleFace.Front);
         }
-        if (polyOffset)
-            _gl.Disable(EnableCap.PolygonOffsetFill);
-        if (depthFuncVal != 0)
-            _gl.DepthFunc(DepthFunction.Lequal);
-        if (hasDeform)
-            _gl.Uniform1(_deformTypeLoc, -1);
+    }
+
+    private bool ApplyDeforms(DeformVertexes[]? deforms)
+    {
+        if (deforms == null || deforms.Length == 0)
+            return false;
+
+        for (int d = 0; d < deforms.Length; d++)
+        {
+            var df = deforms[d];
+            if (df.Type == DeformType.Wave)
+            {
+                _gl.Uniform1(_deformTypeLoc, 0);
+                _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, df.Param2, df.Param3);
+                _gl.Uniform4(_deformParams1Loc, df.Param4, df.Param5, 0f, 0f);
+                return true;
+            }
+            else if (df.Type == DeformType.Move)
+            {
+                _gl.Uniform1(_deformTypeLoc, 1);
+                _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, df.Param2, df.Param4);
+                _gl.Uniform4(_deformParams1Loc, df.Param5, df.Param6, df.Param7, df.Param8);
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>

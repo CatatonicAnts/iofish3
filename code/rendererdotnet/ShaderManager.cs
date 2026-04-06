@@ -265,6 +265,40 @@ public unsafe class ShaderManager
         return entry.Deforms;
     }
 
+    /// <summary>
+    /// Get multi-stage rendering data for a shader. Returns null for single-stage shaders.
+    /// </summary>
+    public RuntimeStage[]? GetStages(int handle)
+    {
+        handle = ResolveRemap(handle);
+        if (handle <= 0 || handle >= _shaders.Count)
+            return null;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.Stages;
+    }
+
+    /// <summary>
+    /// Get the texture ID for a specific stage, handling animation cycling.
+    /// </summary>
+    public uint GetStageTextureId(RuntimeStage stage, float timeSec)
+    {
+        if (stage.AnimTextureIds != null && stage.AnimTextureIds.Length > 0 && stage.AnimFrequency > 0)
+        {
+            int frameIdx = (int)(timeSec * stage.AnimFrequency) % stage.AnimTextureIds.Length;
+            if (frameIdx < 0) frameIdx = 0;
+            return stage.AnimTextureIds[frameIdx] != 0 ? stage.AnimTextureIds[frameIdx] : WhiteTexture;
+        }
+        if (stage.IsWhiteImage) return WhiteTexture;
+        return stage.TextureId != 0 ? stage.TextureId : WhiteTexture;
+    }
+
     public bool IsTransparent(int handle)
     {
         if (handle <= 0 || handle >= _shaders.Count)
@@ -315,7 +349,7 @@ public unsafe class ShaderManager
             entry.SortKey = def.SortKey;
             entry.Deforms = def.Deforms;
 
-            // Load animated texture frames
+            // Load animated texture frames (single-stage fallback path)
             if (def.AnimFrames != null && def.AnimFrames.Length > 1)
             {
                 entry.AnimFrequency = def.AnimFrequency;
@@ -333,6 +367,62 @@ public unsafe class ShaderManager
                     }
                 }
                 entry.AnimTextureIds = animIds;
+            }
+
+            // Load multi-stage data
+            if (def.Stages != null && def.Stages.Length > 0)
+            {
+                var runtimeStages = new RuntimeStage[def.Stages.Length];
+                for (int si = 0; si < def.Stages.Length; si++)
+                {
+                    var src = def.Stages[si];
+                    var rs = new RuntimeStage
+                    {
+                        IsLightmap = src.IsLightmap,
+                        IsWhiteImage = src.IsWhiteImage,
+                        Blend = src.Blend,
+                        AlphaFunc = src.AlphaFunc,
+                        HasEnvMap = src.HasEnvMap,
+                        TcMods = src.TcMods,
+                        RgbGen = src.RgbGen,
+                        AlphaGen = src.AlphaGen,
+                        DepthFunc = src.DepthFunc,
+                        DepthWrite = src.DepthWrite,
+                        AnimFrequency = src.AnimFrequency,
+                    };
+
+                    // Load stage texture
+                    if (src.AnimFrames != null && src.AnimFrames.Length > 1)
+                    {
+                        var sAnimIds = new uint[src.AnimFrames.Length];
+                        for (int fi = 0; fi < src.AnimFrames.Length; fi++)
+                        {
+                            var frameImg = ImageLoader.LoadFromEngineFS(src.AnimFrames[fi]);
+                            if (frameImg != null && _renderer != null)
+                            {
+                                fixed (byte* fd = frameImg.Data)
+                                    sAnimIds[fi] = _renderer.CreateTexture(
+                                        frameImg.Width, frameImg.Height, fd, clamp: src.Clamp);
+                            }
+                        }
+                        rs.AnimTextureIds = sAnimIds;
+                        // Use first frame as fallback
+                        if (sAnimIds.Length > 0) rs.TextureId = sAnimIds[0];
+                    }
+                    else if (src.ImagePath != null && !src.IsLightmap && !src.IsWhiteImage)
+                    {
+                        var stageImg = ImageLoader.LoadFromEngineFS(src.ImagePath);
+                        if (stageImg != null && _renderer != null)
+                        {
+                            fixed (byte* sd = stageImg.Data)
+                                rs.TextureId = _renderer.CreateTexture(
+                                    stageImg.Width, stageImg.Height, sd, clamp: src.Clamp);
+                        }
+                    }
+
+                    runtimeStages[si] = rs;
+                }
+                entry.Stages = runtimeStages;
             }
         }
 
@@ -401,5 +491,40 @@ public unsafe class ShaderManager
         public int SortKey { get; set; }
         /// <summary>deformVertexes operations</summary>
         public DeformVertexes[]? Deforms { get; set; }
+        /// <summary>Multi-stage rendering data (null = single-stage shader)</summary>
+        public RuntimeStage[]? Stages { get; set; }
+    }
+
+    /// <summary>
+    /// Per-stage runtime data for multi-pass rendering.
+    /// </summary>
+    public sealed class RuntimeStage
+    {
+        /// <summary>GL texture ID for this stage (0 = use lightmap or white)</summary>
+        public uint TextureId { get; set; }
+        /// <summary>Animated frame texture IDs (null if not animated)</summary>
+        public uint[]? AnimTextureIds { get; set; }
+        /// <summary>Animation frequency</summary>
+        public float AnimFrequency { get; set; }
+        /// <summary>True if this stage uses $lightmap</summary>
+        public bool IsLightmap { get; set; }
+        /// <summary>True if this stage uses $whiteimage</summary>
+        public bool IsWhiteImage { get; set; }
+        /// <summary>Blend mode for this stage</summary>
+        public BlendMode Blend { get; set; }
+        /// <summary>0=none, 1=GT0, 2=LT128, 3=GE128</summary>
+        public int AlphaFunc { get; set; }
+        /// <summary>Whether this stage uses tcGen environment</summary>
+        public bool HasEnvMap { get; set; }
+        /// <summary>tcMod operations</summary>
+        public TcMod[]? TcMods { get; set; }
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting</summary>
+        public int RgbGen { get; set; }
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave</summary>
+        public int AlphaGen { get; set; }
+        /// <summary>0=lequal, 1=equal</summary>
+        public int DepthFunc { get; set; }
+        /// <summary>Whether depthWrite is set</summary>
+        public bool DepthWrite { get; set; }
     }
 }
