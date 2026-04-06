@@ -13,6 +13,8 @@ public sealed unsafe class PostProcess : IDisposable
     private GL _gl = null!;
     private int _width, _height;
     private bool _enabled;
+    private bool _hdrEnabled;
+    private bool _bloomEnabled;
 
     // Main scene FBO (full resolution)
     private uint _sceneFbo;
@@ -26,12 +28,23 @@ public sealed unsafe class PostProcess : IDisposable
     private int _halfW, _halfH;
     private int _quarterW, _quarterH;
 
+    // HDR: luminance pyramid for auto-exposure
+    private uint[] _lumFbos = Array.Empty<uint>();
+    private uint[] _lumTexs = Array.Empty<uint>();
+    private int _lumLevels;
+    private uint _exposureFbo, _exposureTex;     // current smoothed exposure (1x1)
+    private uint _prevExposureFbo, _prevExposureTex; // previous frame's exposure
+    private int _frameCount;
+    private bool _autoExposure;
+
     // Shader programs
     private uint _brightProgram;   // bright-pass extraction
     private uint _blurHProgram;    // horizontal Gaussian blur
     private uint _blurVProgram;    // vertical Gaussian blur
-    private uint _compositeProgram; // combine scene + bloom
+    private uint _compositeProgram; // combine scene + bloom + tonemap
     private uint _blitProgram;     // simple texture blit (for downsample)
+    private uint _lumInitProgram;  // initial log-luminance from HDR scene
+    private uint _lumBlendProgram; // temporal exposure blending
 
     // Fullscreen quad VAO
     private uint _quadVao, _quadVbo;
@@ -41,10 +54,13 @@ public sealed unsafe class PostProcess : IDisposable
     private int _blurHTexelSizeLoc;
     private int _blurVTexelSizeLoc;
     private int _compSceneLoc, _compBloomLoc, _compStrengthLoc;
+    private int _compHdrLoc, _compExposureTexLoc;
+    private int _lumBlendFactorLoc;
 
     // Bloom settings
     private const float BloomThreshold = 0.7f;
     private const float BloomStrength = 0.35f;
+    private const float ExposureBlendFactor = 0.03f;
 
     #region GLSL Shaders
 
@@ -116,12 +132,44 @@ public sealed unsafe class PostProcess : IDisposable
         in vec2 vUV;
         uniform sampler2D uScene;
         uniform sampler2D uBloom;
+        uniform sampler2D uExposure;
         uniform float uBloomStrength;
+        uniform int uHdr;
+
+        // Filmic tonemapping (Uncharted 2 / Hable)
+        vec3 FilmicTonemap(vec3 x) {
+            const float SS  = 0.22; // Shoulder Strength
+            const float LS  = 0.30; // Linear Strength
+            const float LA  = 0.10; // Linear Angle
+            const float TS  = 0.20; // Toe Strength
+            const float TAN = 0.01; // Toe Angle Numerator
+            const float TAD = 0.30; // Toe Angle Denominator
+            return ((x*(SS*x+LA*LS)+TS*TAN)/(x*(SS*x+LS)+TS*TAD)) - TAN/TAD;
+        }
+
         out vec4 oColor;
         void main() {
             vec3 scene = texture(uScene, vUV).rgb;
             vec3 bloom = texture(uBloom, vUV).rgb;
-            oColor = vec4(scene + bloom * uBloomStrength, 1.0);
+            vec3 color = scene + bloom * uBloomStrength;
+
+            if (uHdr == 1) {
+                // Read auto-exposure from 1x1 texture
+                float avgLogLum = texture(uExposure, vec2(0.5)).r;
+                // Decode from [0,1] back to log space [-10,+10]
+                float logLum = (avgLogLum - 0.5) * 20.0;
+                float exposure = pow(2.0, -logLum);
+                color *= exposure;
+
+                // Apply filmic tonemapping
+                float W = 11.2; // Linear White
+                vec3 mapped = FilmicTonemap(color) / FilmicTonemap(vec3(W));
+
+                // Gamma correction (linear → sRGB)
+                color = pow(mapped, vec3(1.0 / 2.2));
+            }
+
+            oColor = vec4(color, 1.0);
         }
         """;
 
@@ -132,6 +180,36 @@ public sealed unsafe class PostProcess : IDisposable
         out vec4 oColor;
         void main() {
             oColor = texture(uTex, vUV);
+        }
+        """;
+
+    // Compute log-luminance from HDR scene (initial pass)
+    private const string LumInitFragSrc = """
+        #version 450 core
+        in vec2 vUV;
+        uniform sampler2D uScene;
+        out vec4 oColor;
+        void main() {
+            vec3 color = texture(uScene, vUV).rgb;
+            float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+            // Encode log luminance to [0,1] range: log2 in [-10,10] → [0,1]
+            float logLum = clamp(log2(max(lum, 0.00001)), -10.0, 10.0);
+            float encoded = logLum * 0.05 + 0.5;
+            oColor = vec4(encoded, encoded, encoded, 1.0);
+        }
+        """;
+
+    // Temporal blend between previous and current exposure
+    private const string LumBlendFragSrc = """
+        #version 450 core
+        in vec2 vUV;
+        uniform sampler2D uTex;
+        uniform float uBlendFactor;
+        out vec4 oColor;
+        void main() {
+            // Just output current luminance with alpha for blending
+            float lum = texture(uTex, vec2(0.5)).r;
+            oColor = vec4(lum, lum, lum, uBlendFactor);
         }
         """;
 
@@ -148,26 +226,43 @@ public sealed unsafe class PostProcess : IDisposable
         _halfH = height / 2;
         _quarterW = width / 4;
         _quarterH = height / 4;
+        _frameCount = 0;
 
-        // Check r_bloom cvar (default on)
+        // Check cvars
         Interop.EngineImports.Cvar_Get("r_bloom", "1", 0x01); // CVAR_ARCHIVE
-        int bloomVal = Interop.EngineImports.Cvar_VariableIntegerValue("r_bloom");
-        if (bloomVal == 0)
+        Interop.EngineImports.Cvar_Get("r_hdr", "1", 0x01);   // CVAR_ARCHIVE
+        Interop.EngineImports.Cvar_Get("r_autoExposure", "1", 0x01);
+        Interop.EngineImports.Cvar_Get("r_cameraExposure", "0", 0);
+
+        _bloomEnabled = Interop.EngineImports.Cvar_VariableIntegerValue("r_bloom") != 0;
+        _hdrEnabled = Interop.EngineImports.Cvar_VariableIntegerValue("r_hdr") != 0;
+        _autoExposure = Interop.EngineImports.Cvar_VariableIntegerValue("r_autoExposure") != 0;
+
+        if (!_bloomEnabled && !_hdrEnabled)
         {
             _enabled = false;
             Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
-                "[.NET] Post-processing disabled (r_bloom 0)\n");
+                "[.NET] Post-processing disabled (r_bloom 0, r_hdr 0)\n");
             return;
         }
 
         // Create fullscreen quad
         CreateQuadVao();
 
-        // Create FBOs
+        // Create FBOs (HDR uses RGBA16F, LDR uses RGBA8)
         CreateSceneFbo();
-        _brightFbo = CreateColorFbo(_halfW, _halfH, out _brightTex);
-        _blurFboA = CreateColorFbo(_quarterW, _quarterH, out _blurTexA);
-        _blurFboB = CreateColorFbo(_quarterW, _quarterH, out _blurTexB);
+
+        if (_bloomEnabled)
+        {
+            _brightFbo = CreateColorFbo(_halfW, _halfH, out _brightTex);
+            _blurFboA = CreateColorFbo(_quarterW, _quarterH, out _blurTexA);
+            _blurFboB = CreateColorFbo(_quarterW, _quarterH, out _blurTexB);
+        }
+
+        if (_hdrEnabled)
+        {
+            CreateLuminancePyramid();
+        }
 
         // Create shader programs
         _brightProgram = CreateProgram(QuadVertSrc, BrightFragSrc);
@@ -192,19 +287,35 @@ public sealed unsafe class PostProcess : IDisposable
         _compSceneLoc = _gl.GetUniformLocation(_compositeProgram, "uScene");
         _compBloomLoc = _gl.GetUniformLocation(_compositeProgram, "uBloom");
         _compStrengthLoc = _gl.GetUniformLocation(_compositeProgram, "uBloomStrength");
+        _compHdrLoc = _gl.GetUniformLocation(_compositeProgram, "uHdr");
+        _compExposureTexLoc = _gl.GetUniformLocation(_compositeProgram, "uExposure");
         _gl.UseProgram(_compositeProgram);
         _gl.Uniform1(_compSceneLoc, 0);
         _gl.Uniform1(_compBloomLoc, 1);
+        _gl.Uniform1(_compExposureTexLoc, 2);
 
         _blitProgram = CreateProgram(QuadVertSrc, BlitFragSrc);
         _gl.UseProgram(_blitProgram);
         _gl.Uniform1(_gl.GetUniformLocation(_blitProgram, "uTex"), 0);
 
+        if (_hdrEnabled)
+        {
+            _lumInitProgram = CreateProgram(QuadVertSrc, LumInitFragSrc);
+            _gl.UseProgram(_lumInitProgram);
+            _gl.Uniform1(_gl.GetUniformLocation(_lumInitProgram, "uScene"), 0);
+
+            _lumBlendProgram = CreateProgram(QuadVertSrc, LumBlendFragSrc);
+            _lumBlendFactorLoc = _gl.GetUniformLocation(_lumBlendProgram, "uBlendFactor");
+            _gl.UseProgram(_lumBlendProgram);
+            _gl.Uniform1(_gl.GetUniformLocation(_lumBlendProgram, "uTex"), 0);
+        }
+
         _gl.UseProgram(0);
         _enabled = true;
 
+        string features = _hdrEnabled ? (_bloomEnabled ? "HDR + bloom" : "HDR") : "bloom";
         Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
-            "[.NET] Post-processing initialized (bloom enabled)\n");
+            $"[.NET] Post-processing initialized ({features})\n");
     }
 
     /// <summary>Bind the scene FBO so all 3D rendering goes to our texture.</summary>
@@ -215,72 +326,136 @@ public sealed unsafe class PostProcess : IDisposable
         _gl.Viewport(0, 0, (uint)_width, (uint)_height);
     }
 
-    /// <summary>Unbind the scene FBO and apply bloom post-processing.</summary>
+    /// <summary>Unbind the scene FBO and apply post-processing (bloom + HDR tonemapping).</summary>
     public void ApplyAndBlit()
     {
         if (!_enabled) return;
+        _frameCount++;
 
         _gl.Disable(EnableCap.DepthTest);
         _gl.Disable(EnableCap.Blend);
         _gl.Disable(EnableCap.CullFace);
         _gl.BindVertexArray(_quadVao);
 
-        // Step 1: Bright-pass extract to half-res FBO
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _brightFbo);
-        _gl.Viewport(0, 0, (uint)_halfW, (uint)_halfH);
-        _gl.UseProgram(_brightProgram);
-        _gl.Uniform1(_brightThresholdLoc, BloomThreshold);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _sceneColorTex);
-        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+        // Bloom passes
+        uint bloomTex = 0;
+        if (_bloomEnabled)
+        {
+            // Step 1: Bright-pass extract to half-res FBO
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _brightFbo);
+            _gl.Viewport(0, 0, (uint)_halfW, (uint)_halfH);
+            _gl.UseProgram(_brightProgram);
+            _gl.Uniform1(_brightThresholdLoc, BloomThreshold);
+            _gl.ActiveTexture(TextureUnit.Texture0);
+            _gl.BindTexture(TextureTarget.Texture2D, _sceneColorTex);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
-        // Step 2: Downsample bright to quarter-res via blit
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboA);
-        _gl.Viewport(0, 0, (uint)_quarterW, (uint)_quarterH);
-        _gl.UseProgram(_blitProgram);
-        _gl.BindTexture(TextureTarget.Texture2D, _brightTex);
-        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            // Step 2: Downsample bright to quarter-res via blit
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboA);
+            _gl.Viewport(0, 0, (uint)_quarterW, (uint)_quarterH);
+            _gl.UseProgram(_blitProgram);
+            _gl.BindTexture(TextureTarget.Texture2D, _brightTex);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
-        // Step 3: Horizontal Gaussian blur (A → B)
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboB);
-        _gl.UseProgram(_blurHProgram);
-        _gl.Uniform1(_blurHTexelSizeLoc, 1.0f / _quarterW);
-        _gl.BindTexture(TextureTarget.Texture2D, _blurTexA);
-        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            // Step 3: Horizontal Gaussian blur (A → B)
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboB);
+            _gl.UseProgram(_blurHProgram);
+            _gl.Uniform1(_blurHTexelSizeLoc, 1.0f / _quarterW);
+            _gl.BindTexture(TextureTarget.Texture2D, _blurTexA);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
-        // Step 4: Vertical Gaussian blur (B → A)
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboA);
-        _gl.UseProgram(_blurVProgram);
-        _gl.Uniform1(_blurVTexelSizeLoc, 1.0f / _quarterH);
-        _gl.BindTexture(TextureTarget.Texture2D, _blurTexB);
-        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            // Step 4: Vertical Gaussian blur (B → A)
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboA);
+            _gl.UseProgram(_blurVProgram);
+            _gl.Uniform1(_blurVTexelSizeLoc, 1.0f / _quarterH);
+            _gl.BindTexture(TextureTarget.Texture2D, _blurTexB);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
-        // Optional: second blur pass for smoother bloom
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboB);
-        _gl.UseProgram(_blurHProgram);
-        _gl.BindTexture(TextureTarget.Texture2D, _blurTexA);
-        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            // Second blur pass for smoother bloom
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboB);
+            _gl.UseProgram(_blurHProgram);
+            _gl.BindTexture(TextureTarget.Texture2D, _blurTexA);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboA);
-        _gl.UseProgram(_blurVProgram);
-        _gl.BindTexture(TextureTarget.Texture2D, _blurTexB);
-        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _blurFboA);
+            _gl.UseProgram(_blurVProgram);
+            _gl.BindTexture(TextureTarget.Texture2D, _blurTexB);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
-        // Step 5: Composite — scene + bloom → default framebuffer
+            bloomTex = _blurTexA;
+        }
+
+        // HDR: compute auto-exposure via luminance pyramid
+        if (_hdrEnabled && _autoExposure)
+        {
+            ComputeAutoExposure();
+        }
+
+        // Final composite — scene + bloom → default framebuffer (with optional tonemapping)
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         _gl.Viewport(0, 0, (uint)_width, (uint)_height);
         _gl.UseProgram(_compositeProgram);
-        _gl.Uniform1(_compStrengthLoc, BloomStrength);
+        _gl.Uniform1(_compStrengthLoc, _bloomEnabled ? BloomStrength : 0.0f);
+        _gl.Uniform1(_compHdrLoc, _hdrEnabled ? 1 : 0);
+
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _sceneColorTex);
         _gl.ActiveTexture(TextureUnit.Texture1);
-        _gl.BindTexture(TextureTarget.Texture2D, _blurTexA);
+        _gl.BindTexture(TextureTarget.Texture2D, bloomTex != 0 ? bloomTex : _sceneColorTex);
+        _gl.ActiveTexture(TextureUnit.Texture2);
+        _gl.BindTexture(TextureTarget.Texture2D, _hdrEnabled ? _exposureTex : 0);
         _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
         // Restore state for 2D rendering
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindVertexArray(0);
         _gl.UseProgram(0);
+    }
+
+    /// <summary>Compute auto-exposure via luminance pyramid downsampling.</summary>
+    private void ComputeAutoExposure()
+    {
+        _gl.ActiveTexture(TextureUnit.Texture0);
+
+        // Step 1: Extract log-luminance from scene to first pyramid level
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _lumFbos[0]);
+        int size = 1 << (_lumLevels - 1); // largest level
+        _gl.Viewport(0, 0, (uint)size, (uint)size);
+        _gl.UseProgram(_lumInitProgram);
+        _gl.BindTexture(TextureTarget.Texture2D, _sceneColorTex);
+        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+
+        // Step 2: Downsample pyramid to 1x1 via blit (linear filtering averages)
+        _gl.UseProgram(_blitProgram);
+        for (int i = 1; i < _lumLevels; i++)
+        {
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _lumFbos[i]);
+            size >>= 1;
+            _gl.Viewport(0, 0, (uint)size, (uint)size);
+            _gl.BindTexture(TextureTarget.Texture2D, _lumTexs[i - 1]);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+        }
+
+        // Step 3: Temporal blend — smoothly adapt exposure
+        // Swap exposure FBOs
+        (_exposureFbo, _prevExposureFbo) = (_prevExposureFbo, _exposureFbo);
+        (_exposureTex, _prevExposureTex) = (_prevExposureTex, _exposureTex);
+
+        // Blit previous exposure first as base
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _exposureFbo);
+        _gl.Viewport(0, 0, 1, 1);
+        _gl.UseProgram(_blitProgram);
+        _gl.BindTexture(TextureTarget.Texture2D, _prevExposureTex);
+        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+
+        // Blend in current luminance
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        _gl.UseProgram(_lumBlendProgram);
+        _gl.Uniform1(_lumBlendFactorLoc, ExposureBlendFactor);
+        _gl.BindTexture(TextureTarget.Texture2D, _lumTexs[_lumLevels - 1]); // 1x1 current
+        _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+        _gl.Disable(EnableCap.Blend);
     }
 
     public void Dispose()
@@ -290,12 +465,25 @@ public sealed unsafe class PostProcess : IDisposable
         if (_blurVProgram != 0) _gl.DeleteProgram(_blurVProgram);
         if (_blurHProgram != 0) _gl.DeleteProgram(_blurHProgram);
         if (_brightProgram != 0) _gl.DeleteProgram(_brightProgram);
+        if (_lumInitProgram != 0) _gl.DeleteProgram(_lumInitProgram);
+        if (_lumBlendProgram != 0) _gl.DeleteProgram(_lumBlendProgram);
 
         DeleteFbo(ref _blurFboB, ref _blurTexB, 0);
         DeleteFbo(ref _blurFboA, ref _blurTexA, 0);
         DeleteFbo(ref _brightFbo, ref _brightTex, 0);
         DeleteFbo(ref _sceneFbo, ref _sceneColorTex, _sceneDepthRbo);
         _sceneDepthRbo = 0;
+
+        // Clean up HDR luminance pyramid
+        for (int i = 0; i < _lumLevels; i++)
+        {
+            DeleteFbo(ref _lumFbos[i], ref _lumTexs[i], 0);
+        }
+        _lumFbos = Array.Empty<uint>();
+        _lumTexs = Array.Empty<uint>();
+        _lumLevels = 0;
+        DeleteFbo(ref _exposureFbo, ref _exposureTex, 0);
+        DeleteFbo(ref _prevExposureFbo, ref _prevExposureTex, 0);
 
         if (_quadVbo != 0) { _gl.DeleteBuffer(_quadVbo); _quadVbo = 0; }
         if (_quadVao != 0) { _gl.DeleteVertexArray(_quadVao); _quadVao = 0; }
@@ -310,11 +498,19 @@ public sealed unsafe class PostProcess : IDisposable
         _sceneFbo = _gl.GenFramebuffer();
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _sceneFbo);
 
-        // Color attachment: RGBA8 (could upgrade to RGBA16F for HDR later)
+        // HDR: RGBA16F, LDR: RGBA8
         _sceneColorTex = _gl.GenTexture();
         _gl.BindTexture(TextureTarget.Texture2D, _sceneColorTex);
-        _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8,
-            (uint)_width, (uint)_height, 0, Silk.NET.OpenGL.PixelFormat.Rgba, Silk.NET.OpenGL.PixelType.UnsignedByte, null);
+        if (_hdrEnabled)
+        {
+            _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba16f,
+                (uint)_width, (uint)_height, 0, Silk.NET.OpenGL.PixelFormat.Rgba, Silk.NET.OpenGL.PixelType.Float, null);
+        }
+        else
+        {
+            _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8,
+                (uint)_width, (uint)_height, 0, Silk.NET.OpenGL.PixelFormat.Rgba, Silk.NET.OpenGL.PixelType.UnsignedByte, null);
+        }
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
         _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
@@ -358,6 +554,35 @@ public sealed unsafe class PostProcess : IDisposable
 
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         return fbo;
+    }
+
+    private void CreateLuminancePyramid()
+    {
+        // Compute number of levels needed to get from 256 down to 1 (256→128→64→32→16→8→4→2→1 = 9 levels)
+        _lumLevels = 9; // 256x256 → 1x1
+        _lumFbos = new uint[_lumLevels];
+        _lumTexs = new uint[_lumLevels];
+
+        int size = 256;
+        for (int i = 0; i < _lumLevels; i++)
+        {
+            _lumFbos[i] = CreateColorFbo(size, size, out _lumTexs[i]);
+            size >>= 1;
+            if (size < 1) size = 1;
+        }
+
+        // Two 1x1 FBOs for temporal exposure blending (current + previous)
+        _exposureFbo = CreateColorFbo(1, 1, out _exposureTex);
+        _prevExposureFbo = CreateColorFbo(1, 1, out _prevExposureTex);
+
+        // Initialize exposure textures to mid-gray (0.5 = log2(1.0) = neutral exposure)
+        float midGray = 0.5f;
+        _gl.BindTexture(TextureTarget.Texture2D, _exposureTex);
+        _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 1, 1,
+            Silk.NET.OpenGL.PixelFormat.Red, Silk.NET.OpenGL.PixelType.Float, &midGray);
+        _gl.BindTexture(TextureTarget.Texture2D, _prevExposureTex);
+        _gl.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, 1, 1,
+            Silk.NET.OpenGL.PixelFormat.Red, Silk.NET.OpenGL.PixelType.Float, &midGray);
     }
 
     private void DeleteFbo(ref uint fbo, ref uint tex, uint rbo)

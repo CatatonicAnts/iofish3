@@ -39,7 +39,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### Tier 3 — GL2-Specific Advanced Features
 
-- [ ] **HDR rendering** - GL2 renders to GL_RGBA16F FBOs and does tonemapping with auto-exposure. Controlled by `r_hdr`. `CPX 4`
+- [x] **HDR rendering** - RGBA16F scene FBO, filmic tonemapping (Uncharted 2 curve), auto-exposure via luminance pyramid with temporal smoothing. Controlled by `r_hdr`, `r_autoExposure`, `r_cameraExposure`. `CPX 4`
 - [x] **Bloom / post-processing** - FBO-based bloom pipeline: bright-pass extraction, multi-pass Gaussian blur, additive composite. Controlled by `r_bloom` cvar. `CPX 3`
 - [ ] **Normal mapping** - `normalMap`/`bumpMap` stage type for per-pixel lighting. GL2 generates normals from height maps if missing. `CPX 3`
 - [ ] **Specular mapping** - `specularMap` stage type with `specularScale`, `specularReflectance`, `specularExponent`, `gloss` controls. `CPX 3`
@@ -257,6 +257,7 @@ The cgame DLL interface is:
 - [x] rgbGen / alphaGen — parse identity/vertex/entity/wave/identityLighting, apply vertex color path in BSP fragment shader
 - [x] polygonOffset — parse directive, apply `glPolygonOffset(-1,-1)` per-surface for decals
 - [x] depthFunc / depthWrite — parse `depthFunc equal` and `depthWrite`, apply per-surface depth state
+- [x] HDR rendering — RGBA16F scene FBO, filmic tonemapping (Uncharted 2 curve), auto-exposure via luminance pyramid (256→1x1) with temporal smoothing (3% blend), r_hdr/r_autoExposure/r_cameraExposure cvars
 - [x] FBO pipeline and bloom post-processing — scene FBO with bright-pass extraction, multi-pass Gaussian blur at quarter resolution, additive bloom composite. Controlled by `r_bloom` cvar (default on)
 - [x] RemapShader — runtime shader handle remapping via dictionary, resolve in GetTextureId
 - [x] Sort order — parse `sort` directive (portal/sky/opaque/decal/seeThrough/banner/additive/nearest + numeric), sort transparent surfaces by key before drawing
