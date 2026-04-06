@@ -111,14 +111,20 @@ public sealed unsafe class ShaderScriptParser
 
     /// <summary>
     /// Parse a single shader definition (everything between the outer { }).
-    /// Extracts the first usable "map" image path from the shader's stages.
+    /// Extracts the first usable "map" image path and blendFunc from the shader's stages.
     /// </summary>
     private ShaderDef? ParseSingleShader(string name, ref ShaderTokenizer tokenizer)
     {
         int depth = 1;
         string? imagePath = null;
         bool clamp = false;
-        bool foundImage = false;
+        BlendMode blend = BlendMode.Opaque;
+        bool foundUsableStage = false;
+
+        // Per-stage tracking
+        string? stageImage = null;
+        bool stageClamp = false;
+        BlendMode stageBlend = BlendMode.Opaque;
 
         while (depth > 0 && tokenizer.HasMore())
         {
@@ -129,35 +135,45 @@ public sealed unsafe class ShaderScriptParser
             if (token == "{")
             {
                 depth++;
+                if (depth == 2)
+                {
+                    stageImage = null;
+                    stageClamp = false;
+                    stageBlend = BlendMode.Opaque;
+                }
                 continue;
             }
 
             if (token == "}")
             {
+                // When leaving a stage, adopt the first stage that has a real image
+                if (depth == 2 && !foundUsableStage && stageImage != null)
+                {
+                    imagePath = stageImage;
+                    clamp = stageClamp;
+                    blend = stageBlend;
+                    foundUsableStage = true;
+                }
                 depth--;
                 continue;
             }
 
-            // Only look for map directives inside stages (depth == 2)
-            if (depth == 2 && !foundImage)
+            // Parse directives inside stages (depth == 2)
+            if (depth == 2)
             {
                 if (string.Equals(token, "map", StringComparison.OrdinalIgnoreCase))
                 {
                     string? mapToken = tokenizer.NextToken();
-                    if (mapToken != null && !IsSpecialMap(mapToken))
-                    {
-                        imagePath = mapToken;
-                        foundImage = true;
-                    }
+                    if (mapToken != null && !IsSpecialMap(mapToken) && stageImage == null)
+                        stageImage = mapToken;
                 }
                 else if (string.Equals(token, "clampMap", StringComparison.OrdinalIgnoreCase))
                 {
                     string? mapToken = tokenizer.NextToken();
-                    if (mapToken != null && !IsSpecialMap(mapToken))
+                    if (mapToken != null && !IsSpecialMap(mapToken) && stageImage == null)
                     {
-                        imagePath = mapToken;
-                        clamp = true;
-                        foundImage = true;
+                        stageImage = mapToken;
+                        stageClamp = true;
                     }
                 }
                 else if (string.Equals(token, "animMap", StringComparison.OrdinalIgnoreCase))
@@ -165,11 +181,12 @@ public sealed unsafe class ShaderScriptParser
                     // animMap <frequency> <image1> <image2> ...
                     tokenizer.NextToken(); // skip frequency
                     string? firstFrame = tokenizer.NextToken();
-                    if (firstFrame != null && !IsSpecialMap(firstFrame))
-                    {
-                        imagePath = firstFrame;
-                        foundImage = true;
-                    }
+                    if (firstFrame != null && !IsSpecialMap(firstFrame) && stageImage == null)
+                        stageImage = firstFrame;
+                }
+                else if (string.Equals(token, "blendFunc", StringComparison.OrdinalIgnoreCase))
+                {
+                    stageBlend = ParseBlendFunc(ref tokenizer);
                 }
             }
         }
@@ -178,8 +195,48 @@ public sealed unsafe class ShaderScriptParser
         {
             Name = name,
             ImagePath = imagePath,
-            Clamp = clamp
+            Clamp = clamp,
+            Blend = blend
         };
+    }
+
+    /// <summary>
+    /// Parse a blendFunc directive: either shorthand (add/filter/blend)
+    /// or long form (GL_ONE GL_ONE, etc.)
+    /// </summary>
+    private static BlendMode ParseBlendFunc(ref ShaderTokenizer tokenizer)
+    {
+        string? src = tokenizer.NextToken();
+        if (src == null || src == "{" || src == "}") return BlendMode.Alpha;
+
+        // Shorthand forms
+        if (string.Equals(src, "add", StringComparison.OrdinalIgnoreCase))
+            return BlendMode.Add;
+        if (string.Equals(src, "filter", StringComparison.OrdinalIgnoreCase))
+            return BlendMode.Filter;
+        if (string.Equals(src, "blend", StringComparison.OrdinalIgnoreCase))
+            return BlendMode.Alpha;
+
+        // Long form: blendFunc <srcFactor> <dstFactor>
+        string? dst = tokenizer.NextToken();
+        if (dst == null || dst == "{" || dst == "}") return BlendMode.Alpha;
+
+        // Classify common GL blend factor combinations
+        bool srcIsOne = src.Equals("GL_ONE", StringComparison.OrdinalIgnoreCase);
+        bool dstIsOne = dst.Equals("GL_ONE", StringComparison.OrdinalIgnoreCase);
+        bool srcIsSrcAlpha = src.Equals("GL_SRC_ALPHA", StringComparison.OrdinalIgnoreCase);
+        bool dstIsOneMinusSrcAlpha = dst.Equals("GL_ONE_MINUS_SRC_ALPHA", StringComparison.OrdinalIgnoreCase);
+        bool srcIsDstColor = src.Equals("GL_DST_COLOR", StringComparison.OrdinalIgnoreCase);
+        bool dstIsZero = dst.Equals("GL_ZERO", StringComparison.OrdinalIgnoreCase);
+
+        if (srcIsOne && dstIsOne) return BlendMode.Add;
+        if (srcIsSrcAlpha && dstIsOneMinusSrcAlpha) return BlendMode.Alpha;
+        if (srcIsDstColor && dstIsZero) return BlendMode.Filter;
+
+        // Any other blend combo that isn't fully opaque → alpha blend
+        if (srcIsOne && dstIsZero) return BlendMode.Opaque;
+
+        return BlendMode.Alpha;
     }
 
     private static bool IsSpecialMap(string token)
@@ -302,4 +359,18 @@ public sealed class ShaderDef
 
     /// <summary>Whether the texture should use clamp-to-edge wrapping.</summary>
     public bool Clamp { get; init; }
+
+    /// <summary>Blend mode from the first stage's blendFunc directive.</summary>
+    public BlendMode Blend { get; init; }
+}
+
+/// <summary>
+/// Common Q3 blend modes mapped from shader script blendFunc directives.
+/// </summary>
+public enum BlendMode
+{
+    Opaque = 0,   // No blending (solid geometry)
+    Alpha,        // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA (standard transparency)
+    Add,          // GL_ONE, GL_ONE (additive glow effects)
+    Filter,       // GL_DST_COLOR, GL_ZERO (multiplicative darkening)
 }

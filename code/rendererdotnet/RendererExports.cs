@@ -319,7 +319,8 @@ public static unsafe class RendererExports
         if (_renderer2D == null || _shaders == null) return;
 
         uint tex = _shaders.GetTextureId(hShader);
-        _renderer2D.DrawQuad(x, y, w, h, s1, t1, s2, t2, tex);
+        BlendMode blend = _shaders.GetBlendMode(hShader);
+        _renderer2D.DrawQuad(x, y, w, h, s1, t1, s2, t2, tex, blend);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

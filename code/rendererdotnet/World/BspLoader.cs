@@ -346,11 +346,19 @@ public static unsafe class BspLoader
             int totalW = numPatchesX * TESS_LEVEL + 1;
             int totalH = numPatchesY * TESS_LEVEL + 1;
 
-            // Tessellate all sub-patches
-            for (int py = 0; py < numPatchesY; py++)
+            // Tessellate: generate vertices in grid order
+            for (int gy = 0; gy < totalH; gy++)
             {
-                for (int px = 0; px < numPatchesX; px++)
+                for (int gx = 0; gx < totalW; gx++)
                 {
+                    // Which sub-patch does this grid point belong to?
+                    int px = Math.Min(gx / TESS_LEVEL, numPatchesX - 1);
+                    int py = Math.Min(gy / TESS_LEVEL, numPatchesY - 1);
+
+                    // Local parametric coordinates within the sub-patch [0..1]
+                    float s = (gx - px * TESS_LEVEL) / (float)TESS_LEVEL;
+                    float t = (gy - py * TESS_LEVEL) / (float)TESS_LEVEL;
+
                     // Get 3x3 control points for this sub-patch
                     var cp = new BspVertex[3, 3];
                     for (int cy = 0; cy < 3; cy++)
@@ -363,21 +371,7 @@ public static unsafe class BspLoader
                         }
                     }
 
-                    // Tessellate this 3x3 patch
-                    for (int ty = 0; ty <= TESS_LEVEL; ty++)
-                    {
-                        // Skip first row/col of sub-patch if not the first sub-patch
-                        // (to avoid duplicate vertices at seams)
-                        if (ty == 0 && py > 0) continue;
-                        for (int tx = 0; tx <= TESS_LEVEL; tx++)
-                        {
-                            if (tx == 0 && px > 0) continue;
-
-                            float s = tx / (float)TESS_LEVEL;
-                            float t = ty / (float)TESS_LEVEL;
-                            newVerts.Add(EvalBezier(cp, s, t));
-                        }
-                    }
+                    newVerts.Add(EvalBezier(cp, s, t));
                 }
             }
 

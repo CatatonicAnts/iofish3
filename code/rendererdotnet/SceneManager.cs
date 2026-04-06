@@ -529,7 +529,19 @@ public sealed unsafe class SceneManager
             _gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indices.Length * sizeof(uint)), p, BufferUsageARB.StreamDraw);
 
         _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        BlendMode spriteBlend = _shaders.GetBlendMode(ent.CustomShader);
+        switch (spriteBlend)
+        {
+            case BlendMode.Add:
+                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                break;
+            case BlendMode.Filter:
+                _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
+                break;
+            default:
+                _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+                break;
+        }
         _gl.DepthMask(false);
         _gl.Disable(EnableCap.CullFace);
 
@@ -564,8 +576,6 @@ public sealed unsafe class SceneManager
 
         _gl.BindVertexArray(_spriteVao);
 
-        _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
         _gl.DepthMask(false);
         _gl.Disable(EnableCap.CullFace);
 
@@ -582,6 +592,22 @@ public sealed unsafe class SceneManager
             uint texId = _shaders.GetTextureId(poly.ShaderHandle);
             _gl.ActiveTexture(TextureUnit.Texture0);
             _gl.BindTexture(TextureTarget.Texture2D, texId);
+
+            // Apply per-shader blend mode
+            BlendMode polyBlend = _shaders.GetBlendMode(poly.ShaderHandle);
+            _gl.Enable(EnableCap.Blend);
+            switch (polyBlend)
+            {
+                case BlendMode.Add:
+                    _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+                    break;
+                case BlendMode.Filter:
+                    _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.Zero);
+                    break;
+                default:
+                    _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+                    break;
+            }
 
             // Build triangle fan vertices
             var verts = polyVertBuf[..(nv * 9)];

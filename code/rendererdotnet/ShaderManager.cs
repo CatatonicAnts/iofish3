@@ -80,6 +80,21 @@ public unsafe class ShaderManager
         return entry.TextureId != 0 ? entry.TextureId : WhiteTexture;
     }
 
+    public BlendMode GetBlendMode(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return BlendMode.Alpha;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.Blend;
+    }
+
     private void TryLoadTexture(ShaderEntry entry)
     {
         if (_renderer == null) return;
@@ -95,7 +110,15 @@ public unsafe class ShaderManager
             {
                 image = ImageLoader.LoadFromEngineFS(def.ImagePath);
                 if (image != null)
+                {
                     entry.Clamp = def.Clamp;
+                    entry.Blend = def.Blend;
+                }
+            }
+            else if (def != null)
+            {
+                // No image but shader def exists — still apply blend mode
+                entry.Blend = def.Blend;
             }
         }
 
@@ -138,5 +161,6 @@ public unsafe class ShaderManager
         public uint TextureId { get; set; }
         public bool Loaded { get; set; }
         public bool Clamp { get; set; }
+        public BlendMode Blend { get; set; } = BlendMode.Alpha;
     }
 }
