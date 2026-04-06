@@ -714,8 +714,8 @@ public static unsafe class Player
 
         // Use the torso animation for the weapon hand frame
         ref var pe = ref _playerEntities[clientNum];
-        hand.FrameNum = MapTorsoToWeaponFrame(pe.Torso.Frame);
-        hand.OldFrame = MapTorsoToWeaponFrame(pe.Torso.OldFrame);
+        hand.FrameNum = MapTorsoToWeaponFrame(ci, pe.Torso.Frame);
+        hand.OldFrame = MapTorsoToWeaponFrame(ci, pe.Torso.OldFrame);
         hand.Backlerp = pe.Torso.Backlerp;
 
         hand.HModel = handsModel;
@@ -807,12 +807,23 @@ public static unsafe class Player
 
     // ── MapTorsoToWeaponFrame ──
 
-    private static int MapTorsoToWeaponFrame(int frame)
+    private static int MapTorsoToWeaponFrame(ClientInfo ci, int frame)
     {
-        // Simple pass-through — weapon hand uses same frame numbers.
-        // Q3 has a specific mapping table; for now this is sufficient
-        // since most weapon hand models are static or trivially mapped.
-        return frame;
+        // Map torso animation frames to weapon hand model frames.
+        // Matches CG_MapTorsoToWeaponFrame from cg_weapons.c.
+        ref var drop = ref ci.Animations[TORSO_DROP];
+        if (frame >= drop.FirstFrame && frame < drop.FirstFrame + 9)
+            return frame - drop.FirstFrame + 6;
+
+        ref var attack = ref ci.Animations[TORSO_ATTACK];
+        if (frame >= attack.FirstFrame && frame < attack.FirstFrame + 6)
+            return 1 + frame - attack.FirstFrame;
+
+        ref var attack2 = ref ci.Animations[TORSO_ATTACK2];
+        if (frame >= attack2.FirstFrame && frame < attack2.FirstFrame + 6)
+            return 1 + frame - attack2.FirstFrame;
+
+        return 0;
     }
 
     // ── AnglesToAxis ──

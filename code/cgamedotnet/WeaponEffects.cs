@@ -157,6 +157,10 @@ public static unsafe class WeaponEffects
     public static int GetBarrelModel(int weapon) =>
         (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS) ? _weapons[weapon].BarrelModel : 0;
 
+    /// <summary>Get missile model handle for projectile rendering.</summary>
+    public static int GetMissileModel(int weapon) =>
+        (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS) ? _weapons[weapon].MissileModel : 0;
+
     /// <summary>Get flash model handle for first-person rendering.</summary>
     public static int GetFlashModel(int weapon) =>
         (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS) ? _weapons[weapon].FlashModel : 0;

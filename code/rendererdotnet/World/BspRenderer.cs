@@ -568,6 +568,15 @@ public sealed unsafe class BspRenderer : IDisposable
             if ((sFlags & SurfaceFlags.SURF_SKY) != 0)
                 return;
 
+            // Portal/mirror surfaces (sort key 1): render with environment mapping
+            // as an approximation since full portal rendering is not yet implemented.
+            int sortKey0 = shaders.GetSortKey(surf.ShaderHandle);
+            if (sortKey0 == 1)
+            {
+                DrawSurfacePortal(ref surf, shaders);
+                return;
+            }
+
             // Surfaces with alphaFunc (alpha testing) render in the opaque pass
             // with depth writes, discarding pixels based on alpha test
             int alphaFunc = shaders.GetAlphaFunc(surf.ShaderHandle);
@@ -602,6 +611,37 @@ public sealed unsafe class BspRenderer : IDisposable
     }
 
     private const int CONTENTS_TRANSLUCENT = 0x20000000;
+
+    /// <summary>
+    /// Render a portal/mirror surface with environment mapping as an approximation.
+    /// True portal rendering requires FBO-based scene re-rendering; this provides
+    /// a reflective surface instead of a black screen.
+    /// </summary>
+    private void DrawSurfacePortal(ref BspSurface surf, ShaderManager shaders)
+    {
+        uint texId = shaders.GetTextureId(surf.ShaderHandle);
+        if (texId == 0) texId = shaders.WhiteTexture;
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, texId);
+
+        _gl.Uniform1(_useLightmapLoc, 0);
+        _gl.Uniform1(_alphaFuncLoc, 0);
+        _gl.Uniform1(_rgbGenLoc, 5);
+        _gl.Uniform1(_envMapLoc, 1);
+        SetTcModUniforms(null);
+        _gl.Uniform1(_deformTypeLoc, -1);
+
+        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+        ApplyCullMode(cullMode);
+
+        _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
+            (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
+            (void*)(surf.FirstIndex * sizeof(int)),
+            surf.FirstVertex);
+
+        RestoreCullMode(cullMode);
+        _gl.Uniform1(_envMapLoc, 0);
+    }
 
     private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders, int alphaFunc,
         bool isTransparentPass = false)

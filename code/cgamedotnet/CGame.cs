@@ -516,7 +516,7 @@ public static unsafe class CGame
         for (int i = 1; i < MAX_MODELS; i++)
         {
             string modelName = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_MODELS + i);
-            if (string.IsNullOrEmpty(modelName)) break;
+            if (string.IsNullOrEmpty(modelName)) continue;
             _gameModels[i] = Syscalls.R_RegisterModel(modelName);
             modelCount++;
         }
@@ -527,7 +527,7 @@ public static unsafe class CGame
         for (int i = 1; i < MAX_SOUNDS; i++)
         {
             string soundName = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_SOUNDS + i);
-            if (string.IsNullOrEmpty(soundName)) break;
+            if (string.IsNullOrEmpty(soundName)) continue;
             if (soundName[0] == '*') continue; // custom sound
             _gameSounds[i] = Syscalls.S_RegisterSound(soundName, 0);
             soundCount++;
@@ -800,6 +800,9 @@ public static unsafe class CGame
 
     private static void ConfigStringModified(int index)
     {
+        // Refresh the local copy so GetConfigString reads the updated value
+        Syscalls.GetGameState(_gameStateRaw);
+
         // Re-register models from updated config strings
         const int CS_MODELS = 32;
         const int CS_SOUNDS = CS_MODELS + MAX_MODELS;
@@ -1737,7 +1740,12 @@ public static unsafe class CGame
 
         Q3RefEntity rent = default;
         rent.ReType = Q3RefEntity.RT_MODEL;
-        rent.HModel = _gameModels[s1.ModelIndex];
+
+        // Prefer the missile model registered by WeaponEffects (rocket.md3, grenade1.md3, etc.)
+        // since config-string model registration may have gaps.
+        int missileModel = WeaponEffects.GetMissileModel(weapon);
+        rent.HModel = missileModel != 0 ? missileModel : _gameModels[s1.ModelIndex];
+
         SetEntityOriginAndAxis(ref rent, ref cent);
         SetEntityColors(ref rent, 255, 255, 255, 255);
         Syscalls.R_AddRefEntityToScene(&rent);
