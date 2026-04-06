@@ -58,6 +58,10 @@ public static unsafe class CGame
     private const int BIGCHAR_HEIGHT = 16;
     private const int ICON_SIZE = 48;
     private const int TEXT_ICON_SPACE = 4;
+
+    // Screen scale factors (actual resolution / virtual 640x480)
+    private static float _screenXScale;
+    private static float _screenYScale;
     private const int STAT_MINUS = 10;
     private const int NUM_CROSSHAIRS = 10;
     private const int FPS_FRAMES = 4;
@@ -191,6 +195,8 @@ public static unsafe class CGame
         Syscalls.GetGlconfig(glconfig);
         _screenWidth = *(int*)(glconfig + Q3GlConfig.VID_WIDTH);
         _screenHeight = *(int*)(glconfig + Q3GlConfig.VID_HEIGHT);
+        _screenXScale = _screenWidth / (float)SCREEN_WIDTH;
+        _screenYScale = _screenHeight / (float)SCREEN_HEIGHT;
         Syscalls.Print($"[.NET cgame] Screen: {_screenWidth}x{_screenHeight}\n");
 
         // Get gamestate
@@ -287,6 +293,9 @@ public static unsafe class CGame
         if (cmd == "-scores") { Scoreboard.ScoresUp(); return true; }
         if (cmd == "+zoom") { _zoomed = true; _zoomTime = _time; return true; }
         if (cmd == "-zoom") { _zoomed = false; _zoomTime = _time; return true; }
+        if (cmd == "weapnext") { NextWeapon(); return true; }
+        if (cmd == "weapprev") { PrevWeapon(); return true; }
+        if (cmd == "weapon") { SelectWeapon(); return true; }
 
         // Server-forwarded commands — return false to let engine handle
         return false;
@@ -311,6 +320,11 @@ public static unsafe class CGame
 
         Syscalls.AddCommand("+scores");
         Syscalls.AddCommand("-scores");
+        Syscalls.AddCommand("+zoom");
+        Syscalls.AddCommand("-zoom");
+        Syscalls.AddCommand("weapnext");
+        Syscalls.AddCommand("weapprev");
+        Syscalls.AddCommand("weapon");
     }
 
     // ── DrawActiveFrame — main per-frame entry point ──
@@ -350,11 +364,7 @@ public static unsafe class CGame
             return;
         }
 
-        // Track weapon changes for weapon select display (before updating)
-        int newWeapon = _snap->Ps.Weapon;
-        if (newWeapon != _weaponSelect)
-            _weaponSelectTime = _time;
-        _weaponSelect = newWeapon;
+        // Send desired weapon to server each frame
         Syscalls.SetUserCmdValue(_weaponSelect, 1.0f);
 
         // Run prediction
@@ -586,6 +596,7 @@ public static unsafe class CGame
     private static void SetInitialSnapshot(Q3Snapshot* snap)
     {
         _snap = snap;
+        _weaponSelect = snap->Ps.Weapon;
         Syscalls.Print($"[.NET cgame] Initial snapshot: serverTime={snap->ServerTime}, entities={snap->NumEntities}, ps.weapon={snap->Ps.Weapon}\n");
 
         // Initialize all entities from first snapshot
@@ -1098,6 +1109,42 @@ public static unsafe class CGame
         {
             int idx = Random.Shared.Next(count);
             Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_WEAPON, _weaponFireSounds[weapon, idx]);
+        }
+
+        // Muzzle flash light at the entity's position
+        float* origin = stackalloc float[3];
+        origin[0] = cent.LerpOriginX;
+        origin[1] = cent.LerpOriginY;
+        origin[2] = cent.LerpOriginZ + 16; // approximate muzzle height
+        switch (weapon)
+        {
+            case Weapons.WP_GAUNTLET:
+                Syscalls.R_AddLightToScene(origin, 200 + Random.Shared.Next(32), 1.0f, 0.6f, 0.1f);
+                break;
+            case Weapons.WP_MACHINEGUN:
+                Syscalls.R_AddLightToScene(origin, 150 + Random.Shared.Next(64), 1.0f, 1.0f, 0.6f);
+                break;
+            case Weapons.WP_SHOTGUN:
+                Syscalls.R_AddLightToScene(origin, 250 + Random.Shared.Next(32), 1.0f, 1.0f, 0.6f);
+                break;
+            case Weapons.WP_GRENADE_LAUNCHER:
+                Syscalls.R_AddLightToScene(origin, 150 + Random.Shared.Next(32), 1.0f, 0.7f, 0.5f);
+                break;
+            case Weapons.WP_ROCKET_LAUNCHER:
+                Syscalls.R_AddLightToScene(origin, 300 + Random.Shared.Next(32), 1.0f, 0.75f, 0.0f);
+                break;
+            case Weapons.WP_LIGHTNING:
+                Syscalls.R_AddLightToScene(origin, 200 + Random.Shared.Next(32), 0.6f, 0.6f, 1.0f);
+                break;
+            case Weapons.WP_RAILGUN:
+                Syscalls.R_AddLightToScene(origin, 300 + Random.Shared.Next(32), 0.3f, 1.0f, 0.3f);
+                break;
+            case Weapons.WP_PLASMAGUN:
+                Syscalls.R_AddLightToScene(origin, 200 + Random.Shared.Next(32), 0.6f, 0.6f, 1.0f);
+                break;
+            case Weapons.WP_BFG:
+                Syscalls.R_AddLightToScene(origin, 400 + Random.Shared.Next(32), 0.2f, 1.0f, 0.2f);
+                break;
         }
     }
 
@@ -2030,8 +2077,75 @@ public static unsafe class CGame
         float* color = stackalloc float[4];
         color[0] = 1; color[1] = 1; color[2] = 1; color[3] = 0.8f;
         Syscalls.R_SetColor(color);
-        Syscalls.R_DrawStretchPic(x, y, size, size, 0, 0, 1, 1, shader);
+        float w = size; float h = size;
+        AdjustFrom640(ref x, ref y, ref w, ref h);
+        Syscalls.R_DrawStretchPic(x, y, w, h, 0, 0, 1, 1, shader);
         Syscalls.R_SetColor(null);
+    }
+
+    // ── Weapon Switching ──
+
+    private static bool WeaponSelectable(int weapon)
+    {
+        if (_snap == null) return false;
+        ref var ps = ref _snap->Ps;
+        if ((ps.Stats[Stats.STAT_WEAPONS] & (1 << weapon)) == 0) return false;
+        // Gauntlet always selectable (no ammo needed)
+        if (weapon == Weapons.WP_GAUNTLET) return true;
+        return ps.Ammo[weapon] > 0;
+    }
+
+    private static void NextWeapon()
+    {
+        if (_snap == null) return;
+        if (_snap->Ps.Stats[Stats.STAT_HEALTH] <= 0) return;
+
+        int current = _weaponSelect;
+        for (int i = 0; i < Weapons.WP_NUM_WEAPONS; i++)
+        {
+            current++;
+            if (current >= Weapons.WP_NUM_WEAPONS) current = 1;
+            if (current == Weapons.WP_GAUNTLET) continue; // skip gauntlet on scroll
+            if (WeaponSelectable(current))
+            {
+                _weaponSelect = current;
+                _weaponSelectTime = _time;
+                break;
+            }
+        }
+    }
+
+    private static void PrevWeapon()
+    {
+        if (_snap == null) return;
+        if (_snap->Ps.Stats[Stats.STAT_HEALTH] <= 0) return;
+
+        int current = _weaponSelect;
+        for (int i = 0; i < Weapons.WP_NUM_WEAPONS; i++)
+        {
+            current--;
+            if (current < 1) current = Weapons.WP_NUM_WEAPONS - 1;
+            if (current == Weapons.WP_GAUNTLET) continue;
+            if (WeaponSelectable(current))
+            {
+                _weaponSelect = current;
+                _weaponSelectTime = _time;
+                break;
+            }
+        }
+    }
+
+    private static void SelectWeapon()
+    {
+        if (_snap == null) return;
+        string arg = Syscalls.Argv(1);
+        if (!int.TryParse(arg, out int num)) return;
+        if (num < 1 || num >= Weapons.WP_NUM_WEAPONS) return;
+        if (WeaponSelectable(num))
+        {
+            _weaponSelect = num;
+            _weaponSelectTime = _time;
+        }
     }
 
     // Weapon select display — shows weapon bar when weapon is changed
@@ -2040,13 +2154,6 @@ public static unsafe class CGame
     private static void DrawWeaponSelect()
     {
         ref var ps = ref _snap->Ps;
-
-        // Track weapon changes
-        if (ps.Weapon != _weaponSelect)
-        {
-            _weaponSelectTime = _time;
-            _weaponSelect = ps.Weapon;
-        }
 
         // Show for 1400ms after weapon change
         int elapsed = _time - _weaponSelectTime;
@@ -2078,7 +2185,7 @@ public static unsafe class CGame
             if ((weaponBits & (1 << i)) == 0) continue;
 
             // Selection highlight
-            if (i == ps.Weapon)
+            if (i == _weaponSelect)
             {
                 color[0] = 1; color[1] = 1; color[2] = 1; color[3] = alpha;
                 Syscalls.R_SetColor(color);
@@ -2110,9 +2217,9 @@ public static unsafe class CGame
             "Rocket Launcher", "Lightning Gun", "Railgun", "Plasma Gun",
             "BFG10K", "Grappling Hook"
         };
-        if (ps.Weapon > 0 && ps.Weapon < weaponNames.Length)
+        if (_weaponSelect > 0 && _weaponSelect < weaponNames.Length)
         {
-            string name = weaponNames[ps.Weapon];
+            string name = weaponNames[_weaponSelect];
             int textW = name.Length * BIGCHAR_WIDTH;
             DrawString(320 - textW / 2, 358, name, 1, 1, 1, alpha);
         }
@@ -2160,6 +2267,15 @@ public static unsafe class CGame
 
     // ── Character Drawing (bigchars charset — 16x16 grid of glyphs) ──
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AdjustFrom640(ref float x, ref float y, ref float w, ref float h)
+    {
+        x *= _screenXScale;
+        y *= _screenYScale;
+        w *= _screenXScale;
+        h *= _screenYScale;
+    }
+
     public static void DrawChar(float x, float y, int charWidth, int charHeight, int ch)
     {
         if (ch == ' ') return;
@@ -2172,7 +2288,10 @@ public static unsafe class CGame
         float fcol = col * 0.0625f;
         float size = 0.0625f;
 
-        Syscalls.R_DrawStretchPic(x, y, charWidth, charHeight,
+        float w = charWidth;
+        float h = charHeight;
+        AdjustFrom640(ref x, ref y, ref w, ref h);
+        Syscalls.R_DrawStretchPic(x, y, w, h,
             fcol, frow, fcol + size, frow + size, _charsetShader);
     }
 
@@ -2205,6 +2324,7 @@ public static unsafe class CGame
 
     private static void DrawPic(float x, float y, float w, float h, int shader)
     {
+        AdjustFrom640(ref x, ref y, ref w, ref h);
         Syscalls.R_DrawStretchPic(x, y, w, h, 0, 0, 1, 1, shader);
     }
 
@@ -2212,6 +2332,7 @@ public static unsafe class CGame
     {
         Syscalls.R_SetColor(color);
         int white = Syscalls.R_RegisterShader("white");
+        AdjustFrom640(ref x, ref y, ref w, ref h);
         Syscalls.R_DrawStretchPic(x, y, w, h, 0, 0, 0, 0, white);
         Syscalls.R_SetColor(null);
     }
