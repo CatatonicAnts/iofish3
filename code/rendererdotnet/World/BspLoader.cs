@@ -22,8 +22,11 @@ public static unsafe class BspLoader
     private const int LUMP_LEAFS = 4;
     private const int LUMP_LEAFSURFACES = 5;
     private const int LUMP_MODELS = 7;
+    private const int LUMP_BRUSHES = 8;
+    private const int LUMP_BRUSHSIDES = 9;
     private const int LUMP_DRAWVERTS = 10;
     private const int LUMP_DRAWINDEXES = 11;
+    private const int LUMP_FOGS = 12;
     private const int LUMP_SURFACES = 13;
     private const int LUMP_LIGHTMAPS = 14;
     private const int LUMP_LIGHTGRID = 15;
@@ -38,6 +41,9 @@ public static unsafe class BspLoader
     private const int DSURFACE_SIZE = 104;  // many fields
     private const int DMODEL_SIZE = 40;     // float[3] + float[3] + int + int + int + int
     private const int LIGHTMAP_SIZE = 128 * 128 * 3;
+    private const int DFOG_SIZE = 72;       // char[64] + int + int
+    private const int DBRUSH_SIZE = 12;     // int + int + int
+    private const int DBRUSHSIDE_SIZE = 8;  // int + int
 
     public static BspWorld? LoadFromEngineFS(string path)
     {
@@ -96,6 +102,7 @@ public static unsafe class BspLoader
         world.Lightmaps = LoadLightmaps(buf, lumps[LUMP_LIGHTMAPS * 2], lumps[LUMP_LIGHTMAPS * 2 + 1]);
         LoadVisibility(world, buf, lumps[LUMP_VISIBILITY * 2], lumps[LUMP_VISIBILITY * 2 + 1]);
         LoadLightGrid(world, buf, lumps[LUMP_LIGHTGRID * 2], lumps[LUMP_LIGHTGRID * 2 + 1]);
+        LoadFogs(world, buf, lumps, lumps[LUMP_FOGS * 2], lumps[LUMP_FOGS * 2 + 1]);
 
         // Load entity string for GetEntityToken
         int entOfs = lumps[LUMP_ENTITIES * 2];
@@ -506,5 +513,103 @@ public static unsafe class BspLoader
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Load fog volumes from BSP fogs lump. Requires brushes and brush sides
+    /// lumps to extract the AABB bounds, and planes for the visible surface.
+    /// </summary>
+    private static void LoadFogs(BspWorld world, byte* buf, int* lumps, int ofs, int len)
+    {
+        int fogCount = len / DFOG_SIZE;
+        if (fogCount == 0)
+        {
+            world.Fogs = [];
+            return;
+        }
+
+        int brushOfs = lumps[LUMP_BRUSHES * 2];
+        int brushLen = lumps[LUMP_BRUSHES * 2 + 1];
+        int brushCount = brushLen / DBRUSH_SIZE;
+
+        int sideOfs = lumps[LUMP_BRUSHSIDES * 2];
+        int sideLen = lumps[LUMP_BRUSHSIDES * 2 + 1];
+        int sideCount = sideLen / DBRUSHSIDE_SIZE;
+
+        byte* fogData = buf + ofs;
+        byte* brushData = buf + brushOfs;
+        byte* sideData = buf + sideOfs;
+
+        // Fogs array: index 0 is reserved as "no fog" (surfaces reference fogIndex+1)
+        var fogs = new BspFog[fogCount];
+
+        for (int i = 0; i < fogCount; i++)
+        {
+            byte* f = fogData + i * DFOG_SIZE;
+            string shaderName = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)f, 64)?.TrimEnd('\0') ?? "";
+            int brushNum = *(int*)(f + 64);
+            int visibleSide = *(int*)(f + 68);
+
+            ref var fog = ref fogs[i];
+            fog.ShaderName = shaderName;
+
+            // Extract AABB from brush sides (first 6 axial sides)
+            if (brushNum >= 0 && brushNum < brushCount)
+            {
+                int firstSide = *(int*)(brushData + brushNum * DBRUSH_SIZE);
+
+                if (firstSide >= 0 && firstSide + 5 < sideCount)
+                {
+                    // Axial sides: -X, +X, -Y, +Y, -Z, +Z
+                    int p0 = *(int*)(sideData + (firstSide + 0) * DBRUSHSIDE_SIZE);
+                    if (p0 >= 0 && p0 < world.Planes.Length)
+                        fog.MinX = -world.Planes[p0].Dist;
+
+                    int p1 = *(int*)(sideData + (firstSide + 1) * DBRUSHSIDE_SIZE);
+                    if (p1 >= 0 && p1 < world.Planes.Length)
+                        fog.MaxX = world.Planes[p1].Dist;
+
+                    int p2 = *(int*)(sideData + (firstSide + 2) * DBRUSHSIDE_SIZE);
+                    if (p2 >= 0 && p2 < world.Planes.Length)
+                        fog.MinY = -world.Planes[p2].Dist;
+
+                    int p3 = *(int*)(sideData + (firstSide + 3) * DBRUSHSIDE_SIZE);
+                    if (p3 >= 0 && p3 < world.Planes.Length)
+                        fog.MaxY = world.Planes[p3].Dist;
+
+                    int p4 = *(int*)(sideData + (firstSide + 4) * DBRUSHSIDE_SIZE);
+                    if (p4 >= 0 && p4 < world.Planes.Length)
+                        fog.MinZ = -world.Planes[p4].Dist;
+
+                    int p5 = *(int*)(sideData + (firstSide + 5) * DBRUSHSIDE_SIZE);
+                    if (p5 >= 0 && p5 < world.Planes.Length)
+                        fog.MaxZ = world.Planes[p5].Dist;
+
+                    // Visible surface plane for gradient fog
+                    if (visibleSide >= 0 && firstSide + visibleSide < sideCount)
+                    {
+                        int planeNum = *(int*)(sideData + (firstSide + visibleSide) * DBRUSHSIDE_SIZE);
+                        if (planeNum >= 0 && planeNum < world.Planes.Length)
+                        {
+                            fog.HasSurface = true;
+                            // Q3 negates the normal for fog surface
+                            fog.SurfNX = -world.Planes[planeNum].NormalX;
+                            fog.SurfNY = -world.Planes[planeNum].NormalY;
+                            fog.SurfNZ = -world.Planes[planeNum].NormalZ;
+                            fog.SurfD = -world.Planes[planeNum].Dist;
+                        }
+                    }
+                }
+            }
+
+            // Default fog parameters (will be resolved from shader later)
+            fog.ColorR = 0.5f;
+            fog.ColorG = 0.5f;
+            fog.ColorB = 0.5f;
+            fog.DepthForOpaque = 300f;
+            fog.TcScale = 1f / (300f * 8f);
+        }
+
+        world.Fogs = fogs;
     }
 }

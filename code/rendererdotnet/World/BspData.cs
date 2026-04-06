@@ -40,6 +40,9 @@ public sealed class BspWorld
     // Entity string from BSP for GetEntityToken
     public string EntityString { get; set; } = "";
 
+    // Fog volumes from BSP
+    public BspFog[] Fogs { get; set; } = [];
+
     /// <summary>
     /// Sample the light grid at a world position using trilinear interpolation.
     /// Returns ambient RGB (0-1), directed RGB (0-1), and light direction vector.
@@ -300,4 +303,24 @@ public static class SurfaceFlags
 {
     public const int SURF_NODRAW = 0x80;
     public const int SURF_SKY = 0x4;
+}
+
+/// <summary>
+/// A fog volume defined by a brush in the BSP.
+/// Surfaces with FogIndex pointing to this volume get fogged.
+/// </summary>
+public struct BspFog
+{
+    public string ShaderName;           // Shader that defines fogParms
+    public float ColorR, ColorG, ColorB; // Fog color (0-1)
+    public float DepthForOpaque;         // Distance at which fog is fully opaque
+    public float TcScale;                // 1.0 / (depthForOpaque * 8)
+
+    // Bounding box of the fog brush
+    public float MinX, MinY, MinZ;
+    public float MaxX, MaxY, MaxZ;
+
+    // Visible surface plane (for gradient fog)
+    public bool HasSurface;
+    public float SurfNX, SurfNY, SurfNZ, SurfD; // Plane equation
 }

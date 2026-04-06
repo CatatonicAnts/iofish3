@@ -270,6 +270,30 @@ public static unsafe class RendererExports
         _scene?.SetWorld(_bspWorld);
         _models?.SetBspWorld(_bspWorld);
 
+        // Resolve fog parameters from shader scripts
+        if (_bspWorld.Fogs.Length > 0)
+        {
+            var parser = _shaders.GetScriptParser();
+            if (parser != null)
+            {
+                for (int i = 0; i < _bspWorld.Fogs.Length; i++)
+                {
+                    ref var fog = ref _bspWorld.Fogs[i];
+                    var def = parser.GetShaderDef(fog.ShaderName);
+                    if (def != null && def.HasFogParms)
+                    {
+                        fog.ColorR = def.FogColorR;
+                        fog.ColorG = def.FogColorG;
+                        fog.ColorB = def.FogColorB;
+                        fog.DepthForOpaque = def.FogDepthForOpaque > 1 ? def.FogDepthForOpaque : 300f;
+                        fog.TcScale = 1f / (fog.DepthForOpaque * 8f);
+                    }
+                }
+            }
+            EngineImports.Printf(EngineImports.PRINT_ALL,
+                $"[.NET] Loaded {_bspWorld.Fogs.Length} fog volumes\n");
+        }
+
         // Load skybox textures from shader scripts
         if (_skyboxRenderer != null && _renderer2D != null)
         {

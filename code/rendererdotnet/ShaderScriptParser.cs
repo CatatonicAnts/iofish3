@@ -168,6 +168,9 @@ public sealed unsafe class ShaderScriptParser
         bool depthWrite = false;
         int sortKey = 0;
         var deforms = new List<DeformVertexes>();
+        bool hasFogParms = false;
+        float fogColorR = 0, fogColorG = 0, fogColorB = 0;
+        float fogDepthForOpaque = 0;
         bool stageIsLightmap = false;
         bool stageIsWhiteImage = false;
         string? stageMapRaw = null; // raw map token including $lightmap/$whiteimage
@@ -318,6 +321,26 @@ public sealed unsafe class ShaderScriptParser
                 else if (string.Equals(token, "polygonOffset", StringComparison.OrdinalIgnoreCase))
                 {
                     polygonOffset = true;
+                }
+                else if (string.Equals(token, "fogParms", StringComparison.OrdinalIgnoreCase))
+                {
+                    // fogParms ( <r> <g> <b> ) <depthForOpaque>
+                    // or fogParms <r> <g> <b> <depthForOpaque>
+                    string? next = tokenizer.NextToken();
+                    if (next == "(") next = tokenizer.NextToken(); // skip open paren
+                    if (next != null && float.TryParse(next, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float fr)) fogColorR = fr;
+                    next = tokenizer.NextToken();
+                    if (next != null && float.TryParse(next, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float fg)) fogColorG = fg;
+                    next = tokenizer.NextToken();
+                    if (next != null && float.TryParse(next, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float fb)) fogColorB = fb;
+                    next = tokenizer.NextToken();
+                    if (next == ")") next = tokenizer.NextToken(); // skip close paren
+                    if (next != null && float.TryParse(next, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out float fd)) fogDepthForOpaque = fd;
+                    hasFogParms = true;
                 }
                 else if (string.Equals(token, "deformVertexes", StringComparison.OrdinalIgnoreCase))
                 {
@@ -547,7 +570,12 @@ public sealed unsafe class ShaderScriptParser
             DepthWrite = depthWrite,
             SortKey = sortKey,
             Deforms = deforms.Count > 0 ? deforms.ToArray() : null,
-            Stages = allStages.Count > 0 ? allStages.ToArray() : null
+            Stages = allStages.Count > 0 ? allStages.ToArray() : null,
+            HasFogParms = hasFogParms,
+            FogColorR = fogColorR,
+            FogColorG = fogColorG,
+            FogColorB = fogColorB,
+            FogDepthForOpaque = fogDepthForOpaque
         };
     }
 
@@ -952,6 +980,17 @@ public sealed class ShaderDef
 
     /// <summary>All parsed shader stages (null if no stages or single-stage fallback).</summary>
     public ShaderStage[]? Stages { get; init; }
+
+    /// <summary>Whether this shader has fogParms (defines a fog volume).</summary>
+    public bool HasFogParms { get; init; }
+
+    /// <summary>Fog color RGB (0-1) from fogParms directive.</summary>
+    public float FogColorR { get; init; }
+    public float FogColorG { get; init; }
+    public float FogColorB { get; init; }
+
+    /// <summary>Distance at which fog becomes fully opaque.</summary>
+    public float FogDepthForOpaque { get; init; }
 }
 
 /// <summary>

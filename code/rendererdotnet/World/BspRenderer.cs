@@ -67,6 +67,14 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _dlLightRadiusLoc;
     private uint _dlightTexture; // radial falloff texture
 
+    // Fog rendering
+    private uint _fogProgram;
+    private int _fogMvpLoc;
+    private int _fogColorLoc;
+    private int _fogDistanceLoc;  // fog distance vector
+    private int _fogDepthLoc;     // fog depth vector
+    private int _fogEyeTLoc;      // eye position relative to fog surface
+
     // Surfaces drawn this frame (for dlight reuse)
     private readonly List<int> _visibleSurfaceIndices = new(4096);
 
@@ -113,6 +121,48 @@ public sealed unsafe class BspRenderer : IDisposable
             if (vDlightMod <= 0.0) discard;
             vec4 dlTex = texture(uDlightTex, vDlightUV);
             oColor = vec4(uLightColor * dlTex.r * vDlightMod, 1.0);
+        }
+        """;
+
+    private const string FogVertSrc = """
+        #version 450 core
+        layout(location = 0) in vec3 aPos;
+
+        uniform mat4 uMVP;
+        uniform vec4 uFogDistance;
+        uniform vec4 uFogDepth;
+        uniform float uFogEyeT;
+
+        out float vFogFactor;
+
+        void main() {
+            gl_Position = uMVP * vec4(aPos, 1.0);
+
+            // Compute fog density from distance and depth
+            float s = dot(vec4(aPos, 1.0), uFogDistance) * 8.0;
+            float t = dot(vec4(aPos, 1.0), uFogDepth);
+
+            float eyeOutside = step(0.0, -uFogEyeT);
+            float fogged = step(eyeOutside, t);
+            t += 1e-6;
+            t *= fogged / (t - uFogEyeT * eyeOutside);
+
+            vFogFactor = s * t;
+        }
+        """;
+
+    private const string FogFragSrc = """
+        #version 450 core
+        in float vFogFactor;
+
+        uniform vec4 uFogColor;
+
+        out vec4 oColor;
+
+        void main() {
+            float alpha = sqrt(clamp(vFogFactor, 0.0, 1.0));
+            if (alpha < 0.004) discard;
+            oColor = vec4(uFogColor.rgb, alpha);
         }
         """;
 
@@ -312,6 +362,14 @@ public sealed unsafe class BspRenderer : IDisposable
         // Generate radial falloff texture for dlight projection
         _dlightTexture = GenerateDlightTexture();
 
+        // Fog shader program
+        _fogProgram = CreateFogProgram();
+        _fogMvpLoc = _gl.GetUniformLocation(_fogProgram, "uMVP");
+        _fogColorLoc = _gl.GetUniformLocation(_fogProgram, "uFogColor");
+        _fogDistanceLoc = _gl.GetUniformLocation(_fogProgram, "uFogDistance");
+        _fogDepthLoc = _gl.GetUniformLocation(_fogProgram, "uFogDepth");
+        _fogEyeTLoc = _gl.GetUniformLocation(_fogProgram, "uFogEyeT");
+
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
         _ebo = _gl.GenBuffer();
@@ -483,6 +541,12 @@ public sealed unsafe class BspRenderer : IDisposable
         if (dlights != null && dlights.Count > 0 && _visibleSurfaceIndices.Count > 0)
         {
             RenderDlights(mvp, dlights);
+        }
+
+        // Fog pass: apply fog to surfaces inside fog volumes
+        if (_world.Fogs.Length > 0 && _visibleSurfaceIndices.Count > 0)
+        {
+            RenderFog(mvp, viewX, viewY, viewZ);
         }
 
         _gl.BindVertexArray(0);
@@ -1243,6 +1307,98 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.UseProgram(_program); // switch back to main program
     }
 
+    /// <summary>
+    /// Create the shader program for fog pass rendering.
+    /// </summary>
+    private uint CreateFogProgram()
+    {
+        uint vs = Compile(ShaderType.VertexShader, FogVertSrc);
+        uint fs = Compile(ShaderType.FragmentShader, FogFragSrc);
+
+        uint prog = _gl.CreateProgram();
+        _gl.AttachShader(prog, vs);
+        _gl.AttachShader(prog, fs);
+        _gl.LinkProgram(prog);
+
+        _gl.GetProgram(prog, ProgramPropertyARB.LinkStatus, out int ok);
+        if (ok == 0)
+        {
+            string log = _gl.GetProgramInfoLog(prog);
+            EngineImports.Printf(EngineImports.PRINT_ERROR,
+                $"[.NET] Fog shader link error: {log}\n");
+        }
+
+        _gl.DeleteShader(vs);
+        _gl.DeleteShader(fs);
+        return prog;
+    }
+
+    /// <summary>
+    /// Render fog volumes by redrawing affected surfaces with alpha-blended fog color.
+    /// For each fog volume, surfaces with matching FogIndex are drawn with a fog
+    /// density computed from distance and depth relative to the fog surface.
+    /// </summary>
+    private void RenderFog(float* mvp, float viewX, float viewY, float viewZ)
+    {
+        if (_world == null) return;
+
+        _gl.UseProgram(_fogProgram);
+        _gl.UniformMatrix4(_fogMvpLoc, 1, false, mvp);
+
+        // Alpha blending for fog overlay
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+        _gl.DepthMask(false);
+        _gl.DepthFunc(DepthFunction.Lequal);
+
+        for (int fogIdx = 0; fogIdx < _world.Fogs.Length; fogIdx++)
+        {
+            ref var fog = ref _world.Fogs[fogIdx];
+            int bspFogIndex = fogIdx + 1; // BSP fog indices are 1-based (0 = no fog)
+
+            // Set fog color
+            _gl.Uniform4(_fogColorLoc, fog.ColorR, fog.ColorG, fog.ColorB, 1f);
+
+            // Compute fog distance vector (view forward direction scaled by tcScale)
+            // Simplified: use view-to-vertex distance instead of full model-space transform
+            // fogDistance = -viewForward * tcScale (we approximate with world-Z)
+            _gl.Uniform4(_fogDistanceLoc, 0f, 0f, -fog.TcScale, fog.TcScale * viewZ);
+
+            // Compute fog depth vector from fog surface plane
+            float eyeT;
+            if (fog.HasSurface)
+            {
+                _gl.Uniform4(_fogDepthLoc, fog.SurfNX, fog.SurfNY, fog.SurfNZ, fog.SurfD);
+                eyeT = viewX * fog.SurfNX + viewY * fog.SurfNY + viewZ * fog.SurfNZ + fog.SurfD;
+            }
+            else
+            {
+                // No visible surface — eye is always considered inside fog
+                _gl.Uniform4(_fogDepthLoc, 0f, 0f, 0f, 1f);
+                eyeT = 1f;
+            }
+            _gl.Uniform1(_fogEyeTLoc, eyeT);
+
+            // Draw surfaces belonging to this fog volume
+            foreach (int surfIdx in _visibleSurfaceIndices)
+            {
+                ref var surf = ref _world.Surfaces[surfIdx];
+                if (surf.FogIndex != bspFogIndex) continue;
+                if (surf.NumIndices == 0) continue;
+
+                _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
+                    (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
+                    (void*)(surf.FirstIndex * sizeof(int)),
+                    surf.FirstVertex);
+            }
+        }
+
+        // Restore state
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
+        _gl.UseProgram(_program);
+    }
+
     public void Dispose()
     {
         foreach (uint tex in _lightmapTextures)
@@ -1251,6 +1407,7 @@ public sealed unsafe class BspRenderer : IDisposable
 
         if (_dlightTexture != 0) { _gl.DeleteTexture(_dlightTexture); _dlightTexture = 0; }
         if (_dlightProgram != 0) { _gl.DeleteProgram(_dlightProgram); _dlightProgram = 0; }
+        if (_fogProgram != 0) { _gl.DeleteProgram(_fogProgram); _fogProgram = 0; }
         if (_ebo != 0) { _gl.DeleteBuffer(_ebo); _ebo = 0; }
         if (_vbo != 0) { _gl.DeleteBuffer(_vbo); _vbo = 0; }
         if (_vao != 0) { _gl.DeleteVertexArray(_vao); _vao = 0; }
