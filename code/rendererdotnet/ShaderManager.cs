@@ -97,6 +97,21 @@ public unsafe class ShaderManager
         return entry.Blend;
     }
 
+    public int GetAlphaFunc(int handle)
+    {
+        if (handle <= 0 || handle >= _shaders.Count)
+            return 0;
+
+        var entry = _shaders[handle];
+        if (!entry.Loaded)
+        {
+            entry.Loaded = true;
+            TryLoadTexture(entry);
+        }
+
+        return entry.AlphaFunc;
+    }
+
     public bool IsTransparent(int handle)
     {
         if (handle <= 0 || handle >= _shaders.Count)
@@ -119,26 +134,23 @@ public unsafe class ShaderManager
         // First: try loading the image directly by shader name
         var image = ImageLoader.LoadFromEngineFS(entry.Name);
 
-        // Fallback: look up the shader script to find the actual image path
-        if (image == null && _scriptParser != null)
+        // Look up shader script for metadata (blend, alpha test, transparency)
+        ShaderDef? def = _scriptParser?.GetShaderDef(entry.Name);
+
+        // If direct load failed, try the script's image path
+        if (image == null && def?.ImagePath != null && !def.ImagePath.StartsWith('*'))
         {
-            var def = _scriptParser.GetShaderDef(entry.Name);
-            if (def?.ImagePath != null && !def.ImagePath.StartsWith('*'))
-            {
-                image = ImageLoader.LoadFromEngineFS(def.ImagePath);
-                if (image != null)
-                {
-                    entry.Clamp = def.Clamp;
-                    entry.Blend = def.Blend;
-                    entry.IsTransparent = def.IsTransparent;
-                }
-            }
-            if (def != null && image == null)
-            {
-                // No image but shader def exists — still apply blend/transparency
-                entry.Blend = def.Blend;
-                entry.IsTransparent = def.IsTransparent;
-            }
+            image = ImageLoader.LoadFromEngineFS(def.ImagePath);
+            if (image != null)
+                entry.Clamp = def.Clamp;
+        }
+
+        // Apply shader script metadata regardless of how the image was loaded
+        if (def != null)
+        {
+            entry.Blend = def.Blend;
+            entry.IsTransparent = def.IsTransparent;
+            entry.AlphaFunc = def.AlphaFunc;
         }
 
         if (image == null)
@@ -182,5 +194,7 @@ public unsafe class ShaderManager
         public bool Clamp { get; set; }
         public BlendMode Blend { get; set; } = BlendMode.Alpha;
         public bool IsTransparent { get; set; }
+        /// <summary>0=none, 1=GT0, 2=LT128, 3=GE128</summary>
+        public int AlphaFunc { get; set; }
     }
 }

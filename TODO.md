@@ -24,7 +24,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### High Priority
 
-- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline, 3D model rendering (MD3), BSP world loading with lightmaps and PVS, skybox rendering, shader blending, beam/lightning entities, mark fragments, and entity token parsing all working. Next: environment mapping, dynamic lighting, fog, alpha testing, world portals, improved patch tessellation. `CPX 5`
+- [ ] **C# OpenGL 4.5 rendering backend** - Implement a new renderer backend in C# using OpenGL 4.5. 2D pipeline, 3D model rendering (MD3), BSP world loading with lightmaps and PVS, skybox rendering, shader blending, beam/lightning entities, mark fragments, entity token parsing, and alpha testing all working. Next: environment mapping, dynamic lighting, fog, world portals, improved patch tessellation. `CPX 5`
 
 ### Medium Priority
 
@@ -137,6 +137,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Implement DrawStretchRaw — raw pixel data rendering for cinematic frames.
 - [x] Fix pickup textures — skip `tcGen environment` shader stages, fall back to `qer_editorimage`.
 - [x] Remove intro video and CD key prompt — commented out cinematics defines, CL_CDKeyValidate always returns qtrue.
+- [x] Implement alpha testing — parses `alphaFunc` directive (GT0/LT128/GE128) from shader scripts, adds per-fragment discard in BSP fragment shader. Alpha-tested surfaces render in opaque pass with depth writes. Fixes translucent world geometry on q3dm0.
 
 ### Fixed Bugs
 

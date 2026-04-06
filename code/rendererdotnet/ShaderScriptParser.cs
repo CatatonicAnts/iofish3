@@ -141,12 +141,14 @@ public sealed unsafe class ShaderScriptParser
         BlendMode envMapBlend = BlendMode.Opaque;
         bool allStagesEnvMap = true; // track if ALL stages use tcGen environment
         int stageCount = 0;
+        int alphaFunc = 0; // 0=none, 1=GT0, 2=LT128, 3=GE128
 
         // Per-stage tracking
         string? stageImage = null;
         bool stageClamp = false;
         BlendMode stageBlend = BlendMode.Opaque;
         bool stageHasEnvMap = false;
+        int stageAlphaFunc = 0;
 
         while (depth > 0 && tokenizer.HasMore())
         {
@@ -163,6 +165,7 @@ public sealed unsafe class ShaderScriptParser
                     stageClamp = false;
                     stageBlend = BlendMode.Opaque;
                     stageHasEnvMap = false;
+                    stageAlphaFunc = 0;
                 }
                 continue;
             }
@@ -179,6 +182,7 @@ public sealed unsafe class ShaderScriptParser
                         imagePath = stageImage;
                         clamp = stageClamp;
                         blend = stageBlend;
+                        alphaFunc = stageAlphaFunc;
                         foundUsableStage = true;
                     }
                     // Track env-mapped images as a last-resort fallback
@@ -190,6 +194,9 @@ public sealed unsafe class ShaderScriptParser
                     // Track if any stage is NOT envmap
                     if (!stageHasEnvMap)
                         allStagesEnvMap = false;
+                    // Capture alphaFunc from any stage (first one wins)
+                    if (alphaFunc == 0 && stageAlphaFunc != 0)
+                        alphaFunc = stageAlphaFunc;
                 }
 
                 depth--;
@@ -256,6 +263,19 @@ public sealed unsafe class ShaderScriptParser
                     if (tcGenToken != null && string.Equals(tcGenToken, "environment", StringComparison.OrdinalIgnoreCase))
                         stageHasEnvMap = true;
                 }
+                else if (string.Equals(token, "alphaFunc", StringComparison.OrdinalIgnoreCase))
+                {
+                    string? funcToken = tokenizer.NextToken();
+                    if (funcToken != null)
+                    {
+                        if (string.Equals(funcToken, "GT0", StringComparison.OrdinalIgnoreCase))
+                            stageAlphaFunc = 1;
+                        else if (string.Equals(funcToken, "LT128", StringComparison.OrdinalIgnoreCase))
+                            stageAlphaFunc = 2;
+                        else if (string.Equals(funcToken, "GE128", StringComparison.OrdinalIgnoreCase))
+                            stageAlphaFunc = 3;
+                    }
+                }
             }
         }
 
@@ -279,7 +299,8 @@ public sealed unsafe class ShaderScriptParser
             Clamp = clamp,
             Blend = blend,
             SkyBox = skyBox,
-            IsTransparent = isTransparent
+            IsTransparent = isTransparent,
+            AlphaFunc = alphaFunc
         };
     }
 
@@ -456,6 +477,9 @@ public sealed class ShaderDef
 
     /// <summary>Whether the shader has surfaceparm trans (truly transparent).</summary>
     public bool IsTransparent { get; init; }
+
+    /// <summary>Alpha test function: 0=none, 1=GT0 (alpha>0), 2=LT128 (alpha&lt;0.5), 3=GE128 (alpha>=0.5).</summary>
+    public int AlphaFunc { get; init; }
 }
 
 /// <summary>

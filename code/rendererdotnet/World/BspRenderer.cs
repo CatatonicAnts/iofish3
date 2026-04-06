@@ -20,6 +20,7 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _useLightmapLoc;
     private int _texDiffuseLoc;
     private int _texLightmapLoc;
+    private int _alphaFuncLoc;
 
     private uint _vao;
     private uint _vbo;
@@ -74,17 +75,22 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform vec4 uColor;
         uniform vec3 uLightDir;
         uniform int uUseLightmap;
+        uniform int uAlphaFunc; // 0=none, 1=GT0, 2=LT128, 3=GE128
 
         out vec4 oColor;
 
         void main() {
             vec4 texColor = texture(uTexDiffuse, vUV);
+
+            // Alpha test — discard fragments based on alpha function
+            if (uAlphaFunc == 1 && texColor.a <= 0.0) discard;       // GT0
+            else if (uAlphaFunc == 2 && texColor.a >= 0.5) discard;  // LT128
+            else if (uAlphaFunc == 3 && texColor.a < 0.5) discard;   // GE128
+
             if (uUseLightmap != 0) {
                 vec4 lmColor = texture(uTexLightmap, vLmUV);
-                // Lightmaps are pre-multiplied, scale up for Q3-style overbright
                 oColor = texColor * lmColor * 2.0 * uColor;
             } else {
-                // Fallback: simple directional lighting
                 float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
                 float light = 0.3 + 0.7 * ndl;
                 oColor = texColor * uColor * vec4(vec3(light), 1.0);
@@ -103,6 +109,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _useLightmapLoc = _gl.GetUniformLocation(_program, "uUseLightmap");
         _texDiffuseLoc = _gl.GetUniformLocation(_program, "uTexDiffuse");
         _texLightmapLoc = _gl.GetUniformLocation(_program, "uTexLightmap");
+        _alphaFuncLoc = _gl.GetUniformLocation(_program, "uAlphaFunc");
 
         _vao = _gl.GenVertexArray();
         _vbo = _gl.GenBuffer();
@@ -244,7 +251,7 @@ public sealed unsafe class BspRenderer : IDisposable
             {
                 ref var surf = ref _world.Surfaces[surfIdx];
                 _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
-                DrawSurfaceGeometry(ref surf, shaders);
+                DrawSurfaceGeometry(ref surf, shaders, 0);
             }
 
             _gl.DepthMask(true);
@@ -314,12 +321,19 @@ public sealed unsafe class BspRenderer : IDisposable
             if ((sFlags & SurfaceFlags.SURF_SKY) != 0)
                 return;
 
+            // Surfaces with alphaFunc (alpha testing) render in the opaque pass
+            // with depth writes, discarding pixels based on alpha test
+            int alphaFunc = shaders.GetAlphaFunc(surf.ShaderHandle);
+            if (alphaFunc != 0)
+            {
+                DrawSurfaceGeometry(ref surf, shaders, alphaFunc);
+                return;
+            }
+
             // Only defer surfaces that are ACTUALLY transparent
-            // (CONTENTS_TRANSLUCENT flag or surfaceparm trans in shader script)
             int cFlags = _world.Shaders[surf.ShaderIndex].ContentFlags;
             bool isTrans = (cFlags & CONTENTS_TRANSLUCENT) != 0;
 
-            // Also check shader script for surfaceparm trans
             if (!isTrans)
                 isTrans = shaders.IsTransparent(surf.ShaderHandle);
 
@@ -334,12 +348,12 @@ public sealed unsafe class BspRenderer : IDisposable
             }
         }
 
-        DrawSurfaceGeometry(ref surf, shaders);
+        DrawSurfaceGeometry(ref surf, shaders, 0);
     }
 
     private const int CONTENTS_TRANSLUCENT = 0x20000000;
 
-    private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders)
+    private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders, int alphaFunc)
     {
         // Bind diffuse texture
         uint texId = shaders.GetTextureId(surf.ShaderHandle);
@@ -354,6 +368,9 @@ public sealed unsafe class BspRenderer : IDisposable
             _gl.ActiveTexture(TextureUnit.Texture1);
             _gl.BindTexture(TextureTarget.Texture2D, _lightmapTextures[surf.LightmapIndex]);
         }
+
+        // Set alpha test mode
+        _gl.Uniform1(_alphaFuncLoc, alphaFunc);
 
         _gl.DrawElementsBaseVertex(PrimitiveType.Triangles,
             (uint)surf.NumIndices, DrawElementsType.UnsignedInt,
