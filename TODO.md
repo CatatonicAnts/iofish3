@@ -33,7 +33,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### Tier 2 — Important Visual Quality
 
-- [ ] **Light grid for entity lighting** - BSP stores a 3D grid of ambient+directed light samples. GL2 uses this to light entities (models, weapons) based on world position. We use a hardcoded directional light (0.57, 0.57, 0.57). `CPX 3`
+- [x] **Light grid for entity lighting** - BSP stores a 3D grid of ambient+directed light samples. Trilinear interpolation samples the grid at entity position. Ambient + directed lighting with per-entity light direction replaces hardcoded uniform light. Supports RF_LIGHTING_ORIGIN for multi-part models. `CPX 3`
 - [ ] **Flare rendering** - Light flares (RT_FLARE, MST_FLARE) with depth-based visibility testing and intensity fading. GL2 uses depth reads to check occlusion. We skip MST_FLARE surfaces entirely. `CPX 3`
 - [ ] **Portal / mirror rendering** - Recursive scene rendering through portal surfaces. GL2 detects portal sort, renders the scene from the mirrored viewpoint into an FBO, then composites it. Complex but needed for maps with mirrors/portals. `CPX 5`
 
@@ -80,6 +80,7 @@ A list of planned features, improvements, and tasks for this project.
 The cgame DLL interface is:
 - **`dllEntry(syscall)`** — Called once at load. Receives a pointer to the engine syscall dispatcher (`intptr_t (*)(intptr_t, ...)`) for ~90 import functions (CG_PRINT, CG_R_REGISTERMODEL, CG_GETSNAPSHOT, etc. — see `cg_public.h`)
 - **`vmMain(command, arg0..arg11)`** — Called by the engine for ~8 export functions: CG_INIT, CG_SHUTDOWN, CG_DRAW_ACTIVE_FRAME, CG_CONSOLE_COMMAND, CG_CROSSHAIR_PLAYER, CG_LAST_ATTACKER, CG_KEY_EVENT, CG_MOUSE_EVENT, CG_EVENT_HANDLING
+- **Shared code** - Serverside part is also planned to be rewritten in C#, but it shares code with the cgame (e.g. pmove physics, bg_*), so that shared code should be implemented in a way that can be used by both the cgame and server DLLs (e.g. separate `code/shared/` library).
 
 ### Implementation Plan
 

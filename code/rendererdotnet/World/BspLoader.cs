@@ -26,6 +26,7 @@ public static unsafe class BspLoader
     private const int LUMP_DRAWINDEXES = 11;
     private const int LUMP_SURFACES = 13;
     private const int LUMP_LIGHTMAPS = 14;
+    private const int LUMP_LIGHTGRID = 15;
     private const int LUMP_VISIBILITY = 16;
 
     // Struct sizes on disk
@@ -94,6 +95,7 @@ public static unsafe class BspLoader
         world.Surfaces = LoadSurfaces(buf, lumps[LUMP_SURFACES * 2], lumps[LUMP_SURFACES * 2 + 1]);
         world.Lightmaps = LoadLightmaps(buf, lumps[LUMP_LIGHTMAPS * 2], lumps[LUMP_LIGHTMAPS * 2 + 1]);
         LoadVisibility(world, buf, lumps[LUMP_VISIBILITY * 2], lumps[LUMP_VISIBILITY * 2 + 1]);
+        LoadLightGrid(world, buf, lumps[LUMP_LIGHTGRID * 2], lumps[LUMP_LIGHTGRID * 2 + 1]);
 
         // Load entity string for GetEntityToken
         int entOfs = lumps[LUMP_ENTITIES * 2];
@@ -314,6 +316,40 @@ public static unsafe class BspLoader
         int* header = (int*)(buf + ofs);
         world.NumClusters = header[0];
         world.ClusterBytes = header[1];
+    }
+
+    private static void LoadLightGrid(BspWorld world, byte* buf, int ofs, int len)
+    {
+        if (world.Models.Length == 0 || len < 8)
+        {
+            world.LightGridData = null;
+            return;
+        }
+
+        // Copy raw grid data
+        world.LightGridData = new byte[len];
+        fixed (byte* dst = world.LightGridData)
+        {
+            Buffer.MemoryCopy(buf + ofs, dst, len, len);
+        }
+
+        // Compute grid origin and bounds from world model (Models[0])
+        ref var wm = ref world.Models[0];
+        float[] gridSize = world.LightGridSize;
+
+        for (int i = 0; i < 3; i++)
+        {
+            float wMin = i == 0 ? wm.MinX : i == 1 ? wm.MinY : wm.MinZ;
+            float wMax = i == 0 ? wm.MaxX : i == 1 ? wm.MaxY : wm.MaxZ;
+            world.LightGridOrigin[i] = gridSize[i] * MathF.Ceiling(wMin / gridSize[i]);
+            float maxGrid = gridSize[i] * MathF.Floor(wMax / gridSize[i]);
+            world.LightGridBounds[i] = (int)((maxGrid - world.LightGridOrigin[i]) / gridSize[i]) + 1;
+            world.LightGridInverseSize[i] = 1.0f / gridSize[i];
+        }
+
+        int numGridPoints = world.LightGridBounds[0] * world.LightGridBounds[1] * world.LightGridBounds[2];
+        EngineImports.Printf(EngineImports.PRINT_ALL,
+            $"[.NET] Light grid: {numGridPoints} points ({world.LightGridBounds[0]}x{world.LightGridBounds[1]}x{world.LightGridBounds[2]}), {len} bytes\n");
     }
 
     // --- Bezier patch tessellation ---

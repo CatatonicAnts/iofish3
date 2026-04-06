@@ -17,6 +17,8 @@ public sealed unsafe class Renderer3D : IDisposable
     private int _modelLoc;
     private int _colorLoc;
     private int _lightDirLoc;
+    private int _ambientLightLoc;
+    private int _directedLightLoc;
     private int _envMapLoc;
     private int _viewPosLoc;
     private int _fullbrightLoc;
@@ -71,6 +73,8 @@ public sealed unsafe class Renderer3D : IDisposable
         uniform sampler2D uTex;
         uniform vec4 uColor;
         uniform vec3 uLightDir;
+        uniform vec3 uAmbientLight;
+        uniform vec3 uDirectedLight;
         uniform int uFullbright;
 
         out vec4 oColor;
@@ -81,8 +85,8 @@ public sealed unsafe class Renderer3D : IDisposable
                 oColor = texColor * uColor;
             } else {
                 float ndl = max(dot(normalize(vNormal), uLightDir), 0.0);
-                float light = 0.3 + 0.7 * ndl;
-                oColor = texColor * uColor * vec4(vec3(light), 1.0);
+                vec3 light = uAmbientLight + uDirectedLight * ndl;
+                oColor = texColor * uColor * vec4(light, 1.0);
             }
         }
         """;
@@ -95,6 +99,8 @@ public sealed unsafe class Renderer3D : IDisposable
         _modelLoc = _gl.GetUniformLocation(_program, "uModel");
         _colorLoc = _gl.GetUniformLocation(_program, "uColor");
         _lightDirLoc = _gl.GetUniformLocation(_program, "uLightDir");
+        _ambientLightLoc = _gl.GetUniformLocation(_program, "uAmbientLight");
+        _directedLightLoc = _gl.GetUniformLocation(_program, "uDirectedLight");
         _envMapLoc = _gl.GetUniformLocation(_program, "uEnvMap");
         _viewPosLoc = _gl.GetUniformLocation(_program, "uViewPos");
         _fullbrightLoc = _gl.GetUniformLocation(_program, "uFullbright");
@@ -129,7 +135,10 @@ public sealed unsafe class Renderer3D : IDisposable
                             float* mvp, float* modelMatrix, uint textureId,
                             float r, float g, float b, float a,
                             bool envMap = false, float viewX = 0, float viewY = 0, float viewZ = 0,
-                            BlendMode blend = default)
+                            BlendMode blend = default,
+                            float ambR = 0.5f, float ambG = 0.5f, float ambB = 0.5f,
+                            float dirLightR = 0.5f, float dirLightG = 0.5f, float dirLightB = 0.5f,
+                            float lightDirX = 0.57735f, float lightDirY = 0.57735f, float lightDirZ = 0.57735f)
     {
         int numVerts = surface.NumVerts;
         int numTris = surface.NumTriangles;
@@ -184,8 +193,9 @@ public sealed unsafe class Renderer3D : IDisposable
         _gl.UniformMatrix4(_mvpLoc, 1, false, mvp);
         _gl.UniformMatrix4(_modelLoc, 1, false, modelMatrix);
         _gl.Uniform4(_colorLoc, r, g, b, a);
-        // Default light direction (down from upper-right-front)
-        _gl.Uniform3(_lightDirLoc, 0.57735f, 0.57735f, 0.57735f);
+        _gl.Uniform3(_lightDirLoc, lightDirX, lightDirY, lightDirZ);
+        _gl.Uniform3(_ambientLightLoc, ambR, ambG, ambB);
+        _gl.Uniform3(_directedLightLoc, dirLightR, dirLightG, dirLightB);
         _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
         _gl.Uniform3(_viewPosLoc, viewX, viewY, viewZ);
 

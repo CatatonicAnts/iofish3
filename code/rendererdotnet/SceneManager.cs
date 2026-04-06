@@ -34,6 +34,7 @@ public sealed unsafe class SceneManager
     private int _spriteTexLoc;
 
     private const int RF_THIRD_PERSON = 0x0002;
+    private const int RF_LIGHTING_ORIGIN = 0x0080;
     private const int RDF_NOWORLDMODEL = 0x0001;
 
     // Entity types
@@ -126,6 +127,21 @@ public sealed unsafe class SceneManager
             entity.OriginX = origin[0];
             entity.OriginY = origin[1];
             entity.OriginZ = origin[2];
+
+            // Read lightingOrigin for RF_LIGHTING_ORIGIN
+            float* lightOrigin = (float*)(entityPtr + 12);
+            if ((renderfx & RF_LIGHTING_ORIGIN) != 0)
+            {
+                entity.LightOriginX = lightOrigin[0];
+                entity.LightOriginY = lightOrigin[1];
+                entity.LightOriginZ = lightOrigin[2];
+            }
+            else
+            {
+                entity.LightOriginX = origin[0];
+                entity.LightOriginY = origin[1];
+                entity.LightOriginZ = origin[2];
+            }
 
             float* axis = (float*)(entityPtr + 28);
             for (int i = 0; i < 9; i++)
@@ -373,6 +389,25 @@ public sealed unsafe class SceneManager
                 BuildModelMatrix(ent, modelMat);
                 MatMul(vp, modelMat, mvp);
 
+                // Sample light grid for entity lighting
+                float ambR = 0.5f, ambG = 0.5f, ambB = 0.5f;
+                float dLightR = 0.5f, dLightG = 0.5f, dLightB = 0.5f;
+                float ldX = 0.57735f, ldY = 0.57735f, ldZ = 0.57735f;
+                if (hasWorld && _bspWorld!.LightGridData != null)
+                {
+                    _bspWorld.SampleLightGrid(
+                        ent.LightOriginX, ent.LightOriginY, ent.LightOriginZ,
+                        out ambR, out ambG, out ambB,
+                        out dLightR, out dLightG, out dLightB,
+                        out ldX, out ldY, out ldZ);
+                    // Transform light direction to entity-local space
+                    // (entity axis is column-major: col0=axis[0..2], col1=axis[3..5], col2=axis[6..8])
+                    float tlx = ent.Axis[0] * ldX + ent.Axis[1] * ldY + ent.Axis[2] * ldZ;
+                    float tly = ent.Axis[3] * ldX + ent.Axis[4] * ldY + ent.Axis[5] * ldZ;
+                    float tlz = ent.Axis[6] * ldX + ent.Axis[7] * ldY + ent.Axis[8] * ldZ;
+                    ldX = tlx; ldY = tly; ldZ = tlz;
+                }
+
                 foreach (var surface in model.Surfaces)
                 {
                     int shaderHandle;
@@ -403,7 +438,8 @@ public sealed unsafe class SceneManager
                     {
                         _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
                             mvpPtr, modelPtr, texId, r, g, b, a,
-                            envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend);
+                            envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend,
+                            ambR, ambG, ambB, dLightR, dLightG, dLightB, ldX, ldY, ldZ);
                     }
                 }
             }
@@ -833,6 +869,7 @@ internal unsafe struct SceneEntity
 
     public float OriginX, OriginY, OriginZ;
     public float OldOriginX, OldOriginY, OldOriginZ;
+    public float LightOriginX, LightOriginY, LightOriginZ;
     public fixed float Axis[9];
     public float R, G, B, A;
 
