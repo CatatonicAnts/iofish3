@@ -48,6 +48,7 @@ profile
 *.opensdf
 *.suo
 *.vcxproj.user
+!msvc/ioquake3.vcxproj.user
 .vs/
 *.dir/
 Release/
