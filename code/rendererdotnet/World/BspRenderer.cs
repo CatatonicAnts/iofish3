@@ -86,6 +86,9 @@ public sealed unsafe class BspRenderer : IDisposable
 
     // Current view position, stored per-frame for tcGen environment
     private float _viewX, _viewY, _viewZ;
+    // View axes for autosprite billboarding
+    private readonly float[] _viewRight = new float[3];
+    private readonly float[] _viewUp = new float[3];
 
     // Frustum planes for culling (6 planes, each: nx, ny, nz, d)
     private readonly float[] _frustum = new float[24]; // 6 * 4
@@ -118,6 +121,11 @@ public sealed unsafe class BspRenderer : IDisposable
 
     // Surfaces drawn this frame (for dlight reuse)
     private readonly List<int> _visibleSurfaceIndices = new(4096);
+
+    // Autosprite deform: dynamic VBO for CPU-side billboarding
+    private uint _autospVao, _autospVbo, _autospEbo;
+    private float[] _autospVerts = new float[4096]; // reusable per-frame
+    private uint[] _autospIndices = new uint[2048];
 
     // Portal rendering: collected portal surface info and portal texture
     private uint _portalTexture;  // Set by SceneManager before Render()
@@ -259,8 +267,8 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uTcModCount;
         uniform vec4 uTcMod[4];
         uniform vec4 uTcModExtra[4]; // extra params for stretch (phase,freq) and transform (m11,t0,t1)
-        // deformVertexes: type(0=wave,1=move), params packed in vec4s
-        uniform int uDeformType; // -1=none, 0=wave, 1=move
+        // deformVertexes: type(0=wave,1=move,2=bulge,3=normal), params packed in vec4s
+        uniform int uDeformType; // -1=none, 0=wave, 1=move, 2=bulge, 3=normal
         uniform vec4 uDeformParams0; // wave: div,func,base,amp  move: x,y,z,func
         uniform vec4 uDeformParams1; // wave: phase,freq,0,0     move: base,amp,phase,freq
         uniform int uUseNormalMap;
@@ -286,6 +294,7 @@ public sealed unsafe class BspRenderer : IDisposable
 
         void main() {
             vec3 pos = aPos;
+            vec3 deformedNormal = aNormal;
 
             // Apply deformVertexes
             if (uDeformType == 0) { // wave
@@ -308,11 +317,25 @@ public sealed unsafe class BspRenderer : IDisposable
                 float freq = uDeformParams1.w;
                 float wave = evalWaveFunc(func, phase + uTime * freq);
                 pos += dir * (base_ + wave * amp);
+            } else if (uDeformType == 2) { // bulge
+                float bulgeWidth = uDeformParams0.x;
+                float bulgeHeight = uDeformParams0.y;
+                float bulgeSpeed = uDeformParams0.z;
+                float bulgePhase = aUV.x * bulgeWidth;
+                float wave = sin(bulgePhase + uTime * bulgeSpeed);
+                pos += aNormal * (wave * bulgeHeight);
+            } else if (uDeformType == 3) { // normal
+                float normAmp = uDeformParams0.x;
+                float normFreq = uDeformParams0.y;
+                float px = sin(pos.x * 0.01 + uTime * normFreq) * normAmp;
+                float py = sin(pos.y * 0.01 + uTime * normFreq * 1.1) * normAmp;
+                float pz = sin(pos.z * 0.01 + uTime * normFreq * 0.9) * normAmp;
+                deformedNormal = normalize(aNormal + vec3(px, py, pz));
             }
 
             gl_Position = uMVP * vec4(pos, 1.0);
             vLmUV = aLmUV;
-            vNormal = aNormal;
+            vNormal = deformedNormal;
             vColor = aColor;
             vWorldPos = pos;
 
@@ -829,6 +852,28 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.EnableVertexAttribArray(5);
 
         _gl.BindVertexArray(0);
+
+        // Create dynamic VAO/VBO for autosprite deformed surfaces
+        _autospVao = _gl.GenVertexArray();
+        _autospVbo = _gl.GenBuffer();
+        _autospEbo = _gl.GenBuffer();
+        _gl.BindVertexArray(_autospVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _autospVbo);
+        _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _autospEbo);
+        // Same vertex layout as the main BSP VAO
+        _gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, stride, (void*)0);
+        _gl.EnableVertexAttribArray(0);
+        _gl.VertexAttribPointer(1, 3, VertexAttribPointerType.Float, false, stride, (void*)(3 * sizeof(float)));
+        _gl.EnableVertexAttribArray(1);
+        _gl.VertexAttribPointer(2, 2, VertexAttribPointerType.Float, false, stride, (void*)(6 * sizeof(float)));
+        _gl.EnableVertexAttribArray(2);
+        _gl.VertexAttribPointer(3, 2, VertexAttribPointerType.Float, false, stride, (void*)(8 * sizeof(float)));
+        _gl.EnableVertexAttribArray(3);
+        _gl.VertexAttribPointer(4, 4, VertexAttribPointerType.Float, false, stride, (void*)(10 * sizeof(float)));
+        _gl.EnableVertexAttribArray(4);
+        _gl.VertexAttribPointer(5, 4, VertexAttribPointerType.Float, false, stride, (void*)(14 * sizeof(float)));
+        _gl.EnableVertexAttribArray(5);
+        _gl.BindVertexArray(0);
     }
 
     private void UploadLightmaps(BspWorld world)
@@ -948,6 +993,20 @@ public sealed unsafe class BspRenderer : IDisposable
         _viewX = viewX;
         _viewY = viewY;
         _viewZ = viewZ;
+
+        // Extract view right/up axes from the VP matrix for autosprite billboarding
+        // In column-major layout: row0 = right, row1 = up
+        {
+            float rx = mvp[0], ry = mvp[4], rz = mvp[8];
+            float rlen = MathF.Sqrt(rx*rx + ry*ry + rz*rz);
+            if (rlen > 0.001f) { rx /= rlen; ry /= rlen; rz /= rlen; }
+            _viewRight[0] = rx; _viewRight[1] = ry; _viewRight[2] = rz;
+
+            float ux = mvp[1], uy = mvp[5], uz = mvp[9];
+            float ulen = MathF.Sqrt(ux*ux + uy*uy + uz*uz);
+            if (ulen > 0.001f) { ux /= ulen; uy /= ulen; uz /= ulen; }
+            _viewUp[0] = ux; _viewUp[1] = uy; _viewUp[2] = uz;
+        }
 
         _gl.UseProgram(_program);
         _gl.UniformMatrix4(_mvpLoc, 1, false, mvp);
@@ -1496,6 +1555,18 @@ public sealed unsafe class BspRenderer : IDisposable
     private void DrawSurfaceGeometry(ref BspSurface surf, ShaderManager shaders, int alphaFunc,
         bool isTransparentPass = false)
     {
+        // Check for autosprite deform — needs CPU-side billboarding
+        var deforms = shaders.GetDeforms(surf.ShaderHandle);
+        if (HasAutoSprite(deforms))
+        {
+            bool isAS2 = false;
+            if (deforms != null)
+                foreach (var d in deforms)
+                    if (d.Type == DeformType.AutoSprite2) { isAS2 = true; break; }
+            DrawAutoSpriteSurface(ref surf, shaders, alphaFunc, isTransparentPass, isAS2);
+            return;
+        }
+
         // Check for multi-stage rendering
         var stages = shaders.GetStages(surf.ShaderHandle);
         if (stages != null && stages.Length > 1)
@@ -1749,11 +1820,12 @@ public sealed unsafe class BspRenderer : IDisposable
             }
             else
             {
-                // Subsequent stages in opaque pass: blend on top, no depth write
+                // Subsequent stages in opaque pass: blend on top
                 _gl.Enable(EnableCap.Blend);
                 _gl.BlendFunc((BlendingFactor)stage.Blend.SrcFactor,
                               (BlendingFactor)stage.Blend.DstFactor);
-                _gl.DepthMask(false);
+                // Respect per-stage depthWrite (default off for later stages)
+                _gl.DepthMask(stage.DepthWrite);
 
                 if (stage.DepthFunc == 1)
                     _gl.DepthFunc(DepthFunction.Equal);
@@ -1892,8 +1964,179 @@ public sealed unsafe class BspRenderer : IDisposable
                 _gl.Uniform4(_deformParams1Loc, df.Param5, df.Param6, df.Param7, df.Param8);
                 return true;
             }
+            else if (df.Type == DeformType.Bulge)
+            {
+                _gl.Uniform1(_deformTypeLoc, 2);
+                _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, df.Param2, 0f);
+                return true;
+            }
+            else if (df.Type == DeformType.Normal)
+            {
+                _gl.Uniform1(_deformTypeLoc, 3);
+                _gl.Uniform4(_deformParams0Loc, df.Param0, df.Param1, 0f, 0f);
+                return true;
+            }
         }
         return false;
+    }
+
+    /// <summary>Check if deforms include AutoSprite or AutoSprite2.</summary>
+    private static bool HasAutoSprite(DeformVertexes[]? deforms)
+    {
+        if (deforms == null) return false;
+        foreach (var d in deforms)
+            if (d.Type is DeformType.AutoSprite or DeformType.AutoSprite2)
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// CPU-side autosprite deform: rebuild quads to face the camera.
+    /// Reads vertices from the BSP world data, applies billboard transform,
+    /// uploads to dynamic VBO, and draws.
+    /// </summary>
+    private void DrawAutoSpriteSurface(ref BspSurface surf, ShaderManager shaders,
+                                        int alphaFunc, bool isTransparentPass, bool isAutoSprite2)
+    {
+        if (_world == null) return;
+
+        int numVerts = surf.NumVertices;
+        int numIndices = surf.NumIndices;
+        if (numVerts < 4 || numIndices < 6) return;
+
+        // View axes for billboarding
+        // viewRight = cross(viewForward, worldUp), but we use the stored view position
+        // For autosprite, we need the camera right and up vectors.
+        // We reconstruct them from the MVP matrix (columns of the view rotation).
+        // Actually, we have the view position. The right/up are the standard Q3 axes.
+        // For world entity, use the view axes directly.
+        float rightX = _viewRight[0], rightY = _viewRight[1], rightZ = _viewRight[2];
+        float upX = _viewUp[0], upY = _viewUp[1], upZ = _viewUp[2];
+
+        // Ensure buffer size
+        int neededVerts = numVerts * FLOATS_PER_VERT;
+        if (_autospVerts.Length < neededVerts)
+            _autospVerts = new float[neededVerts];
+
+        // Copy original vertex data
+        for (int i = 0; i < numVerts; i++)
+        {
+            ref var v = ref _world.Vertices[surf.FirstVertex + i];
+            int o = i * FLOATS_PER_VERT;
+            _autospVerts[o] = v.X; _autospVerts[o+1] = v.Y; _autospVerts[o+2] = v.Z;
+            _autospVerts[o+3] = v.NX; _autospVerts[o+4] = v.NY; _autospVerts[o+5] = v.NZ;
+            _autospVerts[o+6] = v.U; _autospVerts[o+7] = v.V;
+            _autospVerts[o+8] = v.LmU; _autospVerts[o+9] = v.LmV;
+            _autospVerts[o+10] = v.R / 255f; _autospVerts[o+11] = v.G / 255f;
+            _autospVerts[o+12] = v.B / 255f; _autospVerts[o+13] = v.A / 255f;
+            _autospVerts[o+14] = v.TX; _autospVerts[o+15] = v.TY;
+            _autospVerts[o+16] = v.TZ; _autospVerts[o+17] = v.TS;
+        }
+
+        // Apply autosprite: process quads (4 verts each)
+        int numQuads = numVerts / 4;
+        for (int q = 0; q < numQuads; q++)
+        {
+            int qi = q * 4;
+            int o0 = qi * FLOATS_PER_VERT;
+            int o1 = (qi+1) * FLOATS_PER_VERT;
+            int o2 = (qi+2) * FLOATS_PER_VERT;
+            int o3 = (qi+3) * FLOATS_PER_VERT;
+
+            // Compute quad center
+            float cx = 0.25f * (_autospVerts[o0] + _autospVerts[o1] + _autospVerts[o2] + _autospVerts[o3]);
+            float cy = 0.25f * (_autospVerts[o0+1] + _autospVerts[o1+1] + _autospVerts[o2+1] + _autospVerts[o3+1]);
+            float cz = 0.25f * (_autospVerts[o0+2] + _autospVerts[o1+2] + _autospVerts[o2+2] + _autospVerts[o3+2]);
+
+            // Compute radius (distance from center to first vert * 0.707)
+            float dx = _autospVerts[o0] - cx;
+            float dy = _autospVerts[o0+1] - cy;
+            float dz = _autospVerts[o0+2] - cz;
+            float radius = MathF.Sqrt(dx*dx + dy*dy + dz*dz) * 0.707f;
+
+            // Rebuild quad facing camera: center ± radius * (right ± up)
+            float lx = rightX * radius, ly = rightY * radius, lz = rightZ * radius;
+            float ux = upX * radius, uy = upY * radius, uz = upZ * radius;
+
+            // v0 = center - left - up (bottom-left)
+            _autospVerts[o0] = cx - lx - ux;
+            _autospVerts[o0+1] = cy - ly - uy;
+            _autospVerts[o0+2] = cz - lz - uz;
+            // v1 = center + left - up (bottom-right)
+            _autospVerts[o1] = cx + lx - ux;
+            _autospVerts[o1+1] = cy + ly - uy;
+            _autospVerts[o1+2] = cz + lz - uz;
+            // v2 = center + left + up (top-right)
+            _autospVerts[o2] = cx + lx + ux;
+            _autospVerts[o2+1] = cy + ly + uy;
+            _autospVerts[o2+2] = cz + lz + uz;
+            // v3 = center - left + up (top-left)
+            _autospVerts[o3] = cx - lx + ux;
+            _autospVerts[o3+1] = cy - ly + uy;
+            _autospVerts[o3+2] = cz - lz + uz;
+        }
+
+        // Build indices (relative to 0 since we upload separate VBO)
+        int neededIdx = numIndices;
+        if (_autospIndices.Length < neededIdx)
+            _autospIndices = new uint[neededIdx];
+        for (int i = 0; i < numIndices; i++)
+            _autospIndices[i] = (uint)(_world.Indices[surf.FirstIndex + i] - surf.FirstVertex);
+
+        // Upload to dynamic VBO
+        _gl.BindVertexArray(_autospVao);
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _autospVbo);
+        fixed (float* p = _autospVerts)
+            _gl.BufferData(BufferTargetARB.ArrayBuffer,
+                (nuint)(numVerts * FLOATS_PER_VERT * sizeof(float)), p, BufferUsageARB.StreamDraw);
+        _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _autospEbo);
+        fixed (uint* p = _autospIndices)
+            _gl.BufferData(BufferTargetARB.ElementArrayBuffer,
+                (nuint)(numIndices * sizeof(uint)), p, BufferUsageARB.StreamDraw);
+
+        // Bind texture
+        uint texId = shaders.GetTextureId(surf.ShaderHandle);
+        _gl.ActiveTexture(TextureUnit.Texture0);
+        _gl.BindTexture(TextureTarget.Texture2D, texId);
+
+        // Set shader state (same as regular surface)
+        int rgbGen = shaders.GetRgbGen(surf.ShaderHandle);
+        if (rgbGen == 0) rgbGen = 8;
+        _gl.Uniform1(_rgbGenLoc, rgbGen);
+        _gl.Uniform1(_alphaGenModeLoc, 0);
+        _gl.Uniform1(_alphaFuncLoc, alphaFunc);
+        _gl.Uniform1(_envMapLoc, 0);
+        _gl.Uniform1(_useLightmapLoc, 0);
+        _gl.Uniform1(_useLmUVLoc, 0);
+        _gl.Uniform1(_deformTypeLoc, -1); // no GPU deform, CPU already applied
+        SetTcModUniforms(shaders.GetTcMods(surf.ShaderHandle));
+
+        int cullMode = shaders.GetCullMode(surf.ShaderHandle);
+        ApplyCullMode(cullMode);
+
+        // Apply blend mode (autosprite surfaces are often additive/blended)
+        BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
+        if (blend.NeedsBlending || isTransparentPass)
+        {
+            _gl.Enable(EnableCap.Blend);
+            _gl.BlendFunc((BlendingFactor)blend.SrcFactor, (BlendingFactor)blend.DstFactor);
+            _gl.DepthMask(false);
+        }
+
+        _gl.DrawElements(PrimitiveType.Triangles,
+            (uint)numIndices, DrawElementsType.UnsignedInt, null);
+
+        if (blend.NeedsBlending || isTransparentPass)
+        {
+            _gl.DepthMask(true);
+            if (!isTransparentPass)
+                _gl.Disable(EnableCap.Blend);
+        }
+
+        RestoreCullMode(cullMode);
+
+        // Restore main VAO
+        _gl.BindVertexArray(_vao);
     }
 
     /// <summary>
@@ -2375,6 +2618,9 @@ public sealed unsafe class BspRenderer : IDisposable
         if (_ebo != 0) { _gl.DeleteBuffer(_ebo); _ebo = 0; }
         if (_vbo != 0) { _gl.DeleteBuffer(_vbo); _vbo = 0; }
         if (_vao != 0) { _gl.DeleteVertexArray(_vao); _vao = 0; }
+        if (_autospEbo != 0) { _gl.DeleteBuffer(_autospEbo); _autospEbo = 0; }
+        if (_autospVbo != 0) { _gl.DeleteBuffer(_autospVbo); _autospVbo = 0; }
+        if (_autospVao != 0) { _gl.DeleteVertexArray(_autospVao); _autospVao = 0; }
         if (_program != 0) { _gl.DeleteProgram(_program); _program = 0; }
         _world = null;
     }
