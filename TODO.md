@@ -260,6 +260,7 @@ The cgame DLL interface is:
 - [x] Brass ejection — machinegun and shotgun shell casings with physics
 - [x] Bubble trail — underwater bullet bubble puffs
 - [x] Event handler wiring — 11 event types fully implemented: EV_CHANGE_WEAPON, EV_MISSILE_HIT/MISS/MISS_METAL, EV_BULLET_HIT_WALL/FLESH, EV_SHOTGUN, EV_RAILTRAIL, EV_GIB_PLAYER, EV_PLAYER_TELEPORT_IN/OUT, EV_JUMP_PAD, EV_SCOREPLUM
+- [x] Player angles — CG_PlayerAngles/CG_SwingAngles with swing damping for smooth head/torso/legs rotation and velocity-based lean
 
 ### Improvements
 
