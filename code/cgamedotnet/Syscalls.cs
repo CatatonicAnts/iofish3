@@ -321,6 +321,9 @@ public static unsafe class Syscalls
     public static void S_AddLoopingSound(int entityNum, float* origin, float* velocity, int sfx) =>
         Call(CG_S_ADDLOOPINGSOUND, entityNum, (nint)origin, (nint)velocity, sfx);
 
+    public static void S_AddRealLoopingSound(int entityNum, float* origin, float* velocity, int sfx) =>
+        Call(CG_S_ADDREALLOOPINGSOUND, entityNum, (nint)origin, (nint)velocity, sfx);
+
     public static void S_UpdateEntityPosition(int entityNum, float* origin) =>
         Call(CG_S_UPDATEENTITYPOSITION, entityNum, (nint)origin);
 

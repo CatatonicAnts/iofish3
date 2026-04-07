@@ -242,6 +242,24 @@ The cgame DLL interface is:
 - [x] Weapon animation — proper MapTorsoToWeaponFrame mapping torso attack/drop/idle to weapon hand frames
 - [x] Mirror rendering — portal surfaces rendered with environment mapping approximation
 - [x] Muzzle flash model — flash model rendered at tag_flash on first-person weapon during fire events
+- [x] Third-person weapon model — weapon/barrel/flash attached to other players via tag_weapon on torso, with muzzle flash for continuous and impulse weapons
+- [x] Weapon impact effects — per-weapon MissileHitWall/MissileHitPlayer with explosion sprite/model, decals, sounds, dynamic lights for all 9 weapons
+- [x] Bullet/shotgun effects — CG_Bullet for wall sparks+marks, CG_ShotgunFire with Q3-compatible deterministic pellet spread, flesh hit blood spray
+- [x] Gib system — 10 gib models with LE_FRAGMENT physics, tumbling, bounce sounds, blood trail marks
+- [x] Score plum — floating +N score text with per-digit number sprites, color-coded by score range, rising+oscillating animation
+- [x] Rail trail with rings — RT_RAIL_CORE beam as fading local entity with spiral ring sprites along path
+- [x] Entity effects — looping sounds, constant lights, bmodel sound positioning for all entities
+- [x] Player sprites — floating connection/talk/medal/friend icons above players based on eFlags
+- [x] Pain twitch — torso roll animation on damage with direction alternation
+- [x] Haste trail — smoke puffs behind running players with haste powerup
+- [x] CTF flags — red/blue flag models trailing behind flag carriers
+- [x] Portal entity — RT_PORTALSURFACE rendering for mirror/portal surfaces
+- [x] Grapple hook — RT_LIGHTNING cable beam from owner to grapple projectile
+- [x] Mover adjustment — AdjustPositionForMover for entities riding moving platforms
+- [x] Spawn/teleport effects — visual teleport model effect for player spawn-in/out
+- [x] Brass ejection — machinegun and shotgun shell casings with physics
+- [x] Bubble trail — underwater bullet bubble puffs
+- [x] Event handler wiring — 11 event types fully implemented: EV_CHANGE_WEAPON, EV_MISSILE_HIT/MISS/MISS_METAL, EV_BULLET_HIT_WALL/FLESH, EV_SHOTGUN, EV_RAILTRAIL, EV_GIB_PLAYER, EV_PLAYER_TELEPORT_IN/OUT, EV_JUMP_PAD, EV_SCOREPLUM
 
 ### Improvements
 

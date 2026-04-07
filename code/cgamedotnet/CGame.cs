@@ -17,6 +17,7 @@ public static unsafe class CGame
 	private const int SOLID_BMODEL = 0xffffff;
 	private const int DEFAULT_GRAVITY = 800;
 	private const int EF_TELEPORT_BIT = 0x00000004;
+	private const int ANIM_TOGGLEBIT = 128;
 
 	// ── Per-entity persistent state (centity_t equivalent) ──
 	private struct CEntity
@@ -34,6 +35,9 @@ public static unsafe class CGame
 
 		// Muzzle flash timing (set on EV_FIRE_WEAPON)
 		public int MuzzleFlashTime;
+
+		// Trail timing (haste smoke, etc.)
+		public int TrailTime;
 	}
 
 	// ── Static game data (cgs_t equivalent) ──
@@ -90,6 +94,10 @@ public static unsafe class CGame
 	private static readonly int[] _gameModels = new int[MAX_MODELS];
 	private static readonly int[] _gameSounds = new int[MAX_SOUNDS];
 	private static readonly int[] _inlineDrawModel = new int[MAX_MODELS];
+	// Inline model midpoints for bmodel sound positioning (3 floats per model)
+	private static readonly float[] _inlineModelMidX = new float[MAX_MODELS];
+	private static readonly float[] _inlineModelMidY = new float[MAX_MODELS];
+	private static readonly float[] _inlineModelMidZ = new float[MAX_MODELS];
 
 	// Item model cache (bg_itemlist equivalent, indexed by item index 0-MAX_ITEMS)
 	private const int MAX_ITEMS = 64;
@@ -291,6 +299,19 @@ public static unsafe class CGame
 	private const int MUZZLE_FLASH_TIME = 20;
 	private const int EF_FIRING = 0x00000100;
 
+	// Entity effect flags
+	private const int EF_DEAD = 0x00000001;
+	private const int EF_AWARD_EXCELLENT = 0x00000008;
+	private const int EF_AWARD_GAUNTLET = 0x00000040;
+	private const int EF_NODRAW = 0x00000080;
+	private const int EF_MOVER_STOP = 0x00000400;
+	private const int EF_AWARD_CAP = 0x00000800;
+	private const int EF_TALK = 0x00001000;
+	private const int EF_CONNECTION = 0x00002000;
+	private const int EF_AWARD_IMPRESSIVE = 0x00008000;
+	private const int EF_AWARD_DEFEND = 0x00010000;
+	private const int EF_AWARD_ASSIST = 0x00020000;
+
 	// Reward medals
 	private const int MAX_REWARDSTACK = 10;
 	private const int REWARD_TIME = 3000;
@@ -303,6 +324,8 @@ public static unsafe class CGame
 	// Reward media
 	private static int _medalExcellent, _medalImpressive, _medalGauntlet;
 	private static int _medalDefend, _medalAssist, _medalCapture;
+	private static int _connectionShader, _balloonShader, _friendShader;
+	private static int _hastePuffShader;
 	private static int _impressiveSound, _excellentSound, _humiliationSound;
 	private static int _defendSound, _assistSound, _captureAwardSound;
 	private static int _deniedSound, _hitSound, _hitTeamSound;
@@ -393,6 +416,13 @@ public static unsafe class CGame
 
 	// Entity tracking array
 	private static CEntity[] _entities = new CEntity[MAX_GENTITIES];
+
+	/// <summary>Get entity type for the given entity number (used by ShotgunPellet trace).</summary>
+	public static int GetEntityType(int entityNum)
+	{
+		if (entityNum < 0 || entityNum >= MAX_GENTITIES) return 0;
+		return _entities[entityNum].CurrentState.EType;
+	}
 
 	// ── Init ──
 	public static void Init(int serverMessageNum, int serverCommandSequence, int clientNum)
@@ -763,6 +793,7 @@ public static unsafe class CGame
 		};
 		for (int i = 0; i < 11; i++)
 			_numberShaders[i] = Syscalls.R_RegisterShader(numNames[i]);
+		LocalEntities.SetNumberShaders(_numberShaders);
 
 		// Crosshair shaders (a-j)
 		for (int i = 0; i < NUM_CROSSHAIRS; i++)
@@ -786,6 +817,12 @@ public static unsafe class CGame
 		_medalAssist = Syscalls.R_RegisterShaderNoMip("medal_assist");
 		_medalCapture = Syscalls.R_RegisterShaderNoMip("medal_capture");
 
+		// Player sprite shaders
+		_connectionShader = Syscalls.R_RegisterShader("disconnected");
+		_balloonShader = Syscalls.R_RegisterShader("sprites/balloon3");
+		_friendShader = Syscalls.R_RegisterShader("sprites/foe");
+		_hastePuffShader = Syscalls.R_RegisterShader("hasteSmokePuff");
+
 		// Lagometer
 		_lagometerShader = Syscalls.R_RegisterShaderNoMip("lagometer");
 		_disconnectIcon = Syscalls.R_RegisterShaderNoMip("gfx/2d/net");
@@ -807,12 +844,18 @@ public static unsafe class CGame
 		for (int i = 1; i < weaponIconPaths.Length && i < Weapons.WP_NUM_WEAPONS; i++)
 			_weaponIcons[i] = Syscalls.R_RegisterShaderNoMip(weaponIconPaths[i]);
 
-		// Register inline BSP models
+		// Register inline BSP models and compute midpoints
 		int numInlineModels = Syscalls.CM_NumInlineModels();
+		float* inlineMins = stackalloc float[3];
+		float* inlineMaxs = stackalloc float[3];
 		for (int i = 1; i < numInlineModels; i++)
 		{
 			string name = $"*{i}";
 			_inlineDrawModel[i] = Syscalls.R_RegisterModel(name);
+			Syscalls.R_ModelBounds(_inlineDrawModel[i], inlineMins, inlineMaxs);
+			_inlineModelMidX[i] = inlineMins[0] + 0.5f * (inlineMaxs[0] - inlineMins[0]);
+			_inlineModelMidY[i] = inlineMins[1] + 0.5f * (inlineMaxs[1] - inlineMins[1]);
+			_inlineModelMidZ[i] = inlineMins[2] + 0.5f * (inlineMaxs[2] - inlineMins[2]);
 		}
 		Syscalls.Print($"[.NET cgame] Registered {numInlineModels - 1} inline models\n");
 
@@ -1171,6 +1214,7 @@ public static unsafe class CGame
 	// Registered event sounds
 	private static int _sfxLandSound;
 	private static int _sfxJumpSound;
+	private static int _sfxJumpPadSound;
 	private static int _sfxNoAmmoSound;
 	private static int _sfxTeleportIn;
 	private static int _sfxTeleportOut;
@@ -1188,6 +1232,7 @@ public static unsafe class CGame
 	{
 		_sfxLandSound = Syscalls.S_RegisterSound("sound/player/land1.wav", 0);
 		_sfxJumpSound = Syscalls.S_RegisterSound("sound/player/jump1.wav", 0);
+		_sfxJumpPadSound = Syscalls.S_RegisterSound("sound/world/jumppad.wav", 0);
 		_sfxNoAmmoSound = Syscalls.S_RegisterSound("sound/weapons/noammo.wav", 0);
 		_sfxTeleportIn = Syscalls.S_RegisterSound("sound/world/telein.wav", 0);
 		_sfxTeleportOut = Syscalls.S_RegisterSound("sound/world/teleout.wav", 0);
@@ -1417,7 +1462,16 @@ public static unsafe class CGame
 			}
 
 			case EntityEvent.EV_JUMP_PAD:
-				Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_VOICE, _sfxJumpSound);
+				// Smoke puff at pad
+				LocalEntities.SmokePuff(cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ,
+					0, 0, 1, 32, 1, 1, 1, 0.33f, 1000, _time, 0);
+				// Boing sound at pad location
+				Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_VOICE, _sfxJumpPadSound);
+				// Jump sound on player
+				{
+					int jmpSfx = Player.CustomSound(es.Number, "*jump1.wav");
+					if (jmpSfx != 0) Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, jmpSfx);
+				}
 				break;
 
 			case EntityEvent.EV_ITEM_PICKUP:
@@ -1440,7 +1494,7 @@ public static unsafe class CGame
 				break;
 
 			case EntityEvent.EV_CHANGE_WEAPON:
-				// Weapon change — no sound by default
+				Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_AUTO, WeaponEffects.SelectSound);
 				break;
 
 			case EntityEvent.EV_FIRE_WEAPON:
@@ -1453,10 +1507,12 @@ public static unsafe class CGame
 
 			case EntityEvent.EV_PLAYER_TELEPORT_IN:
 				Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxTeleportIn);
+				WeaponEffects.SpawnEffect(cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ, _time);
 				break;
 
 			case EntityEvent.EV_PLAYER_TELEPORT_OUT:
 				Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxTeleportOut);
+				WeaponEffects.SpawnEffect(cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ, _time);
 				break;
 
 			case EntityEvent.EV_WATER_TOUCH:
@@ -1506,59 +1562,64 @@ public static unsafe class CGame
 
 			case EntityEvent.EV_MISSILE_HIT:
 				{
-					Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
-					float ox = es.OriginX, oy = es.OriginY, oz = es.OriginZ;
-					LocalEntities.MakeExplosion(ox, oy, oz, _explosionShader, 600,
-						300, 1.0f, 0.75f, 0.0f, _time);
-					float dx = es.Angles2X, dy = es.Angles2Y, dz = es.Angles2Z;
-					float dirLen = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-					if (dirLen > 0.001f) { dx /= dirLen; dy /= dirLen; dz /= dirLen; }
-					else { dx = 0; dy = 0; dz = 1; }
-					Marks.ImpactMark(Marks.BurnMarkShader, ox, oy, oz, dx, dy, dz,
-						32, 1, 1, 1, 1, false, false);
+					WeaponEffects.ByteToDir(eventParm, out float hdx, out float hdy, out float hdz);
+					float hx = es.OriginX, hy = es.OriginY, hz = es.OriginZ;
+					WeaponEffects.MissileHitPlayer(es.Weapon,
+						hx, hy, hz, hdx, hdy, hdz, es.OtherEntityNum, _time);
 					break;
 				}
 
 			case EntityEvent.EV_MISSILE_MISS:
+				{
+					WeaponEffects.ByteToDir(eventParm, out float mdx, out float mdy, out float mdz);
+					WeaponEffects.MissileHitWall(es.Weapon, 0,
+						es.OriginX, es.OriginY, es.OriginZ, mdx, mdy, mdz,
+						WeaponEffects.IMPACTSOUND_DEFAULT, _time);
+					break;
+				}
+
 			case EntityEvent.EV_MISSILE_MISS_METAL:
 				{
-					Syscalls.S_StartSound(origin, EntityNum.ENTITYNUM_NONE, SoundChannel.CHAN_AUTO, _sfxRocketExplosion);
-					float mx = es.OriginX, my = es.OriginY, mz = es.OriginZ;
-					LocalEntities.MakeExplosion(mx, my, mz, _explosionShader, 600,
-						300, 1.0f, 0.75f, 0.0f, _time);
-					float ndx = es.Angles2X, ndy = es.Angles2Y, ndz = es.Angles2Z;
-					float nLen = MathF.Sqrt(ndx * ndx + ndy * ndy + ndz * ndz);
-					if (nLen > 0.001f) { ndx /= nLen; ndy /= nLen; ndz /= nLen; }
-					else { ndx = 0; ndy = 0; ndz = 1; }
-					Marks.ImpactMark(Marks.BurnMarkShader, mx, my, mz, ndx, ndy, ndz,
-						32, 1, 1, 1, 1, false, false);
+					WeaponEffects.ByteToDir(eventParm, out float mmdx, out float mmdy, out float mmdz);
+					WeaponEffects.MissileHitWall(es.Weapon, 0,
+						es.OriginX, es.OriginY, es.OriginZ, mmdx, mmdy, mmdz,
+						WeaponEffects.IMPACTSOUND_METAL, _time);
 					break;
 				}
 
 			case EntityEvent.EV_BULLET_HIT_WALL:
 				{
-					float bx = es.OriginX, by = es.OriginY, bz = es.OriginZ;
-					float bdx = es.Angles2X, bdy = es.Angles2Y, bdz = es.Angles2Z;
-					float bLen = MathF.Sqrt(bdx * bdx + bdy * bdy + bdz * bdz);
-					if (bLen > 0.001f) { bdx /= bLen; bdy /= bLen; bdz /= bLen; }
-					else { bdx = 0; bdy = 0; bdz = 1; }
-					Marks.ImpactMark(Marks.BulletMarkShader, bx, by, bz, bdx, bdy, bdz,
-						8, 1, 1, 1, 1, true, false);
+					WeaponEffects.ByteToDir(eventParm, out float bdx, out float bdy, out float bdz);
+					WeaponEffects.Bullet(es.Pos.TrBaseX, es.Pos.TrBaseY, es.Pos.TrBaseZ,
+						es.OtherEntityNum, bdx, bdy, bdz, false, EntityNum.ENTITYNUM_WORLD, _time);
 					break;
 				}
 
 			case EntityEvent.EV_BULLET_HIT_FLESH:
-				// Blood effect — just sound for now
+				WeaponEffects.Bullet(es.Pos.TrBaseX, es.Pos.TrBaseY, es.Pos.TrBaseZ,
+					es.OtherEntityNum, 0, 0, 1, true, eventParm, _time);
 				break;
 
 			case EntityEvent.EV_SHOTGUN:
-				// Shotgun pellet pattern — each pellet leaves a bullet mark
+				WeaponEffects.ShotgunFire(
+					es.Pos.TrBaseX, es.Pos.TrBaseY, es.Pos.TrBaseZ,
+					es.Origin2X, es.Origin2Y, es.Origin2Z,
+					eventParm, es.OtherEntityNum, _time);
 				break;
 
 			case EntityEvent.EV_RAILTRAIL:
 				{
-					// Rail trail beam — render as temporary refEntity
-					// Sound is handled by the weapon fire event
+					cent.CurrentState.Weapon = Weapons.WP_RAILGUN;
+					WeaponEffects.RailTrail(
+						es.Origin2X, es.Origin2Y, es.Origin2Z,
+						es.Pos.TrBaseX, es.Pos.TrBaseY, es.Pos.TrBaseZ, _time);
+					if (eventParm != 255)
+					{
+						WeaponEffects.ByteToDir(eventParm, out float rdx, out float rdy, out float rdz);
+						WeaponEffects.MissileHitWall(Weapons.WP_RAILGUN, es.ClientNum,
+							es.Pos.TrBaseX, es.Pos.TrBaseY, es.Pos.TrBaseZ,
+							rdx, rdy, rdz, WeaponEffects.IMPACTSOUND_DEFAULT, _time);
+					}
 					break;
 				}
 
@@ -1602,6 +1663,7 @@ public static unsafe class CGame
 
 			case EntityEvent.EV_GIB_PLAYER:
 				Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_BODY, _sfxGibSound);
+				WeaponEffects.GibPlayer(cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ, _time);
 				break;
 
 			case EntityEvent.EV_ITEM_POP:
@@ -1800,10 +1862,10 @@ public static unsafe class CGame
 	/// <summary>Handle EV_SCOREPLUM — floating damage score numbers.</summary>
 	private static void ScorePlum(ref Q3EntityState es)
 	{
-		// Score plums show "+N" above the victim when you score
-		// Currently log-only; visual rendering requires local entity support
 		int score = es.OtherEntityNum2;
-		if (score < 0) score = 0;
+		LocalEntities.MakeScorePlum(
+			es.Pos.TrBaseX, es.Pos.TrBaseY, es.Pos.TrBaseZ,
+			score, _time);
 	}
 
 	/// <summary>Handle EV_GLOBAL_TEAM_SOUND — CTF/team announcements.</summary>
@@ -1998,6 +2060,14 @@ public static unsafe class CGame
 			out cent.LerpOriginX, out cent.LerpOriginY, out cent.LerpOriginZ);
 		EvaluateTrajectory(ref cent.CurrentState.APos, _time,
 			out cent.LerpAnglesX, out cent.LerpAnglesY, out cent.LerpAnglesZ);
+
+		// Adjust for riding a mover
+		if (cent.CurrentState.Number != _clientNum && _snap != null)
+		{
+			AdjustPositionForMover(ref cent,
+				cent.CurrentState.GroundEntityNum,
+				_snap->ServerTime, _time);
+		}
 	}
 
 	private static void InterpolateEntityPosition(ref CEntity cent)
@@ -2022,6 +2092,40 @@ public static unsafe class CGame
 		cent.LerpAnglesX = LerpAngle(curAX, nextAX, f);
 		cent.LerpAnglesY = LerpAngle(curAY, nextAY, f);
 		cent.LerpAnglesZ = LerpAngle(curAZ, nextAZ, f);
+	}
+
+	private static void AdjustPositionForMover(ref CEntity cent, int moverNum,
+		int fromTime, int toTime)
+	{
+		const int ENTITYNUM_MAX_NORMAL = MAX_GENTITIES - 2;
+		if (moverNum <= 0 || moverNum >= ENTITYNUM_MAX_NORMAL) return;
+
+		ref var mover = ref _entities[moverNum];
+		if (mover.CurrentState.EType != EntityType.ET_MOVER) return;
+
+		// Evaluate mover position at both times
+		EvaluateTrajectory(ref mover.CurrentState.Pos, fromTime,
+			out float oldOrgX, out float oldOrgY, out float oldOrgZ);
+		EvaluateTrajectory(ref mover.CurrentState.Pos, toTime,
+			out float newOrgX, out float newOrgY, out float newOrgZ);
+
+		float deltaX = newOrgX - oldOrgX;
+		float deltaY = newOrgY - oldOrgY;
+		float deltaZ = newOrgZ - oldOrgZ;
+
+		cent.LerpOriginX += deltaX;
+		cent.LerpOriginY += deltaY;
+		cent.LerpOriginZ += deltaZ;
+
+		// Angular adjustment
+		EvaluateTrajectory(ref mover.CurrentState.APos, fromTime,
+			out float oldAngX, out float oldAngY, out float oldAngZ);
+		EvaluateTrajectory(ref mover.CurrentState.APos, toTime,
+			out float newAngX, out float newAngY, out float newAngZ);
+
+		cent.LerpAnglesX += newAngX - oldAngX;
+		cent.LerpAnglesY += newAngY - oldAngY;
+		cent.LerpAnglesZ += newAngZ - oldAngZ;
 	}
 
 	// ── View Calculation (cg_view.c equivalent) ──
@@ -2528,6 +2632,9 @@ public static unsafe class CGame
 			// Calculate interpolated position for this entity
 			CalcEntityLerpPositions(ref cent);
 
+			// Apply continuous entity effects (sound positioning, looping sounds, constant lights)
+			EntityEffects(ref cent);
+
 			// Dispatch based on entity type
 			switch (es.EType)
 			{
@@ -2552,7 +2659,63 @@ public static unsafe class CGame
 				case EntityType.ET_SPEAKER:
 					// Speakers handled via looping sounds
 					break;
+				case EntityType.ET_PORTAL:
+					AddPortal(ref cent);
+					break;
+				case EntityType.ET_GRAPPLE:
+					AddGrapple(ref cent);
+					break;
 			}
+		}
+	}
+
+	private static void EntityEffects(ref CEntity cent)
+	{
+		ref var s1 = ref cent.CurrentState;
+
+		// Update sound origin
+		float originX, originY, originZ;
+		if (s1.Solid == SOLID_BMODEL)
+		{
+			int mi = s1.ModelIndex;
+			originX = cent.LerpOriginX + _inlineModelMidX[mi];
+			originY = cent.LerpOriginY + _inlineModelMidY[mi];
+			originZ = cent.LerpOriginZ + _inlineModelMidZ[mi];
+		}
+		else
+		{
+			originX = cent.LerpOriginX;
+			originY = cent.LerpOriginY;
+			originZ = cent.LerpOriginZ;
+		}
+		float* org = stackalloc float[3];
+		org[0] = originX; org[1] = originY; org[2] = originZ;
+		Syscalls.S_UpdateEntityPosition(s1.Number, org);
+
+		// Add looping sound
+		if (s1.LoopSound > 0 && s1.LoopSound < MAX_SOUNDS)
+		{
+			int sfx = _gameSounds[s1.LoopSound];
+			if (sfx != 0)
+			{
+				float* vel = stackalloc float[3];
+				vel[0] = 0; vel[1] = 0; vel[2] = 0;
+				if (s1.EType != EntityType.ET_SPEAKER)
+					Syscalls.S_AddLoopingSound(s1.Number, org, vel, sfx);
+				else
+					Syscalls.S_AddRealLoopingSound(s1.Number, org, vel, sfx);
+			}
+		}
+
+		// Constant light glow
+		if (s1.ConstantLight != 0)
+		{
+			int cl = s1.ConstantLight;
+			float r = (cl & 0xFF) / 255.0f;
+			float g = ((cl >> 8) & 0xFF) / 255.0f;
+			float b = ((cl >> 16) & 0xFF) / 255.0f;
+			float intensity = ((cl >> 24) & 0xFF) * 4.0f;
+			Syscalls.R_AddLightToScene(org, intensity, r, g, b);
 		}
 	}
 
@@ -2584,7 +2747,82 @@ public static unsafe class CGame
 		Player.Render(ref s1,
 			cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ,
 			cent.LerpAnglesX, cent.LerpAnglesY, cent.LerpAnglesZ,
-			s1.Number, _clientNum, _time, _shadowMarkShader);
+			s1.Number, _clientNum, _time, _shadowMarkShader,
+			cent.MuzzleFlashTime);
+
+		// Floating sprites above player
+		PlayerSprites(ref cent);
+
+		// Haste trail
+		if ((s1.Powerups & (1 << PW_HASTE)) != 0)
+			HasteTrail(ref cent);
+	}
+
+	private static void PlayerFloatSprite(ref CEntity cent, int shader)
+	{
+		int rf = (cent.CurrentState.Number == _snap->Ps.ClientNum) ? Q3RefEntity.RF_THIRD_PERSON : 0;
+
+		Q3RefEntity ent = default;
+		ent.ReType = Q3RefEntity.RT_SPRITE;
+		ent.CustomShader = shader;
+		ent.Radius = 10;
+		ent.RenderFx = rf;
+		ent.OriginX = cent.LerpOriginX;
+		ent.OriginY = cent.LerpOriginY;
+		ent.OriginZ = cent.LerpOriginZ + 48;
+		ent.OldOriginX = ent.OriginX;
+		ent.OldOriginY = ent.OriginY;
+		ent.OldOriginZ = ent.OriginZ;
+		ent.ShaderRGBA_R = 255; ent.ShaderRGBA_G = 255;
+		ent.ShaderRGBA_B = 255; ent.ShaderRGBA_A = 255;
+		ent.Axis0X = 1; ent.Axis1Y = 1; ent.Axis2Z = 1;
+		Syscalls.R_AddRefEntityToScene(&ent);
+	}
+
+	private static void PlayerSprites(ref CEntity cent)
+	{
+		if (_snap == null) return;
+		int eFlags = cent.CurrentState.EFlags;
+
+		if ((eFlags & EF_CONNECTION) != 0) { PlayerFloatSprite(ref cent, _connectionShader); return; }
+		if ((eFlags & EF_TALK) != 0) { PlayerFloatSprite(ref cent, _balloonShader); return; }
+		if ((eFlags & EF_AWARD_IMPRESSIVE) != 0) { PlayerFloatSprite(ref cent, _medalImpressive); return; }
+		if ((eFlags & EF_AWARD_EXCELLENT) != 0) { PlayerFloatSprite(ref cent, _medalExcellent); return; }
+		if ((eFlags & EF_AWARD_GAUNTLET) != 0) { PlayerFloatSprite(ref cent, _medalGauntlet); return; }
+		if ((eFlags & EF_AWARD_DEFEND) != 0) { PlayerFloatSprite(ref cent, _medalDefend); return; }
+		if ((eFlags & EF_AWARD_ASSIST) != 0) { PlayerFloatSprite(ref cent, _medalAssist); return; }
+		if ((eFlags & EF_AWARD_CAP) != 0) { PlayerFloatSprite(ref cent, _medalCapture); return; }
+
+		// Team friend indicator
+		int clientNum = cent.CurrentState.ClientNum;
+		if (clientNum >= 0 && clientNum < 64)
+		{
+			int team = Player.GetTeam(clientNum);
+			if ((eFlags & EF_DEAD) == 0 &&
+				_snap->Ps.Persistant[Persistant.PERS_TEAM] == team &&
+				_gametype >= GT_TEAM)
+			{
+				PlayerFloatSprite(ref cent, _friendShader);
+			}
+		}
+	}
+
+	private static void HasteTrail(ref CEntity cent)
+	{
+		if (cent.TrailTime > _time) return;
+
+		// Only emit when running
+		int anim = Player.GetLegsAnim(cent.CurrentState.Number) & ~ANIM_TOGGLEBIT;
+		if (anim != Player.LEGS_RUN && anim != Player.LEGS_BACK) return;
+
+		cent.TrailTime += 100;
+		if (cent.TrailTime < _time) cent.TrailTime = _time;
+
+		LocalEntities.SmokePuff(
+			cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ - 16,
+			0, 0, 0,
+			8, 1, 1, 1, 1,
+			500, _time, _hastePuffShader);
 	}
 
 	private static void AddItem(ref CEntity cent)
@@ -2793,6 +3031,92 @@ public static unsafe class CGame
 		rent.Axis2X = 0; rent.Axis2Y = 0; rent.Axis2Z = 1;
 		rent.RenderFx = Q3RefEntity.RF_NOSHADOW;
 		Syscalls.R_AddRefEntityToScene(&rent);
+	}
+
+	private static void AddPortal(ref CEntity cent)
+	{
+		ref var s1 = ref cent.CurrentState;
+
+		Q3RefEntity rent = default;
+		rent.ReType = Q3RefEntity.RT_PORTALSURFACE;
+		rent.OriginX = cent.LerpOriginX;
+		rent.OriginY = cent.LerpOriginY;
+		rent.OriginZ = cent.LerpOriginZ;
+		rent.OldOriginX = s1.Origin2X;
+		rent.OldOriginY = s1.Origin2Y;
+		rent.OldOriginZ = s1.Origin2Z;
+
+		// Axis from ByteToDir
+		WeaponEffects.ByteToDir(s1.EventParm, out rent.Axis0X, out rent.Axis0Y, out rent.Axis0Z);
+		MakePerp(rent.Axis0X, rent.Axis0Y, rent.Axis0Z,
+			out rent.Axis1X, out rent.Axis1Y, out rent.Axis1Z);
+		// Cross product for axis2
+		rent.Axis2X = rent.Axis0Y * rent.Axis1Z - rent.Axis0Z * rent.Axis1Y;
+		rent.Axis2Y = rent.Axis0Z * rent.Axis1X - rent.Axis0X * rent.Axis1Z;
+		rent.Axis2Z = rent.Axis0X * rent.Axis1Y - rent.Axis0Y * rent.Axis1X;
+
+		rent.OldFrame = s1.Powerups;
+		rent.FrameNum = s1.Frame;
+		rent.SkinNum = (int)(s1.ClientNum / 256.0f * 360);
+
+		Syscalls.R_AddRefEntityToScene(&rent);
+	}
+
+	private static void MakePerp(float ax, float ay, float az,
+		out float px, out float py, out float pz)
+	{
+		// Find perpendicular to axis[0]
+		float absX = MathF.Abs(ax), absY = MathF.Abs(ay), absZ = MathF.Abs(az);
+		float ux, uy, uz;
+		if (absX < absY && absX < absZ) { ux = 1; uy = 0; uz = 0; }
+		else if (absY < absZ) { ux = 0; uy = 1; uz = 0; }
+		else { ux = 0; uy = 0; uz = 1; }
+		// Cross product
+		px = uy * az - uz * ay;
+		py = uz * ax - ux * az;
+		pz = ux * ay - uy * ax;
+		float len = MathF.Sqrt(px * px + py * py + pz * pz);
+		if (len > 0) { px /= len; py /= len; pz /= len; }
+	}
+
+	private static void AddGrapple(ref CEntity cent)
+	{
+		ref var s1 = ref cent.CurrentState;
+
+		// Find the owner entity
+		int ownerNum = s1.OtherEntityNum;
+		if (ownerNum < 0 || ownerNum >= MAX_GENTITIES) return;
+		ref var owner = ref _entities[ownerNum];
+		if (!owner.CurrentValid) return;
+
+		// Cable from owner to grapple hook
+		Q3RefEntity beam = default;
+		beam.ReType = Q3RefEntity.RT_LIGHTNING;
+		beam.CustomShader = WeaponEffects.LightningShader;
+		beam.ShaderRGBA_R = 0xff; beam.ShaderRGBA_G = 0xff;
+		beam.ShaderRGBA_B = 0xff; beam.ShaderRGBA_A = 0xff;
+
+		// Start: owner origin + 26 Z - 6 up
+		beam.OriginX = owner.LerpOriginX;
+		beam.OriginY = owner.LerpOriginY;
+		beam.OriginZ = owner.LerpOriginZ + 26 - 6;
+
+		// End: grapple position
+		beam.OldOriginX = cent.LerpOriginX;
+		beam.OldOriginY = cent.LerpOriginY;
+		beam.OldOriginZ = cent.LerpOriginZ;
+
+		// Don't draw if too close
+		float dx = beam.OldOriginX - beam.OriginX;
+		float dy = beam.OldOriginY - beam.OriginY;
+		float dz = beam.OldOriginZ - beam.OriginZ;
+		if (dx * dx + dy * dy + dz * dz < 64 * 64) return;
+
+		beam.Axis0X = 1; beam.Axis1Y = 1; beam.Axis2Z = 1;
+		Syscalls.R_AddRefEntityToScene(&beam);
+
+		// Also render the grapple hook model
+		AddGeneral(ref cent);
 	}
 
 	// ── Entity Helpers ──

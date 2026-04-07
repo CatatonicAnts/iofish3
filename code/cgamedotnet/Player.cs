@@ -83,6 +83,11 @@ public static unsafe class Player
     // Muzzle flash
     private const int MUZZLE_FLASH_TIME = 20;
     private const int EF_FIRING = 0x00000100;
+    private const int PAIN_TWITCH_TIME = 200;
+
+    // Flag models
+    private static int _redFlagModel;
+    private static int _blueFlagModel;
 
     // ── Orientation from R_LerpTag (48 bytes) ──
     [StructLayout(LayoutKind.Sequential)]
@@ -180,6 +185,11 @@ public static unsafe class Player
         _playerEntities = new PlayerEntity[MAX_GENTITIES];
 
         _handModel = Syscalls.R_RegisterModel("models/weapons2/shotgun/shotgun_hand.md3");
+
+        // Flag models for CTF
+        _redFlagModel = Syscalls.R_RegisterModel("models/flags/r_flag.md3");
+        _blueFlagModel = Syscalls.R_RegisterModel("models/flags/b_flag.md3");
+
         Syscalls.Print("[.NET cgame] Player system initialized\n");
     }
 
@@ -220,11 +230,12 @@ public static unsafe class Player
         return _playerEntities[entityNum].PainTime;
     }
 
-    /// <summary>Set the last pain time for throttling pain sounds.</summary>
+    /// <summary>Set the last pain time for throttling pain sounds. Toggles pain direction.</summary>
     public static void SetPainTime(int entityNum, int time)
     {
         if (entityNum < 0 || entityNum >= MAX_GENTITIES) return;
         _playerEntities[entityNum].PainTime = time;
+        _playerEntities[entityNum].PainDirection ^= 1;
     }
 
     /// <summary>Get the footstep type for a client.</summary>
@@ -232,6 +243,20 @@ public static unsafe class Player
     {
         if (clientNum < 0 || clientNum >= MAX_CLIENTS) return FOOTSTEP_NORMAL;
         return _clientInfo[clientNum].Footsteps;
+    }
+
+    /// <summary>Get the team number for a client.</summary>
+    public static int GetTeam(int clientNum)
+    {
+        if (clientNum < 0 || clientNum >= MAX_CLIENTS) return 0;
+        return _clientInfo[clientNum].Team;
+    }
+
+    /// <summary>Get the current legs animation number for an entity.</summary>
+    public static int GetLegsAnim(int entityNum)
+    {
+        if (entityNum < 0 || entityNum >= MAX_GENTITIES) return 0;
+        return _playerEntities[entityNum].Legs.AnimationIndex;
     }
 
     // ── Info string parsing ──
@@ -685,7 +710,8 @@ public static unsafe class Player
     public static void Render(ref Q3EntityState currentState,
         float lerpOriginX, float lerpOriginY, float lerpOriginZ,
         float lerpAnglesX, float lerpAnglesY, float lerpAnglesZ,
-        int entityNum, int myClientNum, int time, int shadowMarkShader)
+        int entityNum, int myClientNum, int time, int shadowMarkShader,
+        int muzzleFlashTime)
     {
         int clientNum = currentState.ClientNum;
         if (clientNum < 0 || clientNum >= MAX_CLIENTS) return;
@@ -752,8 +778,16 @@ public static unsafe class Player
         torso.LightingOriginZ = lerpOriginZ;
         torso.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
 
-        // Initialize torso axis from pitch+yaw (pitch for looking up/down)
-        AnglesToAxis(lerpAnglesX, lerpAnglesY, 0, ref torso);
+        // Initialize torso axis from pitch+yaw+roll (pitch for looking up/down)
+        float torsoRoll = 0;
+        // Pain twitch: torso rolls when hit
+        int painDelta = time - pe.PainTime;
+        if (painDelta < PAIN_TWITCH_TIME && pe.PainTime > 0)
+        {
+            float f = 1.0f - (float)painDelta / PAIN_TWITCH_TIME;
+            torsoRoll = pe.PainDirection != 0 ? 20 * f : -20 * f;
+        }
+        AnglesToAxis(lerpAnglesX, lerpAnglesY, torsoRoll, ref torso);
 
         PositionRotatedEntityOnTag(ref torso, ref legs, ci.LegsModel, "tag_torso");
         Syscalls.R_AddRefEntityToScene(&torso);
@@ -780,15 +814,21 @@ public static unsafe class Player
         PositionRotatedEntityOnTag(ref head, ref torso, ci.TorsoModel, "tag_head");
         Syscalls.R_AddRefEntityToScene(&head);
 
+        // ── Third-person weapon model ──
+        AddPlayerWeapon(ref torso, currentState.Weapon, entityNum, renderfx,
+            lerpOriginX, lerpOriginY, lerpOriginZ, ci, time,
+            muzzleFlashTime, currentState.EFlags);
+
         // ── Powerup effects ──
-        PlayerPowerups(currentState.Powerups, lerpOriginX, lerpOriginY, lerpOriginZ);
+        PlayerPowerups(currentState.Powerups, lerpOriginX, lerpOriginY, lerpOriginZ,
+            lerpAnglesY);
 
         // ── Player shadow ──
         PlayerShadow(lerpOriginX, lerpOriginY, lerpOriginZ, renderfx, shadowMarkShader);
     }
 
     /// <summary>Add visual effects for active powerups (CG_PlayerPowerups).</summary>
-    private static void PlayerPowerups(int powerups, float ox, float oy, float oz)
+    private static void PlayerPowerups(int powerups, float ox, float oy, float oz, float yaw)
     {
         if (powerups == 0) return;
 
@@ -813,13 +853,46 @@ public static unsafe class Player
         if ((powerups & PW_BATTLESUIT_BIT) != 0)
             Syscalls.R_AddLightToScene(origin, 200, 1.0f, 1.0f, 0.2f);
 
-        // Red flag carrier = red dlight
+        // Red flag carrier
         if ((powerups & PW_REDFLAG_BIT) != 0)
+        {
             Syscalls.R_AddLightToScene(origin, 200, 1.0f, 0.2f, 0.2f);
+            if (_redFlagModel != 0)
+                TrailItem(ox, oy, oz, yaw, _redFlagModel);
+        }
 
-        // Blue flag carrier = blue dlight
+        // Blue flag carrier
         if ((powerups & PW_BLUEFLAG_BIT) != 0)
+        {
             Syscalls.R_AddLightToScene(origin, 200, 0.2f, 0.2f, 1.0f);
+            if (_blueFlagModel != 0)
+                TrailItem(ox, oy, oz, yaw, _blueFlagModel);
+        }
+    }
+
+    /// <summary>CG_TrailItem — float a model behind the player (flags in CTF).</summary>
+    private static void TrailItem(float ox, float oy, float oz, float yaw, int model)
+    {
+        // Position 16 units behind the player, 16 units up
+        float yawRad = yaw * MathF.PI / 180.0f;
+        float fwdX = MathF.Cos(yawRad);
+        float fwdY = MathF.Sin(yawRad);
+
+        Q3RefEntity ent = default;
+        ent.ReType = Q3RefEntity.RT_MODEL;
+        ent.HModel = model;
+        ent.OriginX = ox - 16 * fwdX;
+        ent.OriginY = oy - 16 * fwdY;
+        ent.OriginZ = oz + 16;
+        ent.OldOriginX = ent.OriginX;
+        ent.OldOriginY = ent.OriginY;
+        ent.OldOriginZ = ent.OriginZ;
+
+        // Rotated 90 degrees from player yaw
+        float yaw2 = (yaw + 90) * MathF.PI / 180.0f;
+        AnglesToAxis(0, yaw + 90, 0, ref ent);
+
+        Syscalls.R_AddRefEntityToScene(&ent);
     }
 
     /// <summary>Draw a projected blob shadow under the player (CG_PlayerShadow).</summary>
@@ -933,6 +1006,95 @@ public static unsafe class Player
         entity.Axis2X = t2x * parent.Axis0X + t2y * parent.Axis1X + t2z * parent.Axis2X;
         entity.Axis2Y = t2x * parent.Axis0Y + t2y * parent.Axis1Y + t2z * parent.Axis2Y;
         entity.Axis2Z = t2x * parent.Axis0Z + t2y * parent.Axis1Z + t2z * parent.Axis2Z;
+    }
+
+    // ── AddPlayerWeapon (third-person weapon model on other players) ──
+
+    /// <summary>
+    /// Attaches weapon model to a player's torso at tag_weapon.
+    /// Includes barrel and muzzle flash. Matches CG_AddPlayerWeapon from cg_weapons.c.
+    /// </summary>
+    private static void AddPlayerWeapon(ref Q3RefEntity parent, int weaponNum,
+        int entityNum, int renderfx,
+        float lightOrgX, float lightOrgY, float lightOrgZ,
+        ClientInfo ci, int time,
+        int muzzleFlashTime, int eFlags)
+    {
+        if (weaponNum <= 0 || weaponNum >= Weapons.WP_NUM_WEAPONS) return;
+
+        int weaponModel = WeaponEffects.GetWeaponModel(weaponNum);
+        if (weaponModel == 0) return;
+
+        // Weapon model at tag_weapon on torso
+        Q3RefEntity gun = default;
+        gun.ReType = Q3RefEntity.RT_MODEL;
+        gun.HModel = weaponModel;
+        gun.RenderFx = renderfx;
+        gun.LightingOriginX = lightOrgX;
+        gun.LightingOriginY = lightOrgY;
+        gun.LightingOriginZ = lightOrgZ;
+        gun.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
+        gun.ShaderRGBA_R = 255; gun.ShaderRGBA_G = 255;
+        gun.ShaderRGBA_B = 255; gun.ShaderRGBA_A = 255;
+
+        PositionRotatedEntityOnTag(ref gun, ref parent, ci.TorsoModel, "tag_weapon");
+        Syscalls.R_AddRefEntityToScene(&gun);
+
+        // Barrel model at tag_barrel
+        int barrelModel = WeaponEffects.GetBarrelModel(weaponNum);
+        if (barrelModel != 0)
+        {
+            Q3RefEntity barrel = default;
+            barrel.ReType = Q3RefEntity.RT_MODEL;
+            barrel.HModel = barrelModel;
+            barrel.RenderFx = renderfx;
+            barrel.LightingOriginX = lightOrgX;
+            barrel.LightingOriginY = lightOrgY;
+            barrel.LightingOriginZ = lightOrgZ;
+            barrel.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
+            barrel.ShaderRGBA_R = 255; barrel.ShaderRGBA_G = 255;
+            barrel.ShaderRGBA_B = 255; barrel.ShaderRGBA_A = 255;
+
+            PositionRotatedEntityOnTag(ref barrel, ref gun, weaponModel, "tag_barrel");
+            Syscalls.R_AddRefEntityToScene(&barrel);
+        }
+
+        // Muzzle flash at tag_flash
+        int flashModel = WeaponEffects.GetFlashModel(weaponNum);
+        if (flashModel != 0)
+        {
+            bool showFlash;
+            if (weaponNum == Weapons.WP_LIGHTNING ||
+                weaponNum == Weapons.WP_GAUNTLET ||
+                weaponNum == Weapons.WP_GRAPPLING_HOOK)
+            {
+                showFlash = (eFlags & EF_FIRING) != 0;
+            }
+            else
+            {
+                showFlash = muzzleFlashTime > 0 && (time - muzzleFlashTime) <= MUZZLE_FLASH_TIME;
+            }
+
+            if (showFlash)
+            {
+                Q3RefEntity flash = default;
+                flash.ReType = Q3RefEntity.RT_MODEL;
+                flash.HModel = flashModel;
+                flash.RenderFx = renderfx;
+                flash.LightingOriginX = lightOrgX;
+                flash.LightingOriginY = lightOrgY;
+                flash.LightingOriginZ = lightOrgZ;
+                flash.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
+                flash.ShaderRGBA_R = 255; flash.ShaderRGBA_G = 255;
+                flash.ShaderRGBA_B = 255; flash.ShaderRGBA_A = 255;
+
+                PositionRotatedEntityOnTag(ref flash, ref gun, weaponModel, "tag_flash");
+                Syscalls.R_AddRefEntityToScene(&flash);
+
+                WeaponEffects.MuzzleFlash(flash.OriginX, flash.OriginY, flash.OriginZ,
+                    weaponNum, time);
+            }
+        }
     }
 
     // ── AddViewWeapon (first-person weapon rendering) ──

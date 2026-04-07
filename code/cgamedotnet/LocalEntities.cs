@@ -21,6 +21,7 @@ public static unsafe class LocalEntities
         FallScaleFade,     // falling sprite (blood trails)
         FadeRGB,           // fading RGB entity (teleporters, rail)
         ScaleFade,         // stationary sprite that scales and fades
+        ScorePlum,         // floating +score text
     }
 
     [Flags]
@@ -62,6 +63,7 @@ public static unsafe class LocalEntities
         public int HModel;
         public int CustomShader;
         public float OriginX, OriginY, OriginZ;
+        public float OldOriginX, OldOriginY, OldOriginZ;
         public float Radius;
         public float Rotation;
         public float ShaderTime;
@@ -86,6 +88,11 @@ public static unsafe class LocalEntities
     private static int _burnMarkShader;
     private static int _bloodMarkShader;
     private static int _explosionShader;
+
+    // Number shaders for score plums (set externally by CGame)
+    private static int[] _numberShaders = Array.Empty<int>();
+
+    public static void SetNumberShaders(int[] shaders) => _numberShaders = shaders;
 
     public static void Init()
     {
@@ -161,6 +168,9 @@ public static unsafe class LocalEntities
                     break;
                 case LeType.FallScaleFade:
                     AddFallScaleFade(ref le, time);
+                    break;
+                case LeType.ScorePlum:
+                    AddScorePlum(ref le, time);
                     break;
             }
         }
@@ -295,9 +305,19 @@ public static unsafe class LocalEntities
         rent.CustomShader = le.CustomShader;
 
         EvalTrajectory(ref le, time, out rent.OriginX, out rent.OriginY, out rent.OriginZ);
-        rent.OldOriginX = rent.OriginX;
-        rent.OldOriginY = rent.OriginY;
-        rent.OldOriginZ = rent.OriginZ;
+        // For rail core beams, use stored old origin (endpoint)
+        if (le.OldOriginX != 0 || le.OldOriginY != 0 || le.OldOriginZ != 0)
+        {
+            rent.OldOriginX = le.OldOriginX;
+            rent.OldOriginY = le.OldOriginY;
+            rent.OldOriginZ = le.OldOriginZ;
+        }
+        else
+        {
+            rent.OldOriginX = rent.OriginX;
+            rent.OldOriginY = rent.OriginY;
+            rent.OldOriginZ = rent.OriginZ;
+        }
 
         rent.ShaderRGBA_R = (byte)(le.ColorR * c * 255);
         rent.ShaderRGBA_G = (byte)(le.ColorG * c * 255);
@@ -359,6 +379,86 @@ public static unsafe class LocalEntities
         rent.Axis0X = 1; rent.Axis1Y = 1; rent.Axis2Z = 1;
 
         Syscalls.R_AddRefEntityToScene(&rent);
+    }
+
+    private static void AddScorePlum(ref LocalEntity le, int time)
+    {
+        if (_numberShaders.Length < 11) return;
+
+        float c = (le.EndTime - time) * le.LifeRate;
+        if (c > 1) c = 1;
+
+        // Origin: rise then fall, oscillate laterally
+        float ox = le.PosBaseX + MathF.Sin(c * 2 * MathF.PI) * 20;
+        float oy = le.PosBaseY;
+        float oz = le.PosBaseZ + 110 - c * 100;
+
+        int score = (int)le.Radius;
+        bool negative = score < 0;
+        if (negative) score = -score;
+
+        // Color by score range
+        byte sr, sg, sb;
+        if (negative)              { sr = 0xff; sg = 0x11; sb = 0x11; }
+        else if (score < 2)        { sr = 0xff; sg = 0xff; sb = 0xff; }
+        else if (score < 10)       { sr = 0xff; sg = 0xff; sb = 0x00; }
+        else if (score < 20)       { sr = 0x00; sg = 0xff; sb = 0xff; }
+        else if (score < 50)       { sr = 0x00; sg = 0x00; sb = 0xff; }
+        else                       { sr = 0xff; sg = 0x00; sb = 0x00; }
+
+        const float NUMBER_SIZE = 8;
+
+        // Convert score to digits
+        Span<int> digits = stackalloc int[10];
+        int numDigits = 0;
+        int temp = score;
+        do
+        {
+            digits[numDigits++] = temp % 10;
+            temp /= 10;
+        } while (temp > 0 && numDigits < 10);
+
+        // Render each digit as a sprite (right to left, then flip)
+        float totalWidth = numDigits * NUMBER_SIZE;
+        if (negative) totalWidth += NUMBER_SIZE;
+        float startX = -(totalWidth / 2);
+
+        for (int i = numDigits - 1; i >= 0; i--)
+        {
+            Q3RefEntity rent = default;
+            rent.ReType = Q3RefEntity.RT_SPRITE;
+            rent.CustomShader = _numberShaders[digits[i]];
+            rent.Radius = NUMBER_SIZE / 2 + NUMBER_SIZE / 2 * (1.0f - c);
+            rent.ShaderRGBA_R = sr; rent.ShaderRGBA_G = sg;
+            rent.ShaderRGBA_B = sb; rent.ShaderRGBA_A = (byte)(255 * c);
+            rent.OriginX = ox + startX;
+            rent.OriginY = oy;
+            rent.OriginZ = oz;
+            rent.OldOriginX = rent.OriginX;
+            rent.OldOriginY = rent.OriginY;
+            rent.OldOriginZ = rent.OriginZ;
+            rent.Axis0X = 1; rent.Axis1Y = 1; rent.Axis2Z = 1;
+            Syscalls.R_AddRefEntityToScene(&rent);
+            startX += NUMBER_SIZE;
+        }
+
+        if (negative)
+        {
+            Q3RefEntity minus = default;
+            minus.ReType = Q3RefEntity.RT_SPRITE;
+            minus.CustomShader = _numberShaders[10]; // minus sign
+            minus.Radius = NUMBER_SIZE / 2 + NUMBER_SIZE / 2 * (1.0f - c);
+            minus.ShaderRGBA_R = sr; minus.ShaderRGBA_G = sg;
+            minus.ShaderRGBA_B = sb; minus.ShaderRGBA_A = (byte)(255 * c);
+            minus.OriginX = ox + startX;
+            minus.OriginY = oy;
+            minus.OriginZ = oz;
+            minus.OldOriginX = minus.OriginX;
+            minus.OldOriginY = minus.OriginY;
+            minus.OldOriginZ = minus.OriginZ;
+            minus.Axis0X = 1; minus.Axis1Y = 1; minus.Axis2Z = 1;
+            Syscalls.R_AddRefEntityToScene(&minus);
+        }
     }
 
     // ── Trajectory evaluation for local entities ──
@@ -440,5 +540,24 @@ public static unsafe class LocalEntities
         le.ColorR = r; le.ColorG = g; le.ColorB = b; le.ColorA = a;
         le.Radius = radius;
         le.CustomShader = shader != 0 ? shader : _smokePuffShader;
+    }
+
+    /// <summary>Creates a floating score plum above a position.</summary>
+    public static void MakeScorePlum(float x, float y, float z, int score, int time)
+    {
+        ref var le = ref Alloc();
+        le.Type = LeType.ScorePlum;
+        le.StartTime = time;
+        le.EndTime = time + 4000;
+        le.LifeRate = 1.0f / 4000.0f;
+
+        le.PosType = TrajectoryType.TR_STATIONARY;
+        le.PosBaseX = x;
+        le.PosBaseY = y;
+        le.PosBaseZ = z + 16; // offset up
+        le.PosTime = time;
+
+        le.Radius = score; // store score in radius
+        le.ColorR = 1; le.ColorG = 1; le.ColorB = 1; le.ColorA = 1;
     }
 }
