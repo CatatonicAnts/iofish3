@@ -2059,16 +2059,4 @@ public static unsafe class PMove
             previous_velocity = null;
         }
     }
-
-    // ── EV_TAUNT constant (not in EntityEvent — add inline) ──
-    // EV_TAUNT is typically EV_OBITUARY+6=66, but we reference EV_TAUNT from bg_public.h
-    // Check: it's actually after the event list. In Q3 it's not a standard event,
-    // it's just EV_GENERAL_SOUND in many mods. The C code just calls PM_AddEvent(EV_TAUNT).
-    // We need the actual value.
-}
-
-// Additional EntityEvent constant
-public static partial class EntityEvent
-{
-    public const int EV_TAUNT = 66; // after EV_SCOREPLUM(65)
 }

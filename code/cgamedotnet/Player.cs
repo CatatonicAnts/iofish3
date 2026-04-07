@@ -685,7 +685,7 @@ public static unsafe class Player
     public static void Render(ref Q3EntityState currentState,
         float lerpOriginX, float lerpOriginY, float lerpOriginZ,
         float lerpAnglesX, float lerpAnglesY, float lerpAnglesZ,
-        int entityNum, int myClientNum, int time)
+        int entityNum, int myClientNum, int time, int shadowMarkShader)
     {
         int clientNum = currentState.ClientNum;
         if (clientNum < 0 || clientNum >= MAX_CLIENTS) return;
@@ -779,6 +779,100 @@ public static unsafe class Player
 
         PositionRotatedEntityOnTag(ref head, ref torso, ci.TorsoModel, "tag_head");
         Syscalls.R_AddRefEntityToScene(&head);
+
+        // ── Powerup effects ──
+        PlayerPowerups(currentState.Powerups, lerpOriginX, lerpOriginY, lerpOriginZ);
+
+        // ── Player shadow ──
+        PlayerShadow(lerpOriginX, lerpOriginY, lerpOriginZ, renderfx, shadowMarkShader);
+    }
+
+    /// <summary>Add visual effects for active powerups (CG_PlayerPowerups).</summary>
+    private static void PlayerPowerups(int powerups, float ox, float oy, float oz)
+    {
+        if (powerups == 0) return;
+
+        float* origin = stackalloc float[3];
+        origin[0] = ox; origin[1] = oy; origin[2] = oz;
+
+        const int PW_QUAD_BIT = 1 << 1;        // PW_QUAD = 1
+        const int PW_BATTLESUIT_BIT = 1 << 2;  // PW_BATTLESUIT = 2
+        const int PW_REGEN_BIT = 1 << 5;       // PW_REGEN = 5
+        const int PW_REDFLAG_BIT = 1 << 7;     // PW_REDFLAG = 7
+        const int PW_BLUEFLAG_BIT = 1 << 8;    // PW_BLUEFLAG = 8
+
+        // Quad = blue dlight
+        if ((powerups & PW_QUAD_BIT) != 0)
+            Syscalls.R_AddLightToScene(origin, 200, 0.2f, 0.2f, 1.0f);
+
+        // Regen = green dlight
+        if ((powerups & PW_REGEN_BIT) != 0)
+            Syscalls.R_AddLightToScene(origin, 200, 0.2f, 1.0f, 0.2f);
+
+        // Battlesuit = yellow dlight
+        if ((powerups & PW_BATTLESUIT_BIT) != 0)
+            Syscalls.R_AddLightToScene(origin, 200, 1.0f, 1.0f, 0.2f);
+
+        // Red flag carrier = red dlight
+        if ((powerups & PW_REDFLAG_BIT) != 0)
+            Syscalls.R_AddLightToScene(origin, 200, 1.0f, 0.2f, 0.2f);
+
+        // Blue flag carrier = blue dlight
+        if ((powerups & PW_BLUEFLAG_BIT) != 0)
+            Syscalls.R_AddLightToScene(origin, 200, 0.2f, 0.2f, 1.0f);
+    }
+
+    /// <summary>Draw a projected blob shadow under the player (CG_PlayerShadow).</summary>
+    public static void PlayerShadow(float ox, float oy, float oz, int renderfx, int shadowShader)
+    {
+        if (shadowShader == 0) return;
+
+        // Trace downward to find ground
+        float* start = stackalloc float[3];
+        float* end = stackalloc float[3];
+        float* mins = stackalloc float[3];
+        float* maxs = stackalloc float[3];
+        start[0] = ox; start[1] = oy; start[2] = oz;
+        end[0] = ox; end[1] = oy; end[2] = oz - 128;
+        mins[0] = 0; mins[1] = 0; mins[2] = 0;
+        maxs[0] = 0; maxs[1] = 0; maxs[2] = 0;
+
+        Q3Trace trace;
+        Syscalls.CM_BoxTrace(&trace, start, end, mins, maxs, 0, 1); // CONTENTS_SOLID
+
+        if (trace.Fraction == 1.0f || trace.StartSolid != 0) return;
+
+        // Fade shadow by height
+        float shadowAlpha = 1.0f - trace.Fraction;
+        if (shadowAlpha < 0.1f) return;
+
+        // Shadow position on ground
+        float gx = ox + (end[0] - ox) * trace.Fraction;
+        float gy = oy + (end[1] - oy) * trace.Fraction;
+        float gz = oz + (end[2] - oz) * trace.Fraction + 1.0f; // slightly above ground
+
+        // Build a simple quad — 4 vertices in a square around the ground contact point
+        const float radius = 24.0f;
+        Q3PolyVert* verts = stackalloc Q3PolyVert[4];
+        byte a = (byte)(255.0f * shadowAlpha * 0.5f);
+
+        verts[0].X = gx - radius; verts[0].Y = gy - radius; verts[0].Z = gz;
+        verts[0].S = 0; verts[0].T = 0;
+        verts[0].R = 255; verts[0].G = 255; verts[0].B = 255; verts[0].A = a;
+
+        verts[1].X = gx + radius; verts[1].Y = gy - radius; verts[1].Z = gz;
+        verts[1].S = 1; verts[1].T = 0;
+        verts[1].R = 255; verts[1].G = 255; verts[1].B = 255; verts[1].A = a;
+
+        verts[2].X = gx + radius; verts[2].Y = gy + radius; verts[2].Z = gz;
+        verts[2].S = 1; verts[2].T = 1;
+        verts[2].R = 255; verts[2].G = 255; verts[2].B = 255; verts[2].A = a;
+
+        verts[3].X = gx - radius; verts[3].Y = gy + radius; verts[3].Z = gz;
+        verts[3].S = 0; verts[3].T = 1;
+        verts[3].R = 255; verts[3].G = 255; verts[3].B = 255; verts[3].A = a;
+
+        Syscalls.R_AddPolyToScene(shadowShader, 4, verts);
     }
 
     // ── PositionRotatedEntityOnTag ──

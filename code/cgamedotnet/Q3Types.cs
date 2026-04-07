@@ -515,6 +515,23 @@ public static partial class EntityEvent
     public const int EV_POWERUP_REGEN = 63;
     public const int EV_GIB_PLAYER = 64;
     public const int EV_SCOREPLUM = 65;
+    public const int EV_PROXIMITY_MINE_STICK = 66;
+    public const int EV_PROXIMITY_MINE_TRIGGER = 67;
+    public const int EV_KAMIKAZE = 68;
+    public const int EV_OBELISKEXPLODE = 69;
+    public const int EV_OBELISKPAIN = 70;
+    public const int EV_INVUL_IMPACT = 71;
+    public const int EV_JUICED = 72;
+    public const int EV_LIGHTNINGBOLT = 73;
+    public const int EV_DEBUG_LINE = 74;
+    public const int EV_STOPLOOPINGSOUND = 75;
+    public const int EV_TAUNT = 76;
+    public const int EV_TAUNT_YES = 77;
+    public const int EV_TAUNT_NO = 78;
+    public const int EV_TAUNT_FOLLOWME = 79;
+    public const int EV_TAUNT_GETFLAG = 80;
+    public const int EV_TAUNT_GUARDBASE = 81;
+    public const int EV_TAUNT_PATROL = 82;
 
     public const int EV_EVENT_BIT1 = 0x00000100;
     public const int EV_EVENT_BIT2 = 0x00000200;

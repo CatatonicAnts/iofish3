@@ -129,6 +129,14 @@ The cgame DLL interface is:
 - [x] **Gib sound** — EV_GIB_PLAYER plays gibsplt1 body channel sound. `CPX 1`
 - [x] **CTF/team announcements** — EV_GLOBAL_TEAM_SOUND handler for captures, returns, flag taken, team scoring, lead changes. Team-relative sound selection. `CPX 3`
 - [x] **Use item events** — EV_USE_ITEM0-15 for holdable items (medkit, teleporter) with appropriate sounds. `CPX 1`
+- [x] **Ammo warning** — Flash "LOW AMMO" / "OUT OF AMMO" text when current weapon's ammo ≤ 5 or empty (gauntlet excluded). `CPX 1`
+- [x] **Vote display** — Show active vote string with yes/no counts and countdown timer (30s), updated via CS_VOTE_* configstrings. `CPX 2`
+- [x] **Holdable item display** — Show holdable item icon (teleporter/medkit) on HUD when player has one. `CPX 1`
+- [x] **Player shadow** — Projected blob shadow under players using downward trace and markShadow shader poly, with height-based alpha fade. `CPX 2`
+- [x] **Powerup visual effects** — Dynamic lights for active powerups: quad (blue), regen (green), battlesuit (yellow), flag carriers (red/blue). `CPX 2`
+- [x] **Taunt event** — EV_TAUNT plays per-model *taunt.wav custom sound. `CPX 1`
+- [x] **Stop looping sound** — EV_STOPLOOPINGSOUND event handler. `CPX 1`
+- [x] **Corrected event constants** — Fixed EV_TAUNT/EV_STOPLOOPINGSOUND/EV_DEBUG_LINE numbering to match actual bg_public.h enum (accounting for mission pack events). `CPX 1`
 
 ### Notes
 

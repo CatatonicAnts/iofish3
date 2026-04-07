@@ -342,6 +342,9 @@ public static unsafe class Syscalls
 
     public static void S_StopBackgroundTrack() => Call(CG_S_STOPBACKGROUNDTRACK);
 
+    public static void S_StopLoopingSound(int entityNum) =>
+        Call(CG_S_STOPLOOPINGSOUND, entityNum);
+
     // ── Renderer ──
 
     public static void R_LoadWorldMap(string mapname)

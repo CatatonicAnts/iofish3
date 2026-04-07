@@ -261,6 +261,17 @@ public static unsafe class CGame
 	// Score plum shader
 	private static int _scorePlumShader;
 
+	// Player shadow
+	private static int _shadowMarkShader;
+
+	// Vote state
+	private static int _voteTime;
+	private static string _voteString = "";
+	private static int _voteYes, _voteNo;
+
+	// Low ammo warning state
+	private static int _lowAmmoWarning; // 0=none, 1=low, 2=empty
+
 	// Last computed view (for crosshair scan)
 	private static float _viewOrgX, _viewOrgY, _viewOrgZ;
 	private static float _viewFwdX, _viewFwdY, _viewFwdZ;
@@ -1016,6 +1027,25 @@ public static unsafe class CGame
 			string warmupStr = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_WARMUP);
 			_warmup = string.IsNullOrEmpty(warmupStr) ? 0 : int.TryParse(warmupStr, out int w) ? w : 0;
 		}
+		else if (index == Q3GameState.CS_VOTE_TIME)
+		{
+			string vt = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_VOTE_TIME);
+			_voteTime = string.IsNullOrEmpty(vt) ? 0 : int.TryParse(vt, out int v) ? v : 0;
+		}
+		else if (index == Q3GameState.CS_VOTE_STRING)
+		{
+			_voteString = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_VOTE_STRING) ?? "";
+		}
+		else if (index == Q3GameState.CS_VOTE_YES)
+		{
+			string vy = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_VOTE_YES);
+			_voteYes = string.IsNullOrEmpty(vy) ? 0 : int.TryParse(vy, out int v) ? v : 0;
+		}
+		else if (index == Q3GameState.CS_VOTE_NO)
+		{
+			string vn = Q3GameState.GetConfigString(_gameStateRaw, Q3GameState.CS_VOTE_NO);
+			_voteNo = string.IsNullOrEmpty(vn) ? 0 : int.TryParse(vn, out int v) ? v : 0;
+		}
 	}
 
 	// ── Event System (cg_event.c equivalent) ──
@@ -1122,6 +1152,9 @@ public static unsafe class CGame
 
 		// Score plum shader
 		_scorePlumShader = Syscalls.R_RegisterShader("gfx/2d/numbers/eight_32b");
+
+		// Player shadow shader (circular blob)
+		_shadowMarkShader = Syscalls.R_RegisterShader("markShadow");
 
 		// Weapon fire sounds
 		_weaponFireSounds[Weapons.WP_GAUNTLET, 0] = Syscalls.S_RegisterSound("sound/weapons/melee/fstatck.wav", 0);
@@ -1463,6 +1496,18 @@ public static unsafe class CGame
 
 			case EntityEvent.EV_GLOBAL_TEAM_SOUND:
 				GlobalTeamSoundEvent(eventParm);
+				break;
+
+			case EntityEvent.EV_TAUNT:
+			{
+				int tauntSfx = Player.CustomSound(es.Number, "*taunt.wav");
+				if (tauntSfx != 0)
+					Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, tauntSfx);
+				break;
+			}
+
+			case EntityEvent.EV_STOPLOOPINGSOUND:
+				Syscalls.S_StopLoopingSound(es.Number);
 				break;
 
 			// Use item events (EV_USE_ITEM0 through EV_USE_ITEM0+15)
@@ -2421,7 +2466,7 @@ public static unsafe class CGame
 		Player.Render(ref s1,
 			cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ,
 			cent.LerpAnglesX, cent.LerpAnglesY, cent.LerpAnglesZ,
-			s1.Number, _clientNum, _time);
+			s1.Number, _clientNum, _time, _shadowMarkShader);
 	}
 
 	private static void AddItem(ref CEntity cent)
@@ -2677,12 +2722,17 @@ public static unsafe class CGame
 			if (!Scoreboard.IsShowing && ps.Stats[Stats.STAT_HEALTH] > 0)
 			{
 				DrawStatusBar();
+				DrawAmmoWarning();
 				DrawCrosshair();
 				DrawCrosshairNames();
 				DrawWeaponSelect();
+				DrawHoldableItem();
 				DrawReward();
 			}
 		}
+
+		// Vote display (visible in all modes)
+		DrawVote();
 
 		// Center print message (objectives, notifications)
 		DrawCenterString();
@@ -3488,6 +3538,69 @@ public static unsafe class CGame
 				DrawPic(x, y, CHAR_WIDTH, CHAR_HEIGHT, _numberShaders[frame]);
 			x += CHAR_WIDTH;
 		}
+	}
+
+	/// <summary>Flash "LOW AMMO" warning when ammo is critically low.</summary>
+	private static void DrawAmmoWarning()
+	{
+		if (_snap == null) return;
+		ref var ps = ref _snap->Ps;
+
+		// Determine ammo warning level
+		_lowAmmoWarning = 0;
+		int weapon = ps.Weapon;
+		if (weapon > 0 && weapon < Weapons.WP_NUM_WEAPONS && weapon != Weapons.WP_GAUNTLET)
+		{
+			int ammo = ps.Ammo[weapon];
+			if (ammo <= 0)
+				_lowAmmoWarning = 2; // empty
+			else if (ammo <= 5)
+				_lowAmmoWarning = 1; // low
+		}
+
+		if (_lowAmmoWarning == 0) return;
+
+		// Flash the warning text
+		float* color = stackalloc float[4];
+		color[0] = 1; color[1] = 0; color[2] = 0;
+		color[3] = ((_time >> 8) & 1) != 0 ? 1.0f : 0.5f; // blink
+
+		string msg = _lowAmmoWarning == 2 ? "OUT OF AMMO" : "LOW AMMO";
+		int textWidth = msg.Length * BIGCHAR_WIDTH;
+		int x = (SCREEN_WIDTH - textWidth) / 2;
+
+		Syscalls.R_SetColor(color);
+		DrawStringScaled(x, 64, msg, color[0], color[1], color[2], color[3], BIGCHAR_WIDTH, BIGCHAR_HEIGHT);
+		Syscalls.R_SetColor(null);
+	}
+
+	/// <summary>Display current vote in progress (CG_DrawVote).</summary>
+	private static void DrawVote()
+	{
+		if (_voteTime == 0) return;
+
+		// Vote times out after 30 seconds
+		int sec = 30 - (_time - _voteTime) / 1000;
+		if (sec < 0) { _voteTime = 0; return; }
+
+		string voteText = $"VOTE({sec}): {_voteString}  yes:{_voteYes} no:{_voteNo}";
+		DrawString(2, 58, voteText, 1.0f, 1.0f, 0.0f, 1.0f);
+	}
+
+	/// <summary>Display holdable item icon on the HUD.</summary>
+	private static void DrawHoldableItem()
+	{
+		if (_snap == null) return;
+		ref var ps = ref _snap->Ps;
+
+		int itemIndex = ps.Stats[Stats.STAT_HOLDABLE_ITEM];
+		if (itemIndex <= 0) return;
+
+		// Use the item's icon via registered model
+		int iconShader = Syscalls.R_RegisterShader(itemIndex == 27 ? "icons/teleporter" : "icons/medkit");
+		if (iconShader == 0) return;
+
+		DrawPic(SCREEN_WIDTH / 2 - ICON_SIZE / 2, SCREEN_HEIGHT - ICON_SIZE - 48, ICON_SIZE, ICON_SIZE, iconShader);
 	}
 
 	private static void DrawCrosshair()
