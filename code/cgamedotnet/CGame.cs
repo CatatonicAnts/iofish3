@@ -1419,10 +1419,19 @@ public static unsafe class CGame
 			case EntityEvent.EV_DEATH2:
 			case EntityEvent.EV_DEATH3:
 			{
-				int deathVariant = eventType - EntityEvent.EV_DEATH1 + 1;
-				int deathSfx = Player.CustomSound(es.Number, $"*death{deathVariant}.wav");
+				int deathSfx;
+				if (WaterLevel(ref cent) == 3)
+				{
+					// Underwater: play drown sound
+					deathSfx = Player.CustomSound(es.Number, "*drown.wav");
+				}
+				else
+				{
+					int deathVariant = eventType - EntityEvent.EV_DEATH1 + 1;
+					deathSfx = Player.CustomSound(es.Number, $"*death{deathVariant}.wav");
+				}
 				if (deathSfx != 0)
-					Syscalls.S_StartSound(origin, es.Number, SoundChannel.CHAN_VOICE, deathSfx);
+					Syscalls.S_StartSound(null, es.Number, SoundChannel.CHAN_VOICE, deathSfx);
 				break;
 			}
 
@@ -1476,26 +1485,64 @@ public static unsafe class CGame
 	{
 		int entNum = cent.CurrentState.Number;
 
+		// Skip pain sounds for local player (handled separately via CG_CheckLocalSounds)
+		if (_snap != null && entNum == _snap->Ps.ClientNum) return;
+
 		// Throttle: don't play pain sounds more than once per 500ms
 		if (_time - Player.GetPainTime(entNum) < 500) return;
 		Player.SetPainTime(entNum, _time);
 
-		// Select sound based on health
-		string soundName;
-		if (health < 25) soundName = "*pain25_1.wav";
-		else if (health < 50) soundName = "*pain50_1.wav";
-		else if (health < 75) soundName = "*pain75_1.wav";
-		else soundName = "*pain100_1.wav";
-
-		int sfx = Player.CustomSound(entNum, soundName);
-
-		float* origin = stackalloc float[3];
-		origin[0] = cent.LerpOriginX;
-		origin[1] = cent.LerpOriginY;
-		origin[2] = cent.LerpOriginZ;
+		int sfx;
+		if (WaterLevel(ref cent) == 3)
+		{
+			// Underwater: play gurp sound instead
+			sfx = (_frameCount & 1) != 0 ? _sfxGurp1 : _sfxGurp2;
+		}
+		else
+		{
+			// Select sound based on health
+			string soundName;
+			if (health < 25) soundName = "*pain25_1.wav";
+			else if (health < 50) soundName = "*pain50_1.wav";
+			else if (health < 75) soundName = "*pain75_1.wav";
+			else soundName = "*pain100_1.wav";
+			sfx = Player.CustomSound(entNum, soundName);
+		}
 
 		if (sfx != 0)
-			Syscalls.S_StartSound(origin, entNum, SoundChannel.CHAN_VOICE, sfx);
+			Syscalls.S_StartSound(null, entNum, SoundChannel.CHAN_VOICE, sfx);
+	}
+
+	/// <summary>Returns water level (0-3) for an entity based on BSP content checks.</summary>
+	private static int WaterLevel(ref CEntity cent)
+	{
+		const int MINS_Z = -24;
+		const int DEFAULT_VIEWHEIGHT = 26;
+		const int CROUCH_VIEWHEIGHT = 12;
+		const int MASK_WATER = 32 | 8 | 16; // CONTENTS_WATER | CONTENTS_LAVA | CONTENTS_SLIME
+
+		int anim = cent.CurrentState.LegsAnim & ~128; // ~ANIM_TOGGLEBIT
+		int viewheight = (anim == Player.LEGS_WALKCR || anim == Player.LEGS_IDLECR)
+			? CROUCH_VIEWHEIGHT : DEFAULT_VIEWHEIGHT;
+
+		float* point = stackalloc float[3];
+		point[0] = cent.LerpOriginX;
+		point[1] = cent.LerpOriginY;
+		point[2] = cent.LerpOriginZ + MINS_Z + 1;
+
+		int contents = Prediction.PointContents(point, -1);
+		if ((contents & MASK_WATER) == 0) return 0;
+
+		int sample2 = viewheight - MINS_Z;
+		int sample1 = sample2 / 2;
+
+		point[2] = cent.LerpOriginZ + MINS_Z + sample1;
+		contents = Prediction.PointContents(point, -1);
+		if ((contents & MASK_WATER) == 0) return 1;
+
+		point[2] = cent.LerpOriginZ + MINS_Z + sample2;
+		contents = Prediction.PointContents(point, -1);
+		return (contents & MASK_WATER) != 0 ? 3 : 2;
 	}
 
 	/// <summary>Handle EV_OBITUARY — display kill message in console and center print.</summary>
