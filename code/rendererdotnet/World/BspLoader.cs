@@ -118,6 +118,21 @@ public static unsafe class BspLoader
         TessellatePatches(world);
         ComputeTangents(world);
 
+        // Apply Q3 overbright compensation to lightmap, vertex color, and light grid data.
+        // Q3 maps bake lighting at 1/(2^mapOverBrightBits) intensity; we must shift it back.
+        // r_mapOverBrightBits defaults to 2 in Q3. Since this renderer has no hardware gamma
+        // ramp, we use the full shift (equivalent to windowed mode: overbrightBits = 0).
+        int mapOverBrightBits = EngineImports.Cvar_VariableIntegerValue("r_mapOverBrightBits");
+        if (mapOverBrightBits <= 0) mapOverBrightBits = 2; // default; cvar returns 0 if unset
+        int shift = mapOverBrightBits; // overbrightBits = 0 for this renderer
+
+        if (shift > 0)
+        {
+            ColorShiftLightmaps(world, shift);
+            ColorShiftVertexColors(world, shift);
+            ColorShiftLightGrid(world, shift);
+        }
+
         return world;
     }
 
@@ -452,6 +467,66 @@ public static unsafe class BspLoader
         int numGridPoints = world.LightGridBounds[0] * world.LightGridBounds[1] * world.LightGridBounds[2];
         EngineImports.Printf(EngineImports.PRINT_ALL,
             $"[.NET] Light grid: {numGridPoints} points ({world.LightGridBounds[0]}x{world.LightGridBounds[1]}x{world.LightGridBounds[2]}), {len} bytes\n");
+    }
+
+    // --- R_ColorShiftLightingBytes (Q3 overbright compensation) ---
+
+    /// <summary>
+    /// Shift RGB bytes left by 'shift' bits, normalizing by color (not saturating to white)
+    /// to preserve hue. Matches Q3's R_ColorShiftLightingBytes exactly.
+    /// </summary>
+    private static void ColorShiftBytes(ref byte r, ref byte g, ref byte b, int shift)
+    {
+        int ri = r << shift;
+        int gi = g << shift;
+        int bi = b << shift;
+
+        if ((ri | gi | bi) > 255)
+        {
+            int max = ri;
+            if (gi > max) max = gi;
+            if (bi > max) max = bi;
+            ri = ri * 255 / max;
+            gi = gi * 255 / max;
+            bi = bi * 255 / max;
+        }
+
+        r = (byte)ri;
+        g = (byte)gi;
+        b = (byte)bi;
+    }
+
+    /// <summary>Apply overbright shift to all lightmap texels.</summary>
+    private static void ColorShiftLightmaps(BspWorld world, int shift)
+    {
+        foreach (var lm in world.Lightmaps)
+        {
+            byte[] data = lm.Data;
+            for (int i = 0; i < data.Length - 2; i += 3)
+                ColorShiftBytes(ref data[i], ref data[i + 1], ref data[i + 2], shift);
+        }
+    }
+
+    /// <summary>Apply overbright shift to BSP vertex colors (R, G, B).</summary>
+    private static void ColorShiftVertexColors(BspWorld world, int shift)
+    {
+        for (int i = 0; i < world.Vertices.Length; i++)
+            ColorShiftBytes(ref world.Vertices[i].R, ref world.Vertices[i].G,
+                            ref world.Vertices[i].B, shift);
+    }
+
+    /// <summary>Apply overbright shift to light grid ambient and directed RGB bytes.</summary>
+    private static void ColorShiftLightGrid(BspWorld world, int shift)
+    {
+        byte[]? grid = world.LightGridData;
+        if (grid == null) return;
+
+        // Grid format: 8 bytes per point: ambient RGB (3), directed RGB (3), lat (1), lng (1)
+        for (int i = 0; i + 7 < grid.Length; i += 8)
+        {
+            ColorShiftBytes(ref grid[i], ref grid[i + 1], ref grid[i + 2], shift);
+            ColorShiftBytes(ref grid[i + 3], ref grid[i + 4], ref grid[i + 5], shift);
+        }
     }
 
     // --- Bezier patch tessellation ---

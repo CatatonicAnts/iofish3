@@ -611,6 +611,7 @@ public sealed unsafe class BspRenderer : IDisposable
         EngineImports.Cvar_Get("r_baseParallax", "0.05", 1);
         EngineImports.Cvar_Get("r_deluxeMapping", "1", 1);
         EngineImports.Cvar_Get("r_pbr", "0", 1); // PBR metallic/roughness workflow
+        EngineImports.Cvar_Get("r_mapOverBrightBits", "2", 0x02); // CVAR_LATCH
 
         // Dlight shader program
         _dlightProgram = CreateDlightProgram();
@@ -868,7 +869,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _currentTimeSec = timeSec;
         _gl.Uniform1(_tcModCountLoc, 0);
         _gl.Uniform1(_deformTypeLoc, -1);
-        _gl.Uniform1(_overbrightScaleLoc, 2.0f);
+        _gl.Uniform1(_overbrightScaleLoc, 1.0f);
         _gl.Uniform1(_useLmUVLoc, 0);
         _gl.Uniform1(_useNormalMapLoc, 0);
         _gl.Uniform1(_useSpecularMapLoc, 0);
@@ -983,7 +984,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _currentTimeSec = timeSec;
         _gl.Uniform1(_tcModCountLoc, 0);
         _gl.Uniform1(_deformTypeLoc, -1);
-        _gl.Uniform1(_overbrightScaleLoc, 2.0f);
+        _gl.Uniform1(_overbrightScaleLoc, 1.0f);
         _gl.Uniform1(_useLmUVLoc, 0);
         _gl.Uniform1(_useNormalMapLoc, 0);
         _gl.Uniform1(_useSpecularMapLoc, 0);
@@ -1574,8 +1575,8 @@ public sealed unsafe class BspRenderer : IDisposable
                 }
                 _gl.Uniform1(_useLightmapLoc, 0);
                 _gl.Uniform1(_useLmUVLoc, 1); // sample with lightmap UVs
-                // Apply overbright scaling to lightmap stage via uColor
-                _gl.Uniform4(_colorLoc, 2.0f, 2.0f, 2.0f, 1f);
+                // Overbright is baked into lightmap bytes during loading
+                _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);
             }
             else
             {
