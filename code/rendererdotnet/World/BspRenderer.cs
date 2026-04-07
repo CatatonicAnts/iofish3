@@ -1166,13 +1166,13 @@ public sealed unsafe class BspRenderer : IDisposable
             BlendMode blend = shaders.GetBlendMode(surf.ShaderHandle);
             if (isTrans || blend.NeedsBlending)
             {
-                if (blend.NeedsBlending)
-                {
-                    int sortKey = shaders.GetSortKey(surf.ShaderHandle);
-                    if (sortKey == 0) sortKey = isTrans ? 8 : 5; // trans=blend, non-trans=seeThrough
-                    _transparentSurfaces.Add((surfIdx, blend, sortKey));
-                    return;
-                }
+                // If surface is transparent but has no explicit blend mode, default to alpha blending
+                if (!blend.NeedsBlending)
+                    blend = BlendMode.Alpha;
+                int sortKey = shaders.GetSortKey(surf.ShaderHandle);
+                if (sortKey == 0) sortKey = isTrans ? 8 : 5; // trans=blend, non-trans=seeThrough
+                _transparentSurfaces.Add((surfIdx, blend, sortKey));
+                return;
             }
         }
 

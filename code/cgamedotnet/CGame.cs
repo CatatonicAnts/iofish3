@@ -91,6 +91,107 @@ public static unsafe class CGame
 	private static readonly int[] _gameSounds = new int[MAX_SOUNDS];
 	private static readonly int[] _inlineDrawModel = new int[MAX_MODELS];
 
+	// Item model cache (bg_itemlist equivalent, indexed by item index 0-MAX_ITEMS)
+	private const int MAX_ITEMS = 64;
+	private static readonly int[] _itemModels = new int[MAX_ITEMS];
+	private static readonly int[] _itemIcons = new int[MAX_ITEMS];
+	private static readonly bool[] _itemRegistered = new bool[MAX_ITEMS];
+
+	/// <summary>bg_itemlist world_model[0] paths, indexed by item number.</summary>
+	private static readonly string?[] _bgItemModels = new string?[]
+	{
+		null,                                              //  0 — null item
+		"models/powerups/armor/shard.md3",                 //  1 — Armor Shard
+		"models/powerups/armor/armor_yel.md3",             //  2 — Armor
+		"models/powerups/armor/armor_red.md3",             //  3 — Heavy Armor
+		"models/powerups/health/small_cross.md3",          //  4 — 5 Health
+		"models/powerups/health/medium_cross.md3",         //  5 — 25 Health
+		"models/powerups/health/large_cross.md3",          //  6 — 50 Health
+		"models/powerups/health/mega_cross.md3",           //  7 — Mega Health
+		"models/weapons2/gauntlet/gauntlet.md3",           //  8 — Gauntlet
+		"models/weapons2/shotgun/shotgun.md3",             //  9 — Shotgun
+		"models/weapons2/machinegun/machinegun.md3",       // 10 — Machinegun
+		"models/weapons2/grenadel/grenadel.md3",           // 11 — Grenade Launcher
+		"models/weapons2/rocketl/rocketl.md3",             // 12 — Rocket Launcher
+		"models/weapons2/lightning/lightning.md3",          // 13 — Lightning Gun
+		"models/weapons2/railgun/railgun.md3",             // 14 — Railgun
+		"models/weapons2/plasma/plasma.md3",               // 15 — Plasma Gun
+		"models/weapons2/bfg/bfg.md3",                    // 16 — BFG10K
+		"models/weapons2/grapple/grapple.md3",             // 17 — Grappling Hook
+		"models/powerups/ammo/shotgunam.md3",              // 18 — Shells
+		"models/powerups/ammo/machinegunam.md3",           // 19 — Bullets
+		"models/powerups/ammo/grenadeam.md3",              // 20 — Grenades
+		"models/powerups/ammo/plasmaam.md3",               // 21 — Cells
+		"models/powerups/ammo/lightningam.md3",            // 22 — Lightning
+		"models/powerups/ammo/rocketam.md3",               // 23 — Rockets
+		"models/powerups/ammo/railgunam.md3",              // 24 — Slugs
+		"models/powerups/ammo/bfgam.md3",                  // 25 — Bfg Ammo
+		"models/powerups/holdable/teleporter.md3",         // 26 — Personal Teleporter
+		"models/powerups/holdable/medkit.md3",             // 27 — Medkit
+		"models/powerups/instant/quad.md3",                // 28 — Quad Damage
+		"models/powerups/instant/enviro.md3",              // 29 — Battle Suit
+		"models/powerups/instant/haste.md3",               // 30 — Haste
+		"models/powerups/instant/invis.md3",               // 31 — Invisibility
+		"models/powerups/instant/regen.md3",               // 32 — Regeneration
+		"models/powerups/instant/flight.md3",              // 33 — Flight
+		"models/flags/r_flag.md3",                         // 34 — Red Flag
+		"models/flags/b_flag.md3",                         // 35 — Blue Flag
+	};
+
+	/// <summary>bg_itemlist icon paths, indexed by item number.</summary>
+	private static readonly string?[] _bgItemIcons = new string?[]
+	{
+		null,                    //  0
+		"icons/iconr_shard",     //  1
+		"icons/iconr_yellow",    //  2
+		"icons/iconr_red",       //  3
+		"icons/iconh_green",     //  4
+		"icons/iconh_yellow",    //  5
+		"icons/iconh_red",       //  6
+		"icons/iconh_mega",      //  7
+		"icons/iconw_gauntlet",  //  8
+		"icons/iconw_shotgun",   //  9
+		"icons/iconw_machinegun",// 10
+		"icons/iconw_grenade",   // 11
+		"icons/iconw_rocket",    // 12
+		"icons/iconw_lightning", // 13
+		"icons/iconw_railgun",   // 14
+		"icons/iconw_plasma",    // 15
+		"icons/iconw_bfg",       // 16
+		"icons/iconw_grapple",   // 17
+		"icons/icona_shotgun",   // 18
+		"icons/icona_machinegun",// 19
+		"icons/icona_grenade",   // 20
+		"icons/icona_plasma",    // 21
+		"icons/icona_lightning", // 22
+		"icons/icona_rocket",    // 23
+		"icons/icona_railgun",   // 24
+		"icons/icona_bfg",       // 25
+		"icons/teleporter",      // 26
+		"icons/medkit",          // 27
+		"icons/quad",            // 28
+		"icons/envirosuit",      // 29
+		"icons/haste",           // 30
+		"icons/invis",           // 31
+		"icons/regen",           // 32
+		"icons/flight",          // 33
+		"icons/iconf_red1",      // 34
+		"icons/iconf_blu1",      // 35
+	};
+
+	/// <summary>Lazily register item model and icon on first encounter (like CG_RegisterItemVisuals).</summary>
+	private static void RegisterItemVisuals(int itemNum)
+	{
+		if (itemNum <= 0 || itemNum >= MAX_ITEMS) return;
+		if (_itemRegistered[itemNum]) return;
+		_itemRegistered[itemNum] = true;
+
+		if (itemNum < _bgItemModels.Length && _bgItemModels[itemNum] != null)
+			_itemModels[itemNum] = Syscalls.R_RegisterModel(_bgItemModels[itemNum]!);
+		if (itemNum < _bgItemIcons.Length && _bgItemIcons[itemNum] != null)
+			_itemIcons[itemNum] = Syscalls.R_RegisterShaderNoMip(_bgItemIcons[itemNum]!);
+	}
+
 	// Gamestate raw buffer
 	private static byte* _gameStateRaw;
 
@@ -388,6 +489,7 @@ public static unsafe class CGame
 		_oldPlayerState.CommandTime = 0;
 		_thirdPerson = false; _thirdPersonRange = 80.0f; _thirdPersonAngle = 0.0f;
 		for (int i = 0; i < MAX_CHAT_LINES; i++) { _chatMessages[i] = ""; _chatTimes[i] = 0; }
+		Array.Clear(_itemModels); Array.Clear(_itemIcons); Array.Clear(_itemRegistered);
 		Prediction.Reset();
 		_initialized = true;
 		CrashLog.Breadcrumb("Init: DONE");
@@ -547,6 +649,22 @@ public static unsafe class CGame
 		// Store view for crosshair scanning
 		_viewOrgX = refdef.ViewOrgX; _viewOrgY = refdef.ViewOrgY; _viewOrgZ = refdef.ViewOrgZ;
 		_viewFwdX = refdef.Axis0X; _viewFwdY = refdef.Axis0Y; _viewFwdZ = refdef.Axis0Z;
+
+		// Update sound spatialization — tells the sound engine where the listener is
+		{
+			float* viewOrg = stackalloc float[3];
+			viewOrg[0] = refdef.ViewOrgX; viewOrg[1] = refdef.ViewOrgY; viewOrg[2] = refdef.ViewOrgZ;
+			// viewaxis is 3x3 row-major: forward, right, up
+			float* viewAxis = stackalloc float[9];
+			viewAxis[0] = refdef.Axis0X; viewAxis[1] = refdef.Axis0Y; viewAxis[2] = refdef.Axis0Z;
+			viewAxis[3] = refdef.Axis1X; viewAxis[4] = refdef.Axis1Y; viewAxis[5] = refdef.Axis1Z;
+			viewAxis[6] = refdef.Axis2X; viewAxis[7] = refdef.Axis2Y; viewAxis[8] = refdef.Axis2Z;
+			// Check if view is underwater for muffled audio
+			const int MASK_WATER = 32 | 8 | 16;
+			int contents = Prediction.PointContents(viewOrg, -1);
+			int inwater = (contents & MASK_WATER) != 0 ? 1 : 0;
+			Syscalls.S_Respatialize(_snap->Ps.ClientNum, viewOrg, viewAxis, inwater);
+		}
 
 		CrashLog.Breadcrumb("AddPacketEntities");
 		try { AddPacketEntities(); }
@@ -2474,9 +2592,21 @@ public static unsafe class CGame
 		ref var s1 = ref cent.CurrentState;
 		if (s1.ModelIndex == 0) return;
 
+		// Register item model on first encounter (bg_itemlist lookup)
+		RegisterItemVisuals(s1.ModelIndex);
+
+		int model = _itemModels[s1.ModelIndex < MAX_ITEMS ? s1.ModelIndex : 0];
+		if (model == 0)
+		{
+			// Fallback to config string model if item model not found
+			if (s1.ModelIndex < MAX_MODELS)
+				model = _gameModels[s1.ModelIndex];
+			if (model == 0) return;
+		}
+
 		Q3RefEntity rent = default;
 		rent.ReType = Q3RefEntity.RT_MODEL;
-		rent.HModel = _gameModels[s1.ModelIndex];
+		rent.HModel = model;
 
 		// Items use lerp origin for position
 		rent.OriginX = cent.LerpOriginX;

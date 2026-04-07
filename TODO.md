@@ -207,7 +207,7 @@ The cgame DLL interface is:
 ### ON HOLD
 
 - [ ] **Client disconnect message loss** - Client never parses disconnect message from server (`code/server/sv_client.c`). `CPX 2`
-- [ ] **Single lightmap fullbright** - Maps with only one lightmap render as fullbright (`code/renderergl1/tr_bsp.c`). `CPX 2`
+- [ ] **Single lightmap fullbright (GL1)** - Maps with only one lightmap render as fullbright in GL1 (`code/renderergl1/tr_bsp.c`). Fixed in dotnet renderer. `CPX 2`
 - [ ] **Cgame event loop race** - Server restart during cgame event processing causes undefined behavior (`code/client/cl_cgame.c`). `CPX 3`
 - [ ] **screenShadowImage null crash** - Potential crash when framebuffers unavailable in GL2 (`code/renderergl2/tr_shade.c`). `CPX 1`
 - [ ] **AAS plane orientation** - Axial node planes don't always face positive direction, causing pathfinding errors (`code/botlib/be_aas_sample.c`). `CPX 2`
@@ -285,4 +285,8 @@ The cgame DLL interface is:
 
 ### Fixed Bugs
 
-*No fixed bugs yet*
+- [x] **Missing S_Respatialize in cgame_dotnet** — No sound spatialization: DrawActiveFrame never called S_Respatialize, so the sound engine had no listener position. Added call after CalcViewValues with view origin, axis, and underwater check. `CPX 1`
+- [x] **Continuous rocket smoke trail** — MissileTrail used distance-based spawning (every frame) instead of 50ms time-based intervals like the original CG_RocketTrail. Rewrote to use time-bucket stepping. `CPX 2`
+- [x] **Single lightmap fullbright (dotnet renderer)** — DetectAndSplitDeluxeMaps returned early for maps with 1 lightmap. Added GL1's workaround: duplicate the single lightmap entry so the array has 2 entries. `CPX 1`
+- [x] **Transparent surfaces with surfaceparm trans rendered opaque** — BSP surfaces marked `surfaceparm trans` but without explicit blendFunc fell through to the opaque pass. Now defaults to alpha blending for such surfaces. `CPX 2`
+- [x] **Items not visible in cgame_dotnet** — AddItem used _gameModels[modelIndex] but item entities have modelIndex = bg_itemlist index, not CS_MODELS index. Added item model cache with bg_itemlist world_model paths and lazy registration. `CPX 3`

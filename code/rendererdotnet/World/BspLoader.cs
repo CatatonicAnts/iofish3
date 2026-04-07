@@ -334,6 +334,12 @@ public static unsafe class BspLoader
         {
             world.HasDeluxeMapping = false;
             world.DeluxeMaps = [];
+            // HACK: same as GL1 — maps with only one lightmap render as fullbright otherwise.
+            // Duplicate the single lightmap so the array has 2 entries.
+            if (numLm == 1)
+            {
+                world.Lightmaps = [world.Lightmaps[0], world.Lightmaps[0]];
+            }
             return;
         }
 

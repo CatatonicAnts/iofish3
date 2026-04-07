@@ -220,40 +220,43 @@ public static unsafe class WeaponEffects
             return;
         }
 
-        // Spawn smoke puffs along trail path at ~50ms intervals
+        // Time-based smoke puff spawning at 50ms intervals (matches original CG_RocketTrail)
+        int step = 50;
+        int startTime = _trailTime[entityNum];
+        int t = step * ((startTime + step) / step); // round up to next step boundary
+
+        _trailTime[entityNum] = time;
+
+        if (t > time)
+            return; // no new time bucket has elapsed
+
+        // Get last position and current position for interpolation
         float lx = _trailLastX[entityNum];
         float ly = _trailLastY[entityNum];
         float lz = _trailLastZ[entityNum];
 
-        float dx = nx - lx, dy = ny - ly, dz = nz - lz;
-        float dist = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist < 1) return;
-
-        float step = 50.0f; // units between puffs
-        int numSteps = (int)(dist / step);
-        if (numSteps < 1) numSteps = 1;
-        if (numSteps > 20) numSteps = 20;
-
-        float invDist = 1.0f / dist;
-        dx *= invDist; dy *= invDist; dz *= invDist;
-
-        for (int i = 0; i < numSteps; i++)
-        {
-            float t = (i + 1.0f) / numSteps;
-            float px = lx + (nx - lx) * t;
-            float py = ly + (ny - ly) * t;
-            float pz = lz + (nz - lz) * t;
-
-            LocalEntities.SmokePuff(px, py, pz,
-                0, 0, 20, // slight upward drift
-                wi.TrailRadius, 1, 1, 1, 0.33f,
-                wi.TrailTime, time, _smokePuffShader);
-        }
-
         _trailLastX[entityNum] = nx;
         _trailLastY[entityNum] = ny;
         _trailLastZ[entityNum] = nz;
-        _trailTime[entityNum] = time;
+
+        int duration = time - startTime;
+        if (duration <= 0) return;
+
+        int count = 0;
+        for (; t <= time; t += step)
+        {
+            float frac = (float)(t - startTime) / duration;
+            float px = lx + (nx - lx) * frac;
+            float py = ly + (ny - ly) * frac;
+            float pz = lz + (nz - lz) * frac;
+
+            LocalEntities.SmokePuff(px, py, pz,
+                0, 0, 20,
+                wi.TrailRadius, 1, 1, 1, 0.33f,
+                wi.TrailTime, t, _smokePuffShader);
+
+            if (++count >= 20) break; // safety cap
+        }
     }
 
     /// <summary>Render plasma bolt as sprite.</summary>
