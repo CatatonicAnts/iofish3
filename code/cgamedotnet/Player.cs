@@ -705,13 +705,166 @@ public static unsafe class Player
         RunLerpFrame(ci, ref pe.Torso, torsoAnim, speedScale, time);
     }
 
+    // ── Player Angles (CG_PlayerAngles / CG_SwingAngles) ──
+
+    private static readonly float[] _movementOffsets = { 0, 22, 45, -22, 0, 22, -45, -22 };
+    private const float DEFAULT_SWING_SPEED = 0.3f;
+
+    private static void SwingAngles(float destination, float swingTolerance, float clampTolerance,
+        float speed, ref float angle, ref bool swinging, float frametime)
+    {
+        float swing, move;
+
+        if (!swinging)
+        {
+            swing = AngleSubtract(destination, angle);
+            if (swing > swingTolerance || swing < -swingTolerance)
+                swinging = true;
+        }
+
+        if (!swinging)
+            return;
+
+        swing = AngleSubtract(destination, angle);
+
+        if (swing >= 0)
+        {
+            move = frametime * scale_for_swing(swing) * speed;
+            if (move > swing) { move = swing; swinging = false; }
+            angle = AngleMod(angle + move);
+        }
+        else // swing < 0
+        {
+            move = frametime * scale_for_swing(-swing) * speed;
+            if (move > -swing) { move = -swing; swinging = false; }
+            angle = AngleMod(angle - move);
+        }
+
+        // clamp
+        swing = AngleSubtract(destination, angle);
+        if (swing > clampTolerance) angle = AngleMod(destination - clampTolerance);
+        else if (swing < -clampTolerance) angle = AngleMod(destination + clampTolerance);
+    }
+
+    private static float scale_for_swing(float absSwing)
+    {
+        if (absSwing < 8) return 0.5f;
+        if (absSwing < 16) return 1.0f;
+        if (absSwing < 32) return 2.0f;
+        if (absSwing < 64) return 3.0f;
+        return 4.0f;
+    }
+
+    private static float AngleSubtract(float a, float b)
+    {
+        float d = a - b;
+        while (d > 180) d -= 360;
+        while (d < -180) d += 360;
+        return d;
+    }
+
+    private static float AngleMod(float a)
+    {
+        a %= 360.0f;
+        if (a < 0) a += 360.0f;
+        return a;
+    }
+
+    private static void PlayerAngles(ref Q3EntityState es, ref PlayerEntity pe,
+        float lerpAnglesX, float lerpAnglesY, float lerpAnglesZ,
+        int time, float frametime,
+        out float legsPitch, out float legsYaw, out float legsRoll,
+        out float torsoPitch, out float torsoYaw, out float torsoRoll,
+        out float headPitch, out float headYaw, out float headRoll)
+    {
+        // Head angles = view angles (lerped)
+        headPitch = lerpAnglesX;
+        headYaw = lerpAnglesY;
+        headRoll = lerpAnglesZ;
+
+        // Clamp head yaw to look ±90 from body
+        headYaw = AngleMod(headYaw);
+
+        // Determine movement direction for body
+        int dir = (int)es.Angles2Y;
+        if (dir < 0 || dir > 7) dir = 0;
+        float movementOffset = _movementOffsets[dir];
+
+        // Torso: swing toward head yaw + partial movement offset
+        float destYaw = headYaw + 0.25f * movementOffset;
+        SwingAngles(destYaw, 25, 90, DEFAULT_SWING_SPEED,
+            ref pe.Torso.YawAngle, ref pe.Torso.Yawing, frametime);
+        torsoYaw = pe.Torso.YawAngle;
+
+        // Torso pitch: follow head pitch at 75%
+        float destPitch = headPitch * 0.75f;
+        SwingAngles(destPitch, 15, 30, 0.1f,
+            ref pe.Torso.PitchAngle, ref pe.Torso.Pitching, frametime);
+        torsoPitch = pe.Torso.PitchAngle;
+
+        torsoRoll = 0;
+
+        // Pain twitch: torso roll
+        int painDelta = time - pe.PainTime;
+        if (painDelta < PAIN_TWITCH_TIME && pe.PainTime > 0)
+        {
+            float f = 1.0f - (float)painDelta / PAIN_TWITCH_TIME;
+            torsoRoll = pe.PainDirection != 0 ? 20 * f : -20 * f;
+        }
+
+        // Legs: swing toward head yaw + full movement offset
+        destYaw = headYaw + movementOffset;
+        SwingAngles(destYaw, 40, 90, DEFAULT_SWING_SPEED,
+            ref pe.Legs.YawAngle, ref pe.Legs.Yawing, frametime);
+        legsYaw = pe.Legs.YawAngle;
+
+        legsPitch = 0;
+        legsRoll = 0;
+
+        // Velocity-based lean
+        float vx = es.Pos.TrDeltaX, vy = es.Pos.TrDeltaY, vz = es.Pos.TrDeltaZ;
+        float speed = MathF.Sqrt(vx * vx + vy * vy + vz * vz);
+        if (speed > 0)
+        {
+            // Normalize velocity
+            float invSpeed = 1.0f / speed;
+            vx *= invSpeed; vy *= invSpeed; vz *= invSpeed;
+            speed *= 0.05f;
+
+            // Compute legs axes from legsYaw (pitch=0, roll=0 at this point)
+            // axis[0] = forward = (cos(yaw), sin(yaw), 0)
+            // axis[1] = left = (-sin(yaw), cos(yaw), 0)
+            float yawRad = legsYaw * MathF.PI / 180.0f;
+            float cy = MathF.Cos(yawRad);
+            float sy = MathF.Sin(yawRad);
+
+            // DotProduct(velocity, axis[1]) where axis[1] = (-sy, cy, 0)
+            float side = speed * (vx * (-sy) + vy * cy);
+            legsRoll -= side;
+
+            // DotProduct(velocity, axis[0]) where axis[0] = (cy, sy, 0)
+            side = speed * (vx * cy + vy * sy);
+            legsPitch += side;
+        }
+
+        // Convert to relative angles for tag hierarchy:
+        // head → relative to torso, torso → relative to legs
+        headPitch = AngleSubtract(headPitch, torsoPitch);
+        headYaw = AngleSubtract(headYaw, torsoYaw);
+        headRoll = AngleSubtract(headRoll, torsoRoll);
+
+        torsoPitch = AngleSubtract(torsoPitch, legsPitch);
+        torsoYaw = AngleSubtract(torsoYaw, legsYaw);
+        // torsoRoll stays as-is (legs roll is usually 0)
+    }
+
     // ── Render (CG_Player equivalent) ──
 
     public static void Render(ref Q3EntityState currentState,
         float lerpOriginX, float lerpOriginY, float lerpOriginZ,
         float lerpAnglesX, float lerpAnglesY, float lerpAnglesZ,
         int entityNum, int myClientNum, int time, int shadowMarkShader,
-        int muzzleFlashTime)
+        int muzzleFlashTime, float frameTimeMs)
     {
         int clientNum = currentState.ClientNum;
         if (clientNum < 0 || clientNum >= MAX_CLIENTS) return;
@@ -728,6 +881,13 @@ public static unsafe class Player
         int renderfx = 0;
         if (entityNum == myClientNum)
             renderfx |= Q3RefEntity.RF_THIRD_PERSON;
+
+        // ── Compute player angles with swing damping (CG_PlayerAngles) ──
+        PlayerAngles(ref currentState, ref pe, lerpAnglesX, lerpAnglesY, lerpAnglesZ,
+            time, frameTimeMs,
+            out float legsPitch, out float legsYaw, out float legsRoll,
+            out float torsoPitch, out float torsoYaw, out float torsoRoll,
+            out float headPitch, out float headYaw, out float headRoll);
 
         // ── Build legs refEntity ──
         Q3RefEntity legs = default;
@@ -752,8 +912,7 @@ public static unsafe class Player
         legs.LightingOriginZ = lerpOriginZ;
         legs.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
 
-        // Build axis from yaw only for legs (players rotate on yaw axis)
-        AnglesToAxis(0, lerpAnglesY, 0, ref legs);
+        AnglesToAxis(legsPitch, legsYaw, legsRoll, ref legs);
 
         legs.ShaderRGBA_R = 255; legs.ShaderRGBA_G = 255;
         legs.ShaderRGBA_B = 255; legs.ShaderRGBA_A = 255;
@@ -778,16 +937,7 @@ public static unsafe class Player
         torso.LightingOriginZ = lerpOriginZ;
         torso.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
 
-        // Initialize torso axis from pitch+yaw+roll (pitch for looking up/down)
-        float torsoRoll = 0;
-        // Pain twitch: torso rolls when hit
-        int painDelta = time - pe.PainTime;
-        if (painDelta < PAIN_TWITCH_TIME && pe.PainTime > 0)
-        {
-            float f = 1.0f - (float)painDelta / PAIN_TWITCH_TIME;
-            torsoRoll = pe.PainDirection != 0 ? 20 * f : -20 * f;
-        }
-        AnglesToAxis(lerpAnglesX, lerpAnglesY, torsoRoll, ref torso);
+        AnglesToAxis(torsoPitch, torsoYaw, torsoRoll, ref torso);
 
         PositionRotatedEntityOnTag(ref torso, ref legs, ci.LegsModel, "tag_torso");
         Syscalls.R_AddRefEntityToScene(&torso);
@@ -806,10 +956,7 @@ public static unsafe class Player
         head.LightingOriginZ = lerpOriginZ;
         head.RenderFx |= Q3RefEntity.RF_LIGHTING_ORIGIN;
 
-        // Head inherits torso axis
-        head.Axis0X = torso.Axis0X; head.Axis0Y = torso.Axis0Y; head.Axis0Z = torso.Axis0Z;
-        head.Axis1X = torso.Axis1X; head.Axis1Y = torso.Axis1Y; head.Axis1Z = torso.Axis1Z;
-        head.Axis2X = torso.Axis2X; head.Axis2Y = torso.Axis2Y; head.Axis2Z = torso.Axis2Z;
+        AnglesToAxis(headPitch, headYaw, headRoll, ref head);
 
         PositionRotatedEntityOnTag(ref head, ref torso, ci.TorsoModel, "tag_head");
         Syscalls.R_AddRefEntityToScene(&head);

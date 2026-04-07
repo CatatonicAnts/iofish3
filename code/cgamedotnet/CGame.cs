@@ -2748,7 +2748,7 @@ public static unsafe class CGame
 			cent.LerpOriginX, cent.LerpOriginY, cent.LerpOriginZ,
 			cent.LerpAnglesX, cent.LerpAnglesY, cent.LerpAnglesZ,
 			s1.Number, _clientNum, _time, _shadowMarkShader,
-			cent.MuzzleFlashTime);
+			cent.MuzzleFlashTime, _frameTime * 1000.0f);
 
 		// Floating sprites above player
 		PlayerSprites(ref cent);
