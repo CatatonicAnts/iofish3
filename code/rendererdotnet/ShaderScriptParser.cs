@@ -130,6 +130,7 @@ public sealed unsafe class ShaderScriptParser
     private ShaderDef? ParseSingleShader(string name, ref ShaderTokenizer tokenizer)
     {
         int depth = 1;
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
         string? imagePath = null;
         bool clamp = false;
         BlendMode blend = BlendMode.Opaque;
@@ -159,10 +160,22 @@ public sealed unsafe class ShaderScriptParser
         TcMod[]? tcMods = null;
         int stageRgbGen = 0;
         int stageAlphaGen = 0;
+        int stageWaveFunc = 0;
+        float stageWaveBase = 0, stageWaveAmp = 0, stageWavePhase = 0, stageWaveFreq = 0;
+        int stageAlphaWaveFunc = 0;
+        float stageAlphaWaveBase = 0, stageAlphaWaveAmp = 0, stageAlphaWavePhase = 0, stageAlphaWaveFreq = 0;
+        float stageConstR = 0, stageConstG = 0, stageConstB = 0;
+        float stageConstAlpha = 1f;
         int stageDepthFunc = 0;
         bool stageDepthWrite = false;
         int rgbGen = 0;
         int alphaGen = 0;
+        int waveFunc = 0;
+        float waveBase = 0, waveAmp = 0, wavePhase = 0, waveFreq = 0;
+        int alphaWaveFunc = 0;
+        float alphaWaveBase = 0, alphaWaveAmp = 0, alphaWavePhase = 0, alphaWaveFreq = 0;
+        float constR = 0, constG = 0, constB = 0;
+        float constAlpha = 1f;
         bool polygonOffset = false;
         bool entityMergable = false;
         int depthFunc = 0; // 0=lequal, 1=equal
@@ -207,6 +220,9 @@ public sealed unsafe class ShaderScriptParser
                     stageTcMods.Clear();
                     stageRgbGen = 0;
                     stageAlphaGen = 0;
+                    stageWaveFunc = 0; stageWaveBase = 0; stageWaveAmp = 0; stageWavePhase = 0; stageWaveFreq = 0;
+                    stageAlphaWaveFunc = 0; stageAlphaWaveBase = 0; stageAlphaWaveAmp = 0; stageAlphaWavePhase = 0; stageAlphaWaveFreq = 0;
+                    stageConstR = 0; stageConstG = 0; stageConstB = 0; stageConstAlpha = 1f;
                     stageDepthFunc = 0;
                     stageDepthWrite = false;
                     stageIsLightmap = false;
@@ -255,9 +271,20 @@ public sealed unsafe class ShaderScriptParser
                         tcMods = stageTcMods.ToArray();
                     // Capture rgbGen/alphaGen from first usable stage
                     if (rgbGen == 0 && stageRgbGen != 0)
+                    {
                         rgbGen = stageRgbGen;
+                        waveFunc = stageWaveFunc; waveBase = stageWaveBase; waveAmp = stageWaveAmp;
+                        wavePhase = stageWavePhase; waveFreq = stageWaveFreq;
+                        constR = stageConstR; constG = stageConstG; constB = stageConstB;
+                    }
                     if (alphaGen == 0 && stageAlphaGen != 0)
+                    {
                         alphaGen = stageAlphaGen;
+                        alphaWaveFunc = stageAlphaWaveFunc; alphaWaveBase = stageAlphaWaveBase;
+                        alphaWaveAmp = stageAlphaWaveAmp; alphaWavePhase = stageAlphaWavePhase;
+                        alphaWaveFreq = stageAlphaWaveFreq;
+                        constAlpha = stageConstAlpha;
+                    }
                     // Capture depthFunc/depthWrite from first stage
                     if (depthFunc == 0 && stageDepthFunc != 0)
                         depthFunc = stageDepthFunc;
@@ -282,6 +309,20 @@ public sealed unsafe class ShaderScriptParser
                             TcMods = stageTcMods.Count > 0 ? stageTcMods.ToArray() : null,
                             RgbGen = stageRgbGen,
                             AlphaGen = stageAlphaGen,
+                            WaveFunc = stageWaveFunc,
+                            WaveBase = stageWaveBase,
+                            WaveAmp = stageWaveAmp,
+                            WavePhase = stageWavePhase,
+                            WaveFreq = stageWaveFreq,
+                            AlphaWaveFunc = stageAlphaWaveFunc,
+                            AlphaWaveBase = stageAlphaWaveBase,
+                            AlphaWaveAmp = stageAlphaWaveAmp,
+                            AlphaWavePhase = stageAlphaWavePhase,
+                            AlphaWaveFreq = stageAlphaWaveFreq,
+                            ConstR = stageConstR,
+                            ConstG = stageConstG,
+                            ConstB = stageConstB,
+                            ConstAlpha = stageConstAlpha,
                             DepthFunc = stageDepthFunc,
                             DepthWrite = stageDepthWrite,
                             VideoMapHandle = stageVideoMapHandle,
@@ -532,20 +573,36 @@ public sealed unsafe class ShaderScriptParser
                         else if (string.Equals(rgbToken, "wave", StringComparison.OrdinalIgnoreCase))
                         {
                             stageRgbGen = 3;
-                            // Consume wave params: func base amp phase freq
-                            tokenizer.NextToken(); tokenizer.NextToken();
-                            tokenizer.NextToken(); tokenizer.NextToken();
-                            tokenizer.NextToken();
+                            string? funcName = tokenizer.NextToken();
+                            stageWaveFunc = ParseWaveFunc(funcName);
+                            string? bS = tokenizer.NextToken();
+                            string? aS = tokenizer.NextToken();
+                            string? pS = tokenizer.NextToken();
+                            string? fS = tokenizer.NextToken();
+                            if (bS != null) float.TryParse(bS, ci, out stageWaveBase);
+                            if (aS != null) float.TryParse(aS, ci, out stageWaveAmp);
+                            if (pS != null) float.TryParse(pS, ci, out stageWavePhase);
+                            if (fS != null) float.TryParse(fS, ci, out stageWaveFreq);
                         }
                         else if (string.Equals(rgbToken, "identityLighting", StringComparison.OrdinalIgnoreCase))
                             stageRgbGen = 4;
                         else if (string.Equals(rgbToken, "const", StringComparison.OrdinalIgnoreCase))
                         {
-                            // Consume const params: ( r g b )
-                            tokenizer.NextToken(); tokenizer.NextToken();
-                            tokenizer.NextToken(); tokenizer.NextToken();
-                            tokenizer.NextToken();
+                            stageRgbGen = 5;
+                            // Parse ( r g b )
+                            tokenizer.NextToken(); // skip '('
+                            string? rS = tokenizer.NextToken();
+                            string? gS = tokenizer.NextToken();
+                            string? bS = tokenizer.NextToken();
+                            tokenizer.NextToken(); // skip ')'
+                            if (rS != null) float.TryParse(rS, ci, out stageConstR);
+                            if (gS != null) float.TryParse(gS, ci, out stageConstG);
+                            if (bS != null) float.TryParse(bS, ci, out stageConstB);
                         }
+                        else if (string.Equals(rgbToken, "oneMinusVertex", StringComparison.OrdinalIgnoreCase))
+                            stageRgbGen = 6;
+                        else if (string.Equals(rgbToken, "lightingDiffuse", StringComparison.OrdinalIgnoreCase))
+                            stageRgbGen = 7;
                     }
                 }
                 else if (string.Equals(token, "alphaGen", StringComparison.OrdinalIgnoreCase))
@@ -560,15 +617,29 @@ public sealed unsafe class ShaderScriptParser
                         else if (string.Equals(alphaToken, "wave", StringComparison.OrdinalIgnoreCase))
                         {
                             stageAlphaGen = 3;
-                            // Consume wave params: func base amp phase freq
-                            tokenizer.NextToken(); tokenizer.NextToken();
-                            tokenizer.NextToken(); tokenizer.NextToken();
-                            tokenizer.NextToken();
+                            string? funcName = tokenizer.NextToken();
+                            stageAlphaWaveFunc = ParseWaveFunc(funcName);
+                            string? bS = tokenizer.NextToken();
+                            string? aS = tokenizer.NextToken();
+                            string? pS = tokenizer.NextToken();
+                            string? fS = tokenizer.NextToken();
+                            if (bS != null) float.TryParse(bS, ci, out stageAlphaWaveBase);
+                            if (aS != null) float.TryParse(aS, ci, out stageAlphaWaveAmp);
+                            if (pS != null) float.TryParse(pS, ci, out stageAlphaWavePhase);
+                            if (fS != null) float.TryParse(fS, ci, out stageAlphaWaveFreq);
                         }
                         else if (string.Equals(alphaToken, "const", StringComparison.OrdinalIgnoreCase))
                         {
-                            // Consume const value
-                            tokenizer.NextToken();
+                            stageAlphaGen = 4;
+                            string? vS = tokenizer.NextToken();
+                            if (vS != null) float.TryParse(vS, ci, out stageConstAlpha);
+                        }
+                        else if (string.Equals(alphaToken, "portal", StringComparison.OrdinalIgnoreCase))
+                        {
+                            stageAlphaGen = 5;
+                            // Consume optional portal range
+                            string? rS = tokenizer.NextToken();
+                            // portal range not stored yet
                         }
                     }
                 }
@@ -624,6 +695,20 @@ public sealed unsafe class ShaderScriptParser
             TcMods = tcMods,
             RgbGen = rgbGen,
             AlphaGen = alphaGen,
+            WaveFunc = waveFunc,
+            WaveBase = waveBase,
+            WaveAmp = waveAmp,
+            WavePhase = wavePhase,
+            WaveFreq = waveFreq,
+            AlphaWaveFunc = alphaWaveFunc,
+            AlphaWaveBase = alphaWaveBase,
+            AlphaWaveAmp = alphaWaveAmp,
+            AlphaWavePhase = alphaWavePhase,
+            AlphaWaveFreq = alphaWaveFreq,
+            ConstR = constR,
+            ConstG = constG,
+            ConstB = constB,
+            ConstAlpha = constAlpha,
             PolygonOffset = polygonOffset,
             EntityMergable = entityMergable,
             DepthFunc = depthFunc,
@@ -785,6 +870,23 @@ public sealed unsafe class ShaderScriptParser
             if (sp != null) float.TryParse(sp, ci, out ph2);
             if (sf != null) float.TryParse(sf, ci, out fr2);
             return new TcMod { Type = TcModType.Stretch, Param0 = waveFunc, Param1 = ba2, Param2 = am2, Param3 = ph2, Param4 = fr2 };
+        }
+        else if (string.Equals(type, "transform", StringComparison.OrdinalIgnoreCase))
+        {
+            string? s0 = tokenizer.NextToken();
+            string? s1 = tokenizer.NextToken();
+            string? s2 = tokenizer.NextToken();
+            string? s3 = tokenizer.NextToken();
+            string? s4 = tokenizer.NextToken();
+            string? s5 = tokenizer.NextToken();
+            float m00 = 1, m01 = 0, m10 = 0, m11 = 1, t0 = 0, t1 = 0;
+            if (s0 != null) float.TryParse(s0, ci, out m00);
+            if (s1 != null) float.TryParse(s1, ci, out m01);
+            if (s2 != null) float.TryParse(s2, ci, out m10);
+            if (s3 != null) float.TryParse(s3, ci, out m11);
+            if (s4 != null) float.TryParse(s4, ci, out t0);
+            if (s5 != null) float.TryParse(s5, ci, out t1);
+            return new TcMod { Type = TcModType.Transform, Param0 = m00, Param1 = m01, Param2 = m10, Param3 = m11, Param4 = t0, Param5 = t1 };
         }
 
         return null;
@@ -1029,11 +1131,33 @@ public sealed class ShaderDef
     /// <summary>List of tcMod operations to apply in order (null if none).</summary>
     public TcMod[]? TcMods { get; init; }
 
-    /// <summary>RGB generation mode: 0=identity (default), 1=vertex, 2=entity, 3=wave, 4=identityLighting.</summary>
+    /// <summary>RGB generation mode: 0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting, 5=const.</summary>
     public int RgbGen { get; init; }
 
-    /// <summary>Alpha generation mode: 0=identity (default), 1=vertex, 2=entity, 3=wave.</summary>
+    /// <summary>Alpha generation mode: 0=identity, 1=vertex, 2=entity, 3=wave, 4=const.</summary>
     public int AlphaGen { get; init; }
+
+    /// <summary>rgbGen wave params.</summary>
+    public int WaveFunc { get; init; }
+    public float WaveBase { get; init; }
+    public float WaveAmp { get; init; }
+    public float WavePhase { get; init; }
+    public float WaveFreq { get; init; }
+
+    /// <summary>alphaGen wave params.</summary>
+    public int AlphaWaveFunc { get; init; }
+    public float AlphaWaveBase { get; init; }
+    public float AlphaWaveAmp { get; init; }
+    public float AlphaWavePhase { get; init; }
+    public float AlphaWaveFreq { get; init; }
+
+    /// <summary>rgbGen const color (0-1).</summary>
+    public float ConstR { get; init; }
+    public float ConstG { get; init; }
+    public float ConstB { get; init; }
+
+    /// <summary>alphaGen const value (0-1).</summary>
+    public float ConstAlpha { get; init; } = 1f;
 
     /// <summary>Whether polygonOffset is set for this shader (prevents z-fighting on decals).</summary>
     public bool PolygonOffset { get; init; }
@@ -1139,11 +1263,12 @@ public struct TcMod
 
 public enum TcModType
 {
-    Scroll,   // Param0=sSpeed, Param1=tSpeed
-    Scale,    // Param0=sScale, Param1=tScale
-    Rotate,   // Param0=degreesPerSecond
-    Turb,     // Param0=base, Param1=amplitude, Param2=phase, Param3=frequency
-    Stretch,  // Param0=waveFunc, Param1=base, Param2=amplitude, Param3=phase, Param4=frequency
+    Scroll,    // Param0=sSpeed, Param1=tSpeed
+    Scale,     // Param0=sScale, Param1=tScale
+    Rotate,    // Param0=degreesPerSecond
+    Turb,      // Param0=base, Param1=amplitude, Param2=phase, Param3=frequency
+    Stretch,   // Param0=waveFunc, Param1=base, Param2=amplitude, Param3=phase, Param4=frequency
+    Transform, // Param0=m00, Param1=m01, Param2=m10, Param3=m11, Param4=t0, Param5=t1
 }
 
 /// <summary>
@@ -1219,11 +1344,37 @@ public sealed class ShaderStage
     /// <summary>tcMod operations for this stage.</summary>
     public TcMod[]? TcMods { get; init; }
 
-    /// <summary>RGB generation: 0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting.</summary>
+    /// <summary>RGB generation: 0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting, 5=const, 6=oneMinusVertex, 7=lightingDiffuse.</summary>
     public int RgbGen { get; init; }
 
-    /// <summary>Alpha generation: 0=identity, 1=vertex, 2=entity, 3=wave.</summary>
+    /// <summary>Alpha generation: 0=identity, 1=vertex, 2=entity, 3=wave, 4=const, 5=portal.</summary>
     public int AlphaGen { get; init; }
+
+    /// <summary>rgbGen wave / alphaGen wave function: 0=sin, 1=triangle, 2=square, 3=sawtooth, 4=inverseSawtooth.</summary>
+    public int WaveFunc { get; init; }
+    /// <summary>rgbGen wave base value.</summary>
+    public float WaveBase { get; init; }
+    /// <summary>rgbGen wave amplitude.</summary>
+    public float WaveAmp { get; init; }
+    /// <summary>rgbGen wave phase.</summary>
+    public float WavePhase { get; init; }
+    /// <summary>rgbGen wave frequency.</summary>
+    public float WaveFreq { get; init; }
+
+    /// <summary>alphaGen wave function (separate from RGB wave).</summary>
+    public int AlphaWaveFunc { get; init; }
+    public float AlphaWaveBase { get; init; }
+    public float AlphaWaveAmp { get; init; }
+    public float AlphaWavePhase { get; init; }
+    public float AlphaWaveFreq { get; init; }
+
+    /// <summary>rgbGen const color (0-1).</summary>
+    public float ConstR { get; init; }
+    public float ConstG { get; init; }
+    public float ConstB { get; init; }
+
+    /// <summary>alphaGen const value (0-1).</summary>
+    public float ConstAlpha { get; init; } = 1f;
 
     /// <summary>Depth function: 0=lequal, 1=equal.</summary>
     public int DepthFunc { get; init; }

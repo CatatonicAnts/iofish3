@@ -36,6 +36,8 @@ public sealed unsafe class SceneManager
     private int _spriteTexLoc;
 
     private const int RF_THIRD_PERSON = 0x0002;
+    private const int RF_FIRST_PERSON = 0x0004;
+    private const int RF_DEPTHHACK = 0x0008;
     private const int RF_LIGHTING_ORIGIN = 0x0080;
     private const int RDF_NOWORLDMODEL = 0x0001;
 
@@ -447,6 +449,11 @@ public sealed unsafe class SceneManager
             if ((ent.Renderfx & RF_THIRD_PERSON) != 0)
                 continue;
 
+            // RF_DEPTHHACK: draw weapon models in front using reduced depth range
+            bool depthHack = (ent.Renderfx & RF_DEPTHHACK) != 0;
+            if (depthHack)
+                _gl.DepthRange(0.0, 0.3);
+
             if (ent.ReType == RT_MODEL)
             {
                 // Check if this is an inline BSP model (doors, platforms, etc.)
@@ -560,6 +567,9 @@ public sealed unsafe class SceneManager
             {
                 DrawBeam(ent, viewOrg, vp);
             }
+
+            if (depthHack)
+                _gl.DepthRange(0.0, 1.0);
         }
 
         // Render scene polys (decals, trails, effects)
@@ -1210,6 +1220,10 @@ public sealed unsafe class SceneManager
             if (ent.ReType == RT_PORTALSURFACE) continue;
             if ((ent.Renderfx & RF_THIRD_PERSON) != 0) continue;
 
+            bool depthHack = (ent.Renderfx & RF_DEPTHHACK) != 0;
+            if (depthHack)
+                _gl.DepthRange(0.0, 0.3);
+
             if (ent.ReType == RT_MODEL && _models != null)
             {
                 if (_models.IsBspModel(ent.ModelHandle))
@@ -1305,6 +1319,9 @@ public sealed unsafe class SceneManager
                     DrawSprite(ent, axPtr, new ReadOnlySpan<float>(vpPtr, 16));
                 }
             }
+
+            if (depthHack)
+                _gl.DepthRange(0.0, 1.0);
         }
 
         // Restore state

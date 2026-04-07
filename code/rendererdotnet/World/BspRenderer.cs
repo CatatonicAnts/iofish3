@@ -26,7 +26,15 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _timeLoc;
     private int _tcModCountLoc;
     private int _tcModLoc;
+    private int _tcModExtraLoc;
     private int _rgbGenLoc;
+    private int _alphaGenModeLoc;
+    private int _rgbWaveLoc;
+    private int _rgbWavePhaseLoc;
+    private int _alphaWaveLoc;
+    private int _alphaWavePhaseLoc;
+    private int _constColorLoc;
+    private int _constAlphaLoc;
     private int _deformTypeLoc;
     private int _deformParams0Loc;
     private int _deformParams1Loc;
@@ -250,6 +258,7 @@ public sealed unsafe class BspRenderer : IDisposable
         // tcMod: up to 4 ops, each encoded as vec4(type, p0, p1, p2)
         uniform int uTcModCount;
         uniform vec4 uTcMod[4];
+        uniform vec4 uTcModExtra[4]; // extra params for stretch (phase,freq) and transform (m11,t0,t1)
         // deformVertexes: type(0=wave,1=move), params packed in vec4s
         uniform int uDeformType; // -1=none, 0=wave, 1=move
         uniform vec4 uDeformParams0; // wave: div,func,base,amp  move: x,y,z,func
@@ -348,6 +357,28 @@ public sealed unsafe class BspRenderer : IDisposable
                         float freq2 = uTcMod[i].y;
                         uv.x += amp2 * sin((pos.x + pos.z) * 0.0625 + uTime * freq2 + phase2);
                         uv.y += amp2 * sin((pos.y) * 0.0625 + uTime * freq2 + phase2);
+                    } else if (modType == 4) { // stretch
+                        int func = int(uTcMod[i].y);
+                        float base_ = uTcMod[i].z;
+                        float amp = uTcMod[i].w;
+                        // phase and freq packed in second vec4 via uTcModExtra
+                        float phase = uTcModExtra[i].x;
+                        float freq = uTcModExtra[i].y;
+                        float wave = base_ + amp * evalWaveFunc(func, phase + uTime * freq);
+                        if (abs(wave) < 0.001) wave = 0.001;
+                        float invWave = 1.0 / wave;
+                        uv = vec2(0.5) + (uv - vec2(0.5)) * invWave;
+                    } else if (modType == 5) { // transform
+                        float m00 = uTcMod[i].y;
+                        float m01 = uTcMod[i].z;
+                        float m10 = uTcMod[i].w;
+                        float m11 = uTcModExtra[i].x;
+                        float t0 = uTcModExtra[i].y;
+                        float t1 = uTcModExtra[i].z;
+                        vec2 newUV;
+                        newUV.x = uv.x * m00 + uv.y * m10 + t0;
+                        newUV.y = uv.x * m01 + uv.y * m11 + t1;
+                        uv = newUV;
                     }
                 }
 
@@ -376,7 +407,14 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uUseLightmap;
         uniform float uOverbrightScale;
         uniform int uAlphaFunc; // 0=none, 1=GT0, 2=LT128, 3=GE128
-        uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 4=identityLighting, 5=NDL fallback
+        uniform int uRgbGen;    // 0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting, 5=const, 6=oneMinusVertex, 7=lightingDiffuse, 8=NDL fallback
+        uniform int uAlphaGenMode; // 0=identity, 1=vertex, 2=entity, 3=wave, 4=const
+        uniform vec4 uRgbWave;  // x=func, y=base, z=amp, w=freq
+        uniform float uRgbWavePhase;
+        uniform vec4 uAlphaWave; // x=func, y=base, z=amp, w=freq
+        uniform float uAlphaWavePhase;
+        uniform vec3 uConstColor; // rgbGen const color
+        uniform float uConstAlpha; // alphaGen const value
         uniform int uUseLmUV;   // 1=sample diffuse with lightmap UVs (for multi-stage lightmap)
         uniform float uGreyscale; // 0.0=color, 1.0=fully greyscale
         uniform int uUseNormalMap;
@@ -389,6 +427,18 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uUsePBR;      // 1=metallic/roughness PBR workflow
 
         out vec4 oColor;
+
+        float evalWave(int func, float phase) {
+            if (func == 0) return sin(phase * 6.283185);       // sin
+            if (func == 1) {                                    // triangle
+                float f = fract(phase);
+                return f < 0.5 ? f * 4.0 - 1.0 : 3.0 - f * 4.0;
+            }
+            if (func == 2) return fract(phase) < 0.5 ? 1.0 : -1.0; // square
+            if (func == 3) return fract(phase) * 2.0 - 1.0;         // sawtooth
+            if (func == 4) return 1.0 - fract(phase) * 2.0;         // inverseSawtooth
+            return sin(phase * 6.283185);
+        }
 
         // Steep parallax mapping: 16-step linear search + interpolation
         vec2 ParallaxOffset(vec2 texCoords, vec3 viewDirTS) {
@@ -485,8 +535,27 @@ public sealed unsafe class BspRenderer : IDisposable
             } else if (uRgbGen == 1) {
                 // rgbGen vertex — multiply by vertex color directly
                 oColor = texColor * vColor;
+            } else if (uRgbGen == 3) {
+                // rgbGen wave — animated color from wave function
+                int func = int(uRgbWave.x);
+                float base_ = uRgbWave.y;
+                float amp = uRgbWave.z;
+                float freq = uRgbWave.w;
+                float wave = clamp(base_ + amp * evalWave(func, uRgbWavePhase + uTime * freq), 0.0, 1.0);
+                oColor = texColor * vec4(vec3(wave), 1.0);
             } else if (uRgbGen == 5) {
-                // rgbGen default with NDL lighting fallback (single-stage path)
+                // rgbGen const — constant color
+                oColor = texColor * vec4(uConstColor, 1.0);
+            } else if (uRgbGen == 6) {
+                // rgbGen oneMinusVertex
+                oColor = texColor * (vec4(1.0) - vColor);
+            } else if (uRgbGen == 7) {
+                // rgbGen lightingDiffuse — NDL from light direction
+                float ndl = max(dot(N, uLightDir), 0.0);
+                float light = 0.3 + 0.7 * ndl;
+                oColor = texColor * vec4(vec3(light), 1.0);
+            } else if (uRgbGen == 8) {
+                // NDL fallback (single-stage path with vertex color check)
                 float vcSum = vColor.r + vColor.g + vColor.b;
                 if (vcSum > 0.01) {
                     oColor = texColor * vColor;
@@ -498,6 +567,21 @@ public sealed unsafe class BspRenderer : IDisposable
             } else {
                 // rgbGen identity (0) or identityLighting (4) — pass through
                 oColor = texColor;
+            }
+
+            // Apply alphaGen
+            if (uAlphaGenMode == 1) {
+                oColor.a = texColor.a * vColor.a;
+            } else if (uAlphaGenMode == 2) {
+                oColor.a = texColor.a * uColor.a;
+            } else if (uAlphaGenMode == 3) {
+                int afunc = int(uAlphaWave.x);
+                float abase = uAlphaWave.y;
+                float aamp = uAlphaWave.z;
+                float afreq = uAlphaWave.w;
+                oColor.a = texColor.a * clamp(abase + aamp * evalWave(afunc, uAlphaWavePhase + uTime * afreq), 0.0, 1.0);
+            } else if (uAlphaGenMode == 4) {
+                oColor.a = texColor.a * uConstAlpha;
             }
 
             // Specular / PBR lighting
@@ -577,7 +661,15 @@ public sealed unsafe class BspRenderer : IDisposable
         _timeLoc = _gl.GetUniformLocation(_program, "uTime");
         _tcModCountLoc = _gl.GetUniformLocation(_program, "uTcModCount");
         _tcModLoc = _gl.GetUniformLocation(_program, "uTcMod");
+        _tcModExtraLoc = _gl.GetUniformLocation(_program, "uTcModExtra");
         _rgbGenLoc = _gl.GetUniformLocation(_program, "uRgbGen");
+        _alphaGenModeLoc = _gl.GetUniformLocation(_program, "uAlphaGenMode");
+        _rgbWaveLoc = _gl.GetUniformLocation(_program, "uRgbWave");
+        _rgbWavePhaseLoc = _gl.GetUniformLocation(_program, "uRgbWavePhase");
+        _alphaWaveLoc = _gl.GetUniformLocation(_program, "uAlphaWave");
+        _alphaWavePhaseLoc = _gl.GetUniformLocation(_program, "uAlphaWavePhase");
+        _constColorLoc = _gl.GetUniformLocation(_program, "uConstColor");
+        _constAlphaLoc = _gl.GetUniformLocation(_program, "uConstAlpha");
         _deformTypeLoc = _gl.GetUniformLocation(_program, "uDeformType");
         _deformParams0Loc = _gl.GetUniformLocation(_program, "uDeformParams0");
         _deformParams1Loc = _gl.GetUniformLocation(_program, "uDeformParams1");
@@ -871,6 +963,9 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 1.0f);
         _gl.Uniform1(_useLmUVLoc, 0);
+        _gl.Uniform1(_alphaGenModeLoc, 0);
+        _gl.Uniform1(_constAlphaLoc, 1f);
+        _gl.Uniform3(_constColorLoc, 1f, 1f, 1f);
         _gl.Uniform1(_useNormalMapLoc, 0);
         _gl.Uniform1(_useSpecularMapLoc, 0);
         _gl.Uniform1(_portalMapLoc, 0);
@@ -986,6 +1081,9 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_deformTypeLoc, -1);
         _gl.Uniform1(_overbrightScaleLoc, 1.0f);
         _gl.Uniform1(_useLmUVLoc, 0);
+        _gl.Uniform1(_alphaGenModeLoc, 0);
+        _gl.Uniform1(_constAlphaLoc, 1f);
+        _gl.Uniform3(_constColorLoc, 1f, 1f, 1f);
         _gl.Uniform1(_useNormalMapLoc, 0);
         _gl.Uniform1(_useSpecularMapLoc, 0);
 
@@ -1298,8 +1396,9 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_alphaFuncLoc, alphaFunc);
 
         int rgbGen = shaders.GetRgbGen(surf.ShaderHandle);
-        if (rgbGen == 0) rgbGen = 5;
+        if (rgbGen == 0) rgbGen = 8; // default to NDL fallback
         _gl.Uniform1(_rgbGenLoc, rgbGen);
+        _gl.Uniform1(_alphaGenModeLoc, 0);
 
         bool envMap = shaders.GetHasEnvMap(surf.ShaderHandle);
         _gl.Uniform1(_envMapLoc, envMap ? 1 : 0);
@@ -1377,7 +1476,7 @@ public sealed unsafe class BspRenderer : IDisposable
 
         _gl.Uniform1(_useLightmapLoc, 0);
         _gl.Uniform1(_alphaFuncLoc, 0);
-        _gl.Uniform1(_rgbGenLoc, 5);
+        _gl.Uniform1(_rgbGenLoc, 8); // NDL fallback
         _gl.Uniform1(_envMapLoc, 1);
         SetTcModUniforms(null);
         _gl.Uniform1(_deformTypeLoc, -1);
@@ -1455,10 +1554,11 @@ public sealed unsafe class BspRenderer : IDisposable
         // Set alpha test mode
         _gl.Uniform1(_alphaFuncLoc, alphaFunc);
 
-        // Per-surface rgbGen — use 5 (NDL fallback) for single-stage when no explicit rgbGen
+        // Per-surface rgbGen — use 8 (NDL fallback) for single-stage when no explicit rgbGen
         int rgbGen = shaders.GetRgbGen(surf.ShaderHandle);
-        if (rgbGen == 0) rgbGen = 5; // default to NDL fallback for single-stage
+        if (rgbGen == 0) rgbGen = 8; // default to NDL fallback for single-stage
         _gl.Uniform1(_rgbGenLoc, rgbGen);
+        _gl.Uniform1(_alphaGenModeLoc, 0);
 
         // Per-surface environment mapping
         bool envMap = shaders.GetHasEnvMap(surf.ShaderHandle);
@@ -1607,6 +1707,19 @@ public sealed unsafe class BspRenderer : IDisposable
 
             // Per-stage rgbGen
             _gl.Uniform1(_rgbGenLoc, stage.RgbGen);
+            _gl.Uniform1(_alphaGenModeLoc, stage.AlphaGen);
+
+            // Per-stage wave/const params
+            if (stage.RgbGen == 3) // wave
+                _gl.Uniform4(_rgbWaveLoc, (float)stage.WaveFunc, stage.WaveBase, stage.WaveAmp, stage.WaveFreq);
+            _gl.Uniform1(_rgbWavePhaseLoc, stage.WavePhase);
+            if (stage.RgbGen == 5) // const
+                _gl.Uniform3(_constColorLoc, stage.ConstR, stage.ConstG, stage.ConstB);
+            if (stage.AlphaGen == 3) // alpha wave
+                _gl.Uniform4(_alphaWaveLoc, (float)stage.AlphaWaveFunc, stage.AlphaWaveBase, stage.AlphaWaveAmp, stage.AlphaWaveFreq);
+            _gl.Uniform1(_alphaWavePhaseLoc, stage.AlphaWavePhase);
+            if (stage.AlphaGen == 4) // alpha const
+                _gl.Uniform1(_constAlphaLoc, stage.ConstAlpha);
 
             // Per-stage env map
             _gl.Uniform1(_envMapLoc, stage.HasEnvMap ? 1 : 0);
@@ -1670,9 +1783,12 @@ public sealed unsafe class BspRenderer : IDisposable
         if (!isTransparentPass)
             _gl.Disable(EnableCap.Blend);
 
-        // Restore uColor and uUseLmUV to defaults
+        // Restore uColor, uUseLmUV, and alphaGen/constColor to defaults
         _gl.Uniform4(_colorLoc, 1f, 1f, 1f, 1f);
         _gl.Uniform1(_useLmUVLoc, 0);
+        _gl.Uniform1(_alphaGenModeLoc, 0);
+        _gl.Uniform1(_constAlphaLoc, 1f);
+        _gl.Uniform3(_constColorLoc, 1f, 1f, 1f);
 
         // Restore shared state
         RestoreCullMode(cullMode);
@@ -1700,18 +1816,33 @@ public sealed unsafe class BspRenderer : IDisposable
                 {
                     case TcModType.Scroll:
                         _gl.Uniform4(_tcModLoc + i, 0f, m.Param0, m.Param1, 0f);
+                        _gl.Uniform4(_tcModExtraLoc + i, 0f, 0f, 0f, 0f);
                         break;
                     case TcModType.Scale:
                         _gl.Uniform4(_tcModLoc + i, 1f, m.Param0, m.Param1, 0f);
+                        _gl.Uniform4(_tcModExtraLoc + i, 0f, 0f, 0f, 0f);
                         break;
                     case TcModType.Rotate:
                         _gl.Uniform4(_tcModLoc + i, 2f, m.Param0, 0f, 0f);
+                        _gl.Uniform4(_tcModExtraLoc + i, 0f, 0f, 0f, 0f);
                         break;
                     case TcModType.Turb:
                         _gl.Uniform4(_tcModLoc + i, 3f, m.Param3, m.Param1, m.Param2);
+                        _gl.Uniform4(_tcModExtraLoc + i, 0f, 0f, 0f, 0f);
+                        break;
+                    case TcModType.Stretch:
+                        // Param0=waveFunc, Param1=base, Param2=amp, Param3=phase, Param4=freq
+                        _gl.Uniform4(_tcModLoc + i, 4f, m.Param0, m.Param1, m.Param2);
+                        _gl.Uniform4(_tcModExtraLoc + i, m.Param3, m.Param4, 0f, 0f);
+                        break;
+                    case TcModType.Transform:
+                        // Param0=m00, Param1=m01, Param2=m10, Param3=m11, Param4=t0, Param5=t1
+                        _gl.Uniform4(_tcModLoc + i, 5f, m.Param0, m.Param1, m.Param2);
+                        _gl.Uniform4(_tcModExtraLoc + i, m.Param3, m.Param4, m.Param5, 0f);
                         break;
                     default:
                         _gl.Uniform4(_tcModLoc + i, -1f, 0f, 0f, 0f);
+                        _gl.Uniform4(_tcModExtraLoc + i, 0f, 0f, 0f, 0f);
                         break;
                 }
             }

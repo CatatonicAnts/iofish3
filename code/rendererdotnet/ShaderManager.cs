@@ -443,6 +443,20 @@ public unsafe class ShaderManager
                         TcMods = src.TcMods,
                         RgbGen = src.RgbGen,
                         AlphaGen = src.AlphaGen,
+                        WaveFunc = src.WaveFunc,
+                        WaveBase = src.WaveBase,
+                        WaveAmp = src.WaveAmp,
+                        WavePhase = src.WavePhase,
+                        WaveFreq = src.WaveFreq,
+                        AlphaWaveFunc = src.AlphaWaveFunc,
+                        AlphaWaveBase = src.AlphaWaveBase,
+                        AlphaWaveAmp = src.AlphaWaveAmp,
+                        AlphaWavePhase = src.AlphaWavePhase,
+                        AlphaWaveFreq = src.AlphaWaveFreq,
+                        ConstR = src.ConstR,
+                        ConstG = src.ConstG,
+                        ConstB = src.ConstB,
+                        ConstAlpha = src.ConstAlpha,
                         DepthFunc = src.DepthFunc,
                         DepthWrite = src.DepthWrite,
                         AnimFrequency = src.AnimFrequency,
@@ -544,9 +558,9 @@ public unsafe class ShaderManager
         public float AnimFrequency { get; set; }
         /// <summary>tcMod operations for this shader</summary>
         public TcMod[]? TcMods { get; set; }
-        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting</summary>
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting, 5=const</summary>
         public int RgbGen { get; set; }
-        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave</summary>
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=const</summary>
         public int AlphaGen { get; set; }
         public bool PolygonOffset { get; set; }
         /// <summary>Surfaces from different entities can be merged (smoke, blood sprites)</summary>
@@ -593,10 +607,28 @@ public unsafe class ShaderManager
         public bool HasEnvMap { get; set; }
         /// <summary>tcMod operations</summary>
         public TcMod[]? TcMods { get; set; }
-        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting</summary>
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=identityLighting, 5=const, 6=oneMinusVertex, 7=lightingDiffuse</summary>
         public int RgbGen { get; set; }
-        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave</summary>
+        /// <summary>0=identity, 1=vertex, 2=entity, 3=wave, 4=const, 5=portal</summary>
         public int AlphaGen { get; set; }
+        /// <summary>rgbGen wave params</summary>
+        public int WaveFunc { get; set; }
+        public float WaveBase { get; set; }
+        public float WaveAmp { get; set; }
+        public float WavePhase { get; set; }
+        public float WaveFreq { get; set; }
+        /// <summary>alphaGen wave params</summary>
+        public int AlphaWaveFunc { get; set; }
+        public float AlphaWaveBase { get; set; }
+        public float AlphaWaveAmp { get; set; }
+        public float AlphaWavePhase { get; set; }
+        public float AlphaWaveFreq { get; set; }
+        /// <summary>rgbGen const color</summary>
+        public float ConstR { get; set; }
+        public float ConstG { get; set; }
+        public float ConstB { get; set; }
+        /// <summary>alphaGen const value</summary>
+        public float ConstAlpha { get; set; } = 1f;
         /// <summary>0=lequal, 1=equal</summary>
         public int DepthFunc { get; set; }
         /// <summary>Whether depthWrite is set</summary>
