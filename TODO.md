@@ -296,6 +296,7 @@ The cgame DLL interface is:
 - [x] Entity alpha / shaderRGBA — all-zero detection (uninitialized→white), alpha<1 enables blending on models
 - [x] deformVertexes — parse wave/move/bulge/normal/autosprite/autosprite2 from shader scripts, GPU-based wave and move displacement in BSP vertex shader
 - [x] Overbright scale — configurable lightmap overbright multiplier uniform (replaces hardcoded 2.0)
+- [x] R_ColorShiftLightingBytes — apply Q3's overbright color shift to lightmap texels, vertex colors, and light grid data during BSP loading (shift=r_mapOverBrightBits), replacing shader-time ×2.0 which washed out texture detail
 - [x] Inline BSP models — doors, platforms, and other brush models (*N) registered by ModelManager, rendered via BspRenderer.RenderSubmodel with entity transforms
 - [x] Model shader blend modes — Renderer3D uses shader-defined blend factors (additive, alpha, filter) instead of only entity alpha; fullbright for non-opaque effects
 - [x] BSP transparent surface detection — surfaces with non-opaque blend modes deferred to transparent pass regardless of surfaceparm trans (fixes water, force fields)
