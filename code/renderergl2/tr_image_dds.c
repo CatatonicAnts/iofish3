@@ -305,8 +305,24 @@ void R_LoadDDS ( const char *filename, byte **pic, int *width, int *height, GLen
 			*numMips = 1;
 	}
 
-	// FIXME: handle cube map
-	//if ((ddsHeader->caps2 & DDSCAPS2_CUBEMAP) == DDSCAPS2_CUBEMAP)
+	// handle cube map
+	if (ddsHeader->caps2 & DDSCAPS2_CUBEMAP)
+	{
+		// cubemap faces must be square
+		if (ddsHeader->width != ddsHeader->height)
+		{
+			ri.Printf(PRINT_ALL, "DDS cubemap %s has non-square faces (%dx%d).\n", filename, ddsHeader->width, ddsHeader->height);
+			ri.FS_FreeFile(buffer.v);
+			return;
+		}
+		// require all 6 faces
+		if ((ddsHeader->caps2 & DDSCAPS2_CUBEMAP) != DDSCAPS2_CUBEMAP)
+		{
+			ri.Printf(PRINT_ALL, "DDS cubemap %s does not have all 6 faces (caps2=0x%x).\n", filename, ddsHeader->caps2);
+			ri.FS_FreeFile(buffer.v);
+			return;
+		}
+	}
 
 	//
 	// Convert DXGI format/FourCC into OpenGL format

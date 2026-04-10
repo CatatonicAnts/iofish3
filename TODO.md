@@ -167,7 +167,7 @@ The cgame DLL interface is:
 
 ### Lower Priority
 
-- [ ] **DDS cubemap loading** - Complete DDS cubemap support in `code/renderergl2/tr_image_dds.c`. `CPX 2`
+- [x] **DDS cubemap loading** - Complete DDS cubemap support in `code/renderergl2/tr_image_dds.c`. `CPX 2`
 
 ---
 
@@ -270,6 +270,7 @@ The cgame DLL interface is:
 - [x] FreeType font rendering — bundled FreeType 2.13.3, enabled by default in both GL1/GL2 renderers (BUILD_FREETYPE), static library linked into renderer DLLs
 - [x] Local gravity support — trigger_gravity brush entity sets per-player gravity override, gclient_t.localGravity field, respawn resets to global
 - [x] Bot AI improvements — flag carrier/cube carrier targeting, bridge traversal activation, radial damage teammate proximity check in ai_dmq3.c
+- [x] DDS cubemap loading — validate cubemap DDS files (square faces, all 6 faces required) in GL2 renderer tr_image_dds.c
 
 ### Improvements
 
