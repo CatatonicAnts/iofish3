@@ -347,7 +347,7 @@ public sealed unsafe class PostProcess : IDisposable
 
         // Check cvars
         Interop.EngineImports.Cvar_Get("r_bloom", "1", 0x01); // CVAR_ARCHIVE
-        Interop.EngineImports.Cvar_Get("r_hdr", "1", 0x01);   // CVAR_ARCHIVE
+        Interop.EngineImports.Cvar_Get("r_hdr", "0", 0x01);   // CVAR_ARCHIVE
         Interop.EngineImports.Cvar_Get("r_autoExposure", "0", 0x01);
         Interop.EngineImports.Cvar_Get("r_cameraExposure", "0", 0);
         Interop.EngineImports.Cvar_Get("r_ssao", "0", 0x01);  // CVAR_ARCHIVE
