@@ -705,12 +705,25 @@ static struct
 	int numSurfaces;
 
 	int batchLengths[VAOCACHE_MAX_BATCHES];
+	uint32_t batchHashes[VAOCACHE_MAX_BATCHES];
 	int numBatches;
 
 	int vertexOffset;
 	int indexOffset;
 }
 vc;
+
+static uint32_t VaoCache_HashBatch(queuedSurface_t *surfaces, int numSurfaces)
+{
+	uint32_t hash = (uint32_t)numSurfaces;
+	int i;
+	for (i = 0; i < numSurfaces; i++)
+	{
+		hash = hash * 31u + (uint32_t)(uintptr_t)surfaces[i].indexes;
+		hash = hash * 31u + (uint32_t)surfaces[i].numIndexes;
+	}
+	return hash;
+}
 
 void VaoCache_Commit(void)
 {
@@ -720,13 +733,14 @@ void VaoCache_Commit(void)
 
 	R_BindVao(vc.vao);
 
-	// Search for a matching batch
-	// FIXME: Use faster search
+	// Search for a matching batch using hash to skip non-matches quickly
+	{
+	uint32_t queryHash = VaoCache_HashBatch(vcq.surfaces, vcq.numSurfaces);
 	indexSet = vc.surfaceIndexSets;
 	batchLength = vc.batchLengths;
 	for (; batchLength < vc.batchLengths + vc.numBatches; batchLength++)
 	{
-		if (*batchLength == vcq.numSurfaces)
+		if (*batchLength == vcq.numSurfaces && vc.batchHashes[batchLength - vc.batchLengths] == queryHash)
 		{
 			buffered_t *indexSet2 = indexSet;
 			for (surf = vcq.surfaces; surf < end; surf++, indexSet2++)
@@ -750,7 +764,6 @@ void VaoCache_Commit(void)
 		//ri.Printf(PRINT_ALL, "vc.numSurfaces %d vc.numBatches %d\n", vc.numSurfaces, vc.numBatches);
 	}
 	// If not, rebuffer the batch
-	// FIXME: keep track of the vertexes so we don't have to reupload them every time
 	else
 	{
 		srfVert_t *dstVertex = vcq.vertexes;
@@ -759,6 +772,7 @@ void VaoCache_Commit(void)
 
 		batchLength = vc.batchLengths + vc.numBatches;
 		*batchLength = vcq.numSurfaces;
+		vc.batchHashes[vc.numBatches] = queryHash;
 		vc.numBatches++;
 
 		tess.firstIndex = vc.indexOffset / glRefConfig.vaoCacheGlIndexSize;
@@ -812,6 +826,7 @@ void VaoCache_Commit(void)
 			vc.indexOffset += vcq.indexCommitSize;
 		}
 	}
+	} // queryHash block
 }
 
 void VaoCache_DrawElements(int numIndexes, int firstIndex)

@@ -309,6 +309,8 @@ static void ParseWaveForm( char **text, waveForm_t *wave )
 	char *token;
 
 	token = COM_ParseExt( text, qfalse );
+	if ( token[0] == '(' )
+		token = COM_ParseExt( text, qfalse );
 	if ( token[0] == 0 )
 	{
 		ri.Printf( PRINT_WARNING, "WARNING: missing waveform parm in shader '%s'\n", shader.name );
@@ -318,6 +320,8 @@ static void ParseWaveForm( char **text, waveForm_t *wave )
 
 	// BASE, AMP, PHASE, FREQ
 	token = COM_ParseExt( text, qfalse );
+	if ( token[0] == '(' )
+		token = COM_ParseExt( text, qfalse );
 	if ( token[0] == 0 )
 	{
 		ri.Printf( PRINT_WARNING, "WARNING: missing waveform parm in shader '%s'\n", shader.name );
@@ -326,6 +330,8 @@ static void ParseWaveForm( char **text, waveForm_t *wave )
 	wave->base = atof( token );
 
 	token = COM_ParseExt( text, qfalse );
+	if ( token[0] == ')' )
+		return;
 	if ( token[0] == 0 )
 	{
 		ri.Printf( PRINT_WARNING, "WARNING: missing waveform parm in shader '%s'\n", shader.name );
@@ -334,6 +340,8 @@ static void ParseWaveForm( char **text, waveForm_t *wave )
 	wave->amplitude = atof( token );
 
 	token = COM_ParseExt( text, qfalse );
+	if ( token[0] == ')' )
+		return;
 	if ( token[0] == 0 )
 	{
 		ri.Printf( PRINT_WARNING, "WARNING: missing waveform parm in shader '%s'\n", shader.name );
@@ -342,6 +350,8 @@ static void ParseWaveForm( char **text, waveForm_t *wave )
 	wave->phase = atof( token );
 
 	token = COM_ParseExt( text, qfalse );
+	if ( token[0] == ')' )
+		return;
 	if ( token[0] == 0 )
 	{
 		ri.Printf( PRINT_WARNING, "WARNING: missing waveform parm in shader '%s'\n", shader.name );

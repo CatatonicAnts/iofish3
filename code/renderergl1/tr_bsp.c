@@ -150,58 +150,66 @@ static	void R_LoadLightmaps( lump_t *l ) {
 
 	// create all the lightmaps
 	tr.numLightmaps = len / (LIGHTMAP_SIZE * LIGHTMAP_SIZE * 3);
-	if ( tr.numLightmaps == 1 ) {
-		//FIXME: HACK: maps with only one lightmap turn up fullbright for some reason.
-		//this avoids this, but isn't the correct solution.
-		tr.numLightmaps++;
-	}
 
 	// if we are in r_vertexLight mode, we don't need the lightmaps at all
 	if ( r_vertexLight->integer || glConfig.hardwareType == GLHW_PERMEDIA2 ) {
 		return;
 	}
 
-	tr.lightmaps = ri.Hunk_Alloc( tr.numLightmaps * sizeof(image_t *), h_low );
-	for ( i = 0 ; i < tr.numLightmaps ; i++ ) {
-		// expand the 24 bit on-disk to 32 bit
-		buf_p = buf + i * LIGHTMAP_SIZE*LIGHTMAP_SIZE * 3;
+	// Maps with only one lightmap need numLightmaps >= 2 to avoid fullbright rendering.
+	// Allocate space for at least 2 entries, but only create images from actual data.
+	{
+		int actualLightmaps = tr.numLightmaps;
+		int allocCount = tr.numLightmaps < 2 ? 2 : tr.numLightmaps;
+		tr.numLightmaps = allocCount;
 
-		if ( r_lightmap->integer == 2 )
-		{	// color code by intensity as development tool	(FIXME: check range)
-			for ( j = 0; j < LIGHTMAP_SIZE * LIGHTMAP_SIZE; j++ )
-			{
-				float r = buf_p[j*3+0];
-				float g = buf_p[j*3+1];
-				float b = buf_p[j*3+2];
-				float intensity;
-				float out[3] = {0.0, 0.0, 0.0};
+		tr.lightmaps = ri.Hunk_Alloc( allocCount * sizeof(image_t *), h_low );
+		for ( i = 0 ; i < actualLightmaps ; i++ ) {
+			// expand the 24 bit on-disk to 32 bit
+			buf_p = buf + i * LIGHTMAP_SIZE*LIGHTMAP_SIZE * 3;
 
-				intensity = 0.33f * r + 0.685f * g + 0.063f * b;
+			if ( r_lightmap->integer == 2 )
+			{	// color code by intensity as development tool	(FIXME: check range)
+				for ( j = 0; j < LIGHTMAP_SIZE * LIGHTMAP_SIZE; j++ )
+				{
+					float r = buf_p[j*3+0];
+					float g = buf_p[j*3+1];
+					float b = buf_p[j*3+2];
+					float intensity;
+					float out[3] = {0.0, 0.0, 0.0};
 
-				if ( intensity > 255 )
-					intensity = 1.0f;
-				else
-					intensity /= 255.0f;
+					intensity = 0.33f * r + 0.685f * g + 0.063f * b;
 
-				if ( intensity > maxIntensity )
-					maxIntensity = intensity;
+					if ( intensity > 255 )
+						intensity = 1.0f;
+					else
+						intensity /= 255.0f;
 
-				HSVtoRGB( intensity, 1.00, 0.50, out );
+					if ( intensity > maxIntensity )
+						maxIntensity = intensity;
 
-				image[j*4+0] = out[0] * 255;
-				image[j*4+1] = out[1] * 255;
-				image[j*4+2] = out[2] * 255;
-				image[j*4+3] = 255;
+					HSVtoRGB( intensity, 1.00, 0.50, out );
+
+					image[j*4+0] = out[0] * 255;
+					image[j*4+1] = out[1] * 255;
+					image[j*4+2] = out[2] * 255;
+					image[j*4+3] = 255;
+				}
+			} else {
+				for ( j = 0 ; j < LIGHTMAP_SIZE * LIGHTMAP_SIZE; j++ ) {
+					R_ColorShiftLightingBytes( &buf_p[j*3], &image[j*4] );
+					image[j*4+3] = 255;
+				}
 			}
-		} else {
-			for ( j = 0 ; j < LIGHTMAP_SIZE * LIGHTMAP_SIZE; j++ ) {
-				R_ColorShiftLightingBytes( &buf_p[j*3], &image[j*4] );
-				image[j*4+3] = 255;
-			}
+			tr.lightmaps[i] = R_CreateImage( va("*lightmap%d",i), image, 
+				LIGHTMAP_SIZE, LIGHTMAP_SIZE, IMGTYPE_COLORALPHA,
+				IMGFLAG_NOLIGHTSCALE | IMGFLAG_NO_COMPRESSION | IMGFLAG_CLAMPTOEDGE, 0 );
 		}
-		tr.lightmaps[i] = R_CreateImage( va("*lightmap%d",i), image, 
-			LIGHTMAP_SIZE, LIGHTMAP_SIZE, IMGTYPE_COLORALPHA,
-			IMGFLAG_NOLIGHTSCALE | IMGFLAG_NO_COMPRESSION | IMGFLAG_CLAMPTOEDGE, 0 );
+
+		// Duplicate first lightmap to fill remaining slots
+		for ( i = actualLightmaps ; i < allocCount ; i++ ) {
+			tr.lightmaps[i] = tr.lightmaps[0];
+		}
 	}
 
 	if ( r_lightmap->integer == 2 )	{

@@ -908,8 +908,8 @@ static void SV_NextDownload_f( client_t *cl )
 		return;
 	}
 	// We aren't getting an acknowledge for the correct block, drop the client
-	// FIXME: this is bad... the client will never parse the disconnect message
-	//			because the cgame isn't loaded yet
+	// Send print so the client sees the reason even when cgame isn't loaded yet
+	SV_SendServerCommand( cl, "print \"%s\n\"", "broken download" );
 	SV_DropClient( cl, "broken download" );
 }
 

@@ -552,6 +552,16 @@ char *COM_ParseExt( char **data_p, qboolean allowLineBreaks )
 		}
 	}
 
+	// handle special single-character tokens (braces are always structural delimiters)
+	if ( c == '{' || c == '}' )
+	{
+		com_token[0] = c;
+		com_token[1] = 0;
+		data++;
+		*data_p = ( char * ) data;
+		return com_token;
+	}
+
 	// parse a regular word
 	do
 	{
@@ -562,7 +572,7 @@ char *COM_ParseExt( char **data_p, qboolean allowLineBreaks )
 		}
 		data++;
 		c = *data;
-	} while (c>32);
+	} while ( c > 32 && c != '{' && c != '}' );
 
 	com_token[len] = 0;
 
@@ -596,15 +606,19 @@ Internal brace depths are properly skipped.
 */
 qboolean SkipBracedSection (char **program, int depth) {
 	char			*token;
+	int				i;
 
 	do {
 		token = COM_ParseExt( program, qtrue );
-		if( token[1] == 0 ) {
-			if( token[0] == '{' ) {
+		if ( !token[0] ) break;
+		for ( i = 0; token[i]; i++ ) {
+			if ( token[i] == '{' ) {
 				depth++;
-			}
-			else if( token[0] == '}' ) {
+			} else if ( token[i] == '}' ) {
 				depth--;
+				if ( depth == 0 ) {
+					return qtrue;
+				}
 			}
 		}
 	} while( depth && *program );
