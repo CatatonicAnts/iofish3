@@ -49,7 +49,7 @@ extern botlib_import_t botimport;
 
 //#define REACH_DEBUG
 
-//NOTE: all travel times are in hundreth of a second
+//NOTE: all travel times are in hundredths of a second
 //maximum number of reachability links
 #define AAS_MAX_REACHABILITYSIZE			65536
 //number of areas reachability is calculated for each frame
@@ -61,6 +61,31 @@ extern botlib_import_t botimport;
 #define INSIDEUNITS_WATERJUMP				15
 //area flag used for weapon jumping
 #define AREA_WEAPONJUMP						8192	//valid area to weapon jump to
+
+// Surface normal thresholds — derived from Q3 physics conventions.
+// A surface whose normal dot gravity >= 0.7 (~45°) is considered walkable.
+// A surface whose normal dot gravity < 0.1 (~84°) is considered vertical.
+#define MIN_WALKABLE_NORMAL					0.7f
+#define MAX_VERTICAL_NORMAL					0.1f
+
+// Fall damage: damage = velocity^2 * FALL_DAMAGE_FACTOR.
+// FALL_DAMAGE_THRESHOLD is the max damage before health loss (30 hp).
+#define FALL_DAMAGE_FACTOR					0.0001f
+#define FALL_DAMAGE_THRESHOLD				30
+
+// Movement prediction: bot jump/jumppad simulations use these limits.
+// PREDICTION_FRAMETIME is the per-step duration (100ms).
+#define PREDICTION_MAX_FRAMES				30
+#define PREDICTION_FRAMETIME				0.1f
+
+// Travel time constants (hundredths of a second).
+// BASE_TRAVEL_TIME is the minimum non-zero cost for a reachability link.
+// LADDER_TRAVEL_TIME is the base cost for traversing a ladder segment.
+#define BASE_TRAVEL_TIME					1
+#define LADDER_TRAVEL_TIME					10
+
+// Default trigger_push speed when entity has no "speed" key
+#define JUMPPAD_DEFAULT_SPEED				1000
 //number of reachabilities of each type
 int reach_swim;			//swim
 int reach_equalfloor;	//walk on floors with equal height
@@ -221,7 +246,7 @@ int AAS_GetJumpPadInfo(int ent, vec3_t areastart, vec3_t absmins, vec3_t absmaxs
 
 	//
 	AAS_FloatForBSPEpairKey(ent, "speed", &speed);
-	if (!speed) speed = 1000;
+	if (!speed) speed = JUMPPAD_DEFAULT_SPEED;
 	VectorClear(angles);
 	//get the mins, maxs and origin of the model
 	AAS_ValueForBSPEpairKey(ent, "model", model, MAX_EPAIRKEY);
@@ -328,8 +353,8 @@ int AAS_BestReachableFromJumpPadArea(vec3_t origin, vec3_t mins, vec3_t maxs)
 		VectorSet(cmdmove, 0, 0, 0);
 		Com_Memset(&move, 0, sizeof(aas_clientmove_t));
 		AAS_ClientMovementHitBBox(&move, -1, areastart, PRESENCE_NORMAL, qfalse,
-								velocity, cmdmove, 0, 30, 0.1f, bboxmins, bboxmaxs, bot_visualizejumppads);
-		if (move.frames < 30)
+								velocity, cmdmove, 0, PREDICTION_MAX_FRAMES, PREDICTION_FRAMETIME, bboxmins, bboxmaxs, bot_visualizejumppads);
+		if (move.frames < PREDICTION_MAX_FRAMES)
 		{
 			bestareanum = 0;
 			bestareavolume = 0;
@@ -581,7 +606,7 @@ void AAS_FaceCenter(int facenum, vec3_t center)
 } //end of the function AAS_FaceCenter
 //===========================================================================
 // returns the maximum distance a player can fall before being damaged
-// damage = deltavelocity*deltavelocity  * 0.0001
+// damage = deltavelocity*deltavelocity * FALL_DAMAGE_FACTOR
 //
 // Parameter:				-
 // Returns:					-
@@ -591,7 +616,7 @@ int AAS_FallDamageDistance(void)
 {
 	float maxzvelocity, gravity, t;
 
-	maxzvelocity = sqrt(30 * 10000);
+	maxzvelocity = sqrt(FALL_DAMAGE_THRESHOLD / FALL_DAMAGE_FACTOR);
 	gravity = aassettings.phys_gravity;
 	t = maxzvelocity / gravity;
 	return 0.5 * gravity * t * t;
@@ -599,7 +624,7 @@ int AAS_FallDamageDistance(void)
 //===========================================================================
 // distance = 0.5 * gravity * t * t
 // vel = t * gravity
-// damage = vel * vel * 0.0001
+// damage = vel * vel * FALL_DAMAGE_FACTOR
 //
 // Parameter:			-
 // Returns:				-
@@ -612,7 +637,7 @@ float AAS_FallDelta(float distance)
 	gravity = aassettings.phys_gravity;
 	t = sqrt(fabs(distance) * 2 / gravity);
 	delta = t * gravity;
-	return delta * delta * 0.0001;
+	return delta * delta * FALL_DAMAGE_FACTOR;
 } //end of the function AAS_FallDelta
 //===========================================================================
 //
@@ -883,7 +908,7 @@ int AAS_Reachability_Swim(int area1num, int area2num)
 					plane = &aasworld.planes[face1->planenum ^ side1];
 					VectorMA(lreach->start, -INSIDEUNITS, plane->normal, lreach->end);
 					lreach->traveltype = TRAVEL_SWIM;
-					lreach->traveltime = 1;
+					lreach->traveltime = BASE_TRAVEL_TIME;
 					//if the volume of the area is rather small
 					if (AAS_AreaVolume(area2num) < 800)
 						lreach->traveltime += 200;
@@ -1005,7 +1030,7 @@ int AAS_Reachability_EqualFloorHeight(int area1num, int area2num)
 						VectorCopy(start, lr.start);
 						VectorCopy(end, lr.end);
 						lr.traveltype = TRAVEL_WALK;
-						lr.traveltime = 1;
+						lr.traveltime = BASE_TRAVEL_TIME;
 						foundreach = qtrue;
 					} //end if
 				} //end for
@@ -1115,7 +1140,7 @@ int AAS_Reachability_Step_Barrier_WaterJump_WalkOffLedge(int area1num, int area2
 			{
 				//face plane must be more or less horizontal
 				plane = &aasworld.planes[groundface1->planenum ^ (!faceside1)];
-				if (DotProduct(plane->normal, invgravity) < 0.7) continue;
+				if (DotProduct(plane->normal, invgravity) < MIN_WALKABLE_NORMAL) continue;
 			} //end if
 			else
 			{
@@ -1528,7 +1553,7 @@ int AAS_Reachability_Step_Barrier_WaterJump_WalkOffLedge(int area1num, int area2
 				VectorMA(ground_beststart, INSIDEUNITS_WALKSTART, ground_bestnormal, lreach->start);
 				VectorMA(ground_bestend, INSIDEUNITS_WALKEND, ground_bestnormal, lreach->end);
 				lreach->traveltype = TRAVEL_WALK;
-				lreach->traveltime = 1;
+				lreach->traveltime = BASE_TRAVEL_TIME;
 				lreach->next = areareachability[area1num];
 				areareachability[area1num] = lreach;
 				//we've got another walk reachability
@@ -2227,7 +2252,7 @@ int AAS_Reachability_Jump(int area1num, int area2num)
 		{
 			plane = &aasworld.planes[trace.planenum];
 			// if the bot can stand on the surface
-			if (DotProduct(plane->normal, up) >= 0.7)
+			if (DotProduct(plane->normal, up) >= MIN_WALKABLE_NORMAL)
 			{
 				// if no lava or slime below
 				if (!(AAS_PointContents(trace.endpos) & (CONTENTS_LAVA|CONTENTS_SLIME)))
@@ -2250,7 +2275,7 @@ int AAS_Reachability_Jump(int area1num, int area2num)
 		{
 			plane = &aasworld.planes[trace.planenum];
 			// if the bot can stand on the surface
-			if (DotProduct(plane->normal, up) >= 0.7)
+			if (DotProduct(plane->normal, up) >= MIN_WALKABLE_NORMAL)
 			{
 				// if no lava or slime below
 				if (!(AAS_PointContents(trace.endpos) & (CONTENTS_LAVA|CONTENTS_SLIME)))
@@ -2292,10 +2317,10 @@ int AAS_Reachability_Jump(int area1num, int area2num)
 			VectorScale(dir, speed, velocity);
 			//
 			AAS_PredictClientMovement(&move, -1, beststart, PRESENCE_NORMAL, qtrue,
-										velocity, cmdmove, 3, 30, 0.1f,
+										velocity, cmdmove, 3, PREDICTION_MAX_FRAMES, PREDICTION_FRAMETIME,
 										stopevent, 0, qfalse);
 			// if prediction time wasn't enough to fully predict the movement
-			if (move.frames >= 30)
+			if (move.frames >= PREDICTION_MAX_FRAMES)
 				return qfalse;
 			// don't enter slime or lava and don't fall from too high
 			if (move.stopevent & (SE_ENTERSLIME|SE_ENTERLAVA))
@@ -2465,16 +2490,16 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 		VectorMA(area1point, -32, dir, area1point);
 		VectorMA(area2point, 32, dir, area2point);
 		//
-		ladderface1vertical = fabsf(DotProduct(plane1->normal, up)) < 0.1;
-		ladderface2vertical = fabsf(DotProduct(plane2->normal, up)) < 0.1;
+		ladderface1vertical = fabsf(DotProduct(plane1->normal, up)) < MAX_VERTICAL_NORMAL;
+		ladderface2vertical = fabsf(DotProduct(plane2->normal, up)) < MAX_VERTICAL_NORMAL;
 		//there's only reachability between vertical ladder faces
 		if (!ladderface1vertical && !ladderface2vertical) return qfalse;
 		//if both vertical ladder faces
 		if (ladderface1vertical && ladderface2vertical
 					//and the ladder faces do not make a sharp corner
-					&& DotProduct(plane1->normal, plane2->normal) > 0.7
+					&& DotProduct(plane1->normal, plane2->normal) > MIN_WALKABLE_NORMAL
 					//and the shared edge is not too vertical
-					&& fabsf(DotProduct(sharededgevec, up)) < 0.7)
+					&& fabsf(DotProduct(sharededgevec, up)) < MIN_WALKABLE_NORMAL)
 		{
 			//create a new reachability link
 			lreach = AAS_AllocReachability();
@@ -2486,7 +2511,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 			//VectorCopy(area2point, lreach->end);
 			VectorMA(area2point, -3, plane1->normal, lreach->end);
 			lreach->traveltype = TRAVEL_LADDER;
-			lreach->traveltime = 10;
+			lreach->traveltime = LADDER_TRAVEL_TIME;
 			lreach->next = areareachability[area1num];
 			areareachability[area1num] = lreach;
 			//
@@ -2501,7 +2526,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 			//VectorCopy(area1point, lreach->end);
 			VectorMA(area1point, -3, plane1->normal, lreach->end);
 			lreach->traveltype = TRAVEL_LADDER;
-			lreach->traveltime = 10;
+			lreach->traveltime = LADDER_TRAVEL_TIME;
 			lreach->next = areareachability[area2num];
 			areareachability[area2num] = lreach;
 			//
@@ -2525,7 +2550,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 			lreach->end[2] += 16;
 			VectorMA(lreach->end, -15, plane1->normal, lreach->end);
 			lreach->traveltype = TRAVEL_LADDER;
-			lreach->traveltime = 10;
+			lreach->traveltime = LADDER_TRAVEL_TIME;
 			lreach->next = areareachability[area1num];
 			areareachability[area1num] = lreach;
 			//
@@ -2539,7 +2564,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 			VectorCopy(area2point, lreach->start);
 			VectorCopy(area1point, lreach->end);
 			lreach->traveltype = TRAVEL_WALKOFFLEDGE;
-			lreach->traveltime = 10;
+			lreach->traveltime = LADDER_TRAVEL_TIME;
 			lreach->next = areareachability[area2num];
 			areareachability[area2num] = lreach;
 			//
@@ -2599,7 +2624,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 				if (face2->faceflags & FACE_LADDER)
 				{
 					plane2 = &aasworld.planes[face2->planenum];
-					if (fabsf(DotProduct(plane2->normal, up)) < 0.1) break;
+					if (fabsf(DotProduct(plane2->normal, up)) < MAX_VERTICAL_NORMAL) break;
 				} //end if
 			} //end for
 			//if from another area without vertical ladder faces
@@ -2620,7 +2645,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 					VectorCopy(lowestpoint, lreach->start);
 					VectorCopy(trace.endpos, lreach->end);
 					lreach->traveltype = TRAVEL_LADDER;
-					lreach->traveltime = 10;
+					lreach->traveltime = LADDER_TRAVEL_TIME;
 					lreach->next = areareachability[area1num];
 					areareachability[area1num] = lreach;
 					//
@@ -2637,7 +2662,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 					//get the end point a little higher
 					lreach->end[2] += 10;
 					lreach->traveltype = TRAVEL_JUMP;
-					lreach->traveltime = 10;
+					lreach->traveltime = LADDER_TRAVEL_TIME;
 					lreach->next = areareachability[area2num];
 					areareachability[area2num] = lreach;
 					//
@@ -2686,7 +2711,7 @@ int AAS_Reachability_Ladder(int area1num, int area2num)
 					VectorCopy(lowestpoint, lreach->end);
 					lreach->end[2] += 5;
 					lreach->traveltype = TRAVEL_JUMP;
-					lreach->traveltime = 10;
+					lreach->traveltime = LADDER_TRAVEL_TIME;
 					lreach->next = areareachability[area2num];
 					areareachability[area2num] = lreach;
 					//
@@ -2873,7 +2898,7 @@ void AAS_Reachability_Teleport(void)
 				} //end else
 				VectorClear(cmdmove);
 				AAS_PredictClientMovement(&move, -1, destorigin, PRESENCE_NORMAL, qfalse,
-										velocity, cmdmove, 0, 30, 0.1f,
+										velocity, cmdmove, 0, PREDICTION_MAX_FRAMES, PREDICTION_FRAMETIME,
 										SE_HITGROUND|SE_ENTERWATER|SE_ENTERSLIME|
 										SE_ENTERLAVA|SE_HITGROUNDDAMAGE|SE_TOUCHJUMPPAD|SE_TOUCHTELEPORTER, 0, qfalse); //qtrue);
 				area2num = AAS_PointAreaNum(move.endpos);
@@ -3517,7 +3542,7 @@ void AAS_Reachability_JumpPad(void)
 		/*
 		//
 		AAS_FloatForBSPEpairKey(ent, "speed", &speed);
-		if (!speed) speed = 1000;
+		if (!speed) speed = JUMPPAD_DEFAULT_SPEED;
 //		AAS_VectorForBSPEpairKey(ent, "angles", angles);
 //		AAS_SetMovedir(angles, velocity);
 //		VectorScale(velocity, speed, velocity);
@@ -3618,7 +3643,7 @@ void AAS_Reachability_JumpPad(void)
 			for (i = 0; i < 20; i++)
 			{
 				AAS_PredictClientMovement(&move, -1, areastart, PRESENCE_NORMAL, qfalse,
-										velocity, cmdmove, 0, 30, 0.1f,
+										velocity, cmdmove, 0, PREDICTION_MAX_FRAMES, PREDICTION_FRAMETIME,
 										SE_HITGROUND|SE_ENTERWATER|SE_ENTERSLIME|
 										SE_ENTERLAVA|SE_HITGROUNDDAMAGE|SE_TOUCHJUMPPAD|SE_TOUCHTELEPORTER, 0, bot_visualizejumppads);
 				area2num = move.endarea;
@@ -3719,13 +3744,13 @@ void AAS_Reachability_JumpPad(void)
 						VectorScale(dir, speed, cmdmove);
 						//
 						AAS_PredictClientMovement(&move, -1, areastart, PRESENCE_NORMAL, qfalse,
-													velocity, cmdmove, 30, 30, 0.1f,
+													velocity, cmdmove, 30, PREDICTION_MAX_FRAMES, PREDICTION_FRAMETIME,
 													SE_ENTERWATER|SE_ENTERSLIME|
 													SE_ENTERLAVA|SE_HITGROUNDDAMAGE|
 													SE_TOUCHJUMPPAD|SE_TOUCHTELEPORTER|SE_HITGROUNDAREA, area2num, visualize);
 						//if prediction time wasn't enough to fully predict the movement
 						//don't enter slime or lava and don't fall from too high
-						if (move.frames < 30 && 
+						if (move.frames < PREDICTION_MAX_FRAMES && 
 								!(move.stopevent & (SE_ENTERSLIME|SE_ENTERLAVA|SE_HITGROUNDDAMAGE))
 								&& (move.stopevent & (SE_HITGROUNDAREA|SE_TOUCHJUMPPAD|SE_TOUCHTELEPORTER)))
 						{
@@ -4070,13 +4095,13 @@ int AAS_Reachability_WeaponJump(int area1num, int area2num)
 					*/
 					//
 					AAS_PredictClientMovement(&move, -1, areastart, PRESENCE_NORMAL, qtrue,
-												velocity, cmdmove, 30, 30, 0.1f,
+												velocity, cmdmove, 30, PREDICTION_MAX_FRAMES, PREDICTION_FRAMETIME,
 												SE_ENTERWATER|SE_ENTERSLIME|
 												SE_ENTERLAVA|SE_HITGROUNDDAMAGE|
 												SE_TOUCHJUMPPAD|SE_HITGROUND|SE_HITGROUNDAREA, area2num, visualize);
 					//if prediction time wasn't enough to fully predict the movement
 					//don't enter slime or lava and don't fall from too high
-					if (move.frames < 30 && 
+					if (move.frames < PREDICTION_MAX_FRAMES && 
 							!(move.stopevent & (SE_ENTERSLIME|SE_ENTERLAVA|SE_HITGROUNDDAMAGE))
 								&& (move.stopevent & (SE_HITGROUNDAREA|SE_TOUCHJUMPPAD)))
 					{
