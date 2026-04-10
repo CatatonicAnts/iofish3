@@ -245,6 +245,7 @@ public static unsafe class RendererExports
         _postProcess = new PostProcess();
         _postProcess.Init(_gl!, _currentWidth, _currentHeight);
         _scene.SetPostProcess(_postProcess);
+        _scene.InitShadowMapper(_gl!);
 
         // Fill glconfig_t so the engine doesn't crash
         byte* cfg = (byte*)config;

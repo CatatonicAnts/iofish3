@@ -26,6 +26,7 @@ public sealed unsafe class SceneManager
     private int _screenW;
     private int _screenH;
     private PostProcess? _postProcess;
+    private ShadowMapper? _shadowMapper;
 
     // GL resources for sprite/poly rendering
     private uint _spriteVao;
@@ -85,6 +86,13 @@ public sealed unsafe class SceneManager
     public void SetPostProcess(PostProcess? pp)
     {
         _postProcess = pp;
+    }
+
+    public void InitShadowMapper(GL gl)
+    {
+        _shadowMapper?.Dispose();
+        _shadowMapper = new ShadowMapper();
+        _shadowMapper.Init(gl);
     }
 
     public void ClearScene()
@@ -419,6 +427,25 @@ public sealed unsafe class SceneManager
         Span<float> vp = stackalloc float[16];
         MatMul(proj, view, vp);
 
+        // Collect and render shadow depth maps before main scene
+        if (_shadowMapper?.IsEnabled == true && hasWorld && _renderer3D != null && _models != null)
+        {
+            _shadowMapper.CollectShadows(_entities, _models, _bspWorld, viewOrg, viewAxis);
+            _shadowMapper.RenderShadowMaps(_renderer3D, _entities, _models);
+
+            // Re-bind scene FBO and restore viewport after shadow rendering
+            if (usePostProcess)
+            {
+                _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _postProcess!.SceneFbo);
+            }
+            else
+            {
+                _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+            }
+            _gl.Viewport(x, glY, (uint)width, (uint)height);
+            _gl.Scissor(x, glY, (uint)width, (uint)height);
+        }
+
         // Render skybox before world geometry
         if (hasWorld && _skyboxRenderer != null && _skyboxRenderer.IsLoaded)
         {
@@ -578,6 +605,18 @@ public sealed unsafe class SceneManager
         if (hasPolys)
         {
             DrawPolys(vp);
+        }
+
+        // Apply projected shadows via screen-space pass
+        if (_shadowMapper?.IsEnabled == true && hasWorld && usePostProcess)
+        {
+            Span<float> invVP = stackalloc float[16];
+            if (ShadowMapper.InvertMatrix(vp, invVP))
+            {
+                _shadowMapper.ApplyShadows(_postProcess!.SceneDepthTex, invVP, x, glY, width, height);
+                // Re-bind scene FBO after shadow application
+                _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _postProcess.SceneFbo);
+            }
         }
 
         // Apply post-processing (bloom) and blit to default framebuffer

@@ -346,6 +346,8 @@ public sealed unsafe class PostProcess : IDisposable
     #endregion
 
     public bool IsEnabled => _enabled;
+    public uint SceneDepthTex => _sceneDepthTex;
+    public uint SceneFbo => _sceneFbo;
 
     public void Init(GL gl, int width, int height)
     {
@@ -370,11 +372,14 @@ public sealed unsafe class PostProcess : IDisposable
         _autoExposure = Interop.EngineImports.Cvar_VariableIntegerValue("r_autoExposure") != 0;
         _ssaoEnabled = Interop.EngineImports.Cvar_VariableIntegerValue("r_ssao") != 0;
 
-        if (!_bloomEnabled && !_hdrEnabled && !_ssaoEnabled)
+        int rShadows = Interop.EngineImports.Cvar_VariableIntegerValue("r_shadows");
+        bool shadowsEnabled = rShadows >= 1;
+
+        if (!_bloomEnabled && !_hdrEnabled && !_ssaoEnabled && !shadowsEnabled)
         {
             _enabled = false;
             Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
-                "[.NET] Post-processing disabled (r_bloom 0, r_hdr 0, r_ssao 0)\n");
+                "[.NET] Post-processing disabled (r_bloom 0, r_hdr 0, r_ssao 0, r_shadows 0)\n");
             return;
         }
 

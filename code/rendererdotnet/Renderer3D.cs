@@ -23,6 +23,10 @@ public sealed unsafe class Renderer3D : IDisposable
     private int _viewPosLoc;
     private int _fullbrightLoc;
 
+    // Depth-only shader for shadow map rendering
+    private uint _depthProgram;
+    private int _depthMvpLoc;
+
     // Reusable buffers for interpolated vertex data
     private uint _vao;
     private uint _vbo;
@@ -91,6 +95,20 @@ public sealed unsafe class Renderer3D : IDisposable
         }
         """;
 
+    private const string DepthVertSrc = """
+        #version 450 core
+        layout(location = 0) in vec3 aPos;
+        uniform mat4 uMVP;
+        void main() {
+            gl_Position = uMVP * vec4(aPos, 1.0);
+        }
+        """;
+
+    private const string DepthFragSrc = """
+        #version 450 core
+        void main() { }
+        """;
+
     public void Init(GL gl)
     {
         _gl = gl;
@@ -104,6 +122,10 @@ public sealed unsafe class Renderer3D : IDisposable
         _envMapLoc = _gl.GetUniformLocation(_program, "uEnvMap");
         _viewPosLoc = _gl.GetUniformLocation(_program, "uViewPos");
         _fullbrightLoc = _gl.GetUniformLocation(_program, "uFullbright");
+
+        // Depth-only shader for shadow maps
+        _depthProgram = CreateProgram(DepthVertSrc, DepthFragSrc);
+        _depthMvpLoc = _gl.GetUniformLocation(_depthProgram, "uMVP");
 
         _vao = _gl.GenVertexArray();
         _gl.BindVertexArray(_vao);
@@ -425,10 +447,132 @@ public sealed unsafe class Renderer3D : IDisposable
         _gl.BindVertexArray(0);
     }
 
+    /// <summary>
+    /// Render an MD3 surface using only the depth shader (for shadow map generation).
+    /// </summary>
+    public void DrawSurfaceDepthOnly(Md3Surface surface, int frame, int oldFrame, float backlerp, float* mvp)
+    {
+        int numVerts = surface.NumVerts;
+        int numTris = surface.NumTriangles;
+        if (numVerts == 0 || numTris == 0) return;
+
+        int maxFrame = surface.NumFrames - 1;
+        if (frame > maxFrame) frame = maxFrame;
+        if (oldFrame > maxFrame) oldFrame = maxFrame;
+        if (frame < 0) frame = 0;
+        if (oldFrame < 0) oldFrame = 0;
+
+        int needed = numVerts * FLOATS_PER_VERT;
+        if (_vertBuf.Length < needed)
+            _vertBuf = new float[needed];
+
+        float frontlerp = 1.0f - backlerp;
+        int frameOff = frame * numVerts * 3;
+        int oldOff = oldFrame * numVerts * 3;
+
+        for (int i = 0; i < numVerts; i++)
+        {
+            int pi = i * 3;
+            int vo = i * FLOATS_PER_VERT;
+            _vertBuf[vo] = surface.Positions[frameOff + pi] * frontlerp + surface.Positions[oldOff + pi] * backlerp;
+            _vertBuf[vo + 1] = surface.Positions[frameOff + pi + 1] * frontlerp + surface.Positions[oldOff + pi + 1] * backlerp;
+            _vertBuf[vo + 2] = surface.Positions[frameOff + pi + 2] * frontlerp + surface.Positions[oldOff + pi + 2] * backlerp;
+            _vertBuf[vo + 3] = 0; _vertBuf[vo + 4] = 0; _vertBuf[vo + 5] = 0;
+            _vertBuf[vo + 6] = 0; _vertBuf[vo + 7] = 0;
+        }
+
+        _gl.UseProgram(_depthProgram);
+        _gl.UniformMatrix4(_depthMvpLoc, 1, false, mvp);
+        _gl.BindVertexArray(_vao);
+
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+        fixed (float* p = _vertBuf)
+            _gl.BufferData(BufferTargetARB.ArrayBuffer,
+                (nuint)(numVerts * FLOATS_PER_VERT * sizeof(float)), p, BufferUsageARB.StreamDraw);
+
+        _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _ebo);
+        fixed (int* p = surface.Indices)
+            _gl.BufferData(BufferTargetARB.ElementArrayBuffer,
+                (nuint)(numTris * 3 * sizeof(int)), p, BufferUsageARB.StreamDraw);
+
+        _gl.Disable(EnableCap.CullFace);
+        _gl.DrawElements(PrimitiveType.Triangles, (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
+        _gl.BindVertexArray(0);
+    }
+
+    /// <summary>
+    /// Render an IQM surface using only the depth shader (for shadow map generation).
+    /// </summary>
+    public void DrawIqmSurfaceDepthOnly(IqmSurface surface, IqmModel model,
+                                         float* poseMats, int numJoints, float* mvp, float* modelMatrix)
+    {
+        int numVerts = surface.NumVertexes;
+        int numTris = surface.NumTriangles;
+        if (numVerts == 0 || numTris == 0) return;
+
+        int needed = numVerts * FLOATS_PER_VERT;
+        if (_vertBuf.Length < needed)
+            _vertBuf = new float[needed];
+
+        int firstVert = surface.FirstVertex;
+        for (int i = 0; i < numVerts; i++)
+        {
+            int vi = firstVert + i;
+            int vo = i * FLOATS_PER_VERT;
+            float px = model.Positions[vi * 3], py = model.Positions[vi * 3 + 1], pz = model.Positions[vi * 3 + 2];
+            float ox = 0, oy = 0, oz = 0;
+
+            for (int bi = 0; bi < 4; bi++)
+            {
+                int boneIdx = model.BlendIndexes[vi * 4 + bi];
+                float weight = model.BlendWeights[vi * 4 + bi] / 255.0f;
+                if (weight <= 0 || boneIdx >= numJoints) continue;
+                float* m = poseMats + boneIdx * 12;
+                ox += weight * (m[0] * px + m[1] * py + m[2] * pz + m[3]);
+                oy += weight * (m[4] * px + m[5] * py + m[6] * pz + m[7]);
+                oz += weight * (m[8] * px + m[9] * py + m[10] * pz + m[11]);
+            }
+
+            _vertBuf[vo] = ox; _vertBuf[vo + 1] = oy; _vertBuf[vo + 2] = oz;
+            _vertBuf[vo + 3] = 0; _vertBuf[vo + 4] = 0; _vertBuf[vo + 5] = 0;
+            _vertBuf[vo + 6] = 0; _vertBuf[vo + 7] = 0;
+        }
+
+        int firstTri = surface.FirstTriangle;
+        int numIdx = numTris * 3;
+        if (_iqmIdxBuf.Length < numIdx)
+            _iqmIdxBuf = new int[numIdx];
+        for (int i = 0; i < numIdx; i++)
+            _iqmIdxBuf[i] = model.Triangles[firstTri * 3 + i] - firstVert;
+
+        _gl.UseProgram(_depthProgram);
+        _gl.UniformMatrix4(_depthMvpLoc, 1, false, mvp);
+        _gl.BindVertexArray(_vao);
+
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+        fixed (float* p = _vertBuf)
+            _gl.BufferData(BufferTargetARB.ArrayBuffer,
+                (nuint)(numVerts * FLOATS_PER_VERT * sizeof(float)), p, BufferUsageARB.StreamDraw);
+
+        _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _ebo);
+        fixed (int* p = _iqmIdxBuf)
+            _gl.BufferData(BufferTargetARB.ElementArrayBuffer,
+                (nuint)(numIdx * sizeof(int)), p, BufferUsageARB.StreamDraw);
+
+        _gl.Disable(EnableCap.CullFace);
+        _gl.DrawElements(PrimitiveType.Triangles, (uint)numIdx, DrawElementsType.UnsignedInt, null);
+        _gl.BindVertexArray(0);
+    }
+
     private uint CreateProgram()
     {
-        uint vs = Compile(ShaderType.VertexShader, VertSrc);
-        uint fs = Compile(ShaderType.FragmentShader, FragSrc);
+        return CreateProgram(VertSrc, FragSrc);
+    }
+
+    private uint CreateProgram(string vertSrc, string fragSrc)
+    {
+        uint vs = Compile(ShaderType.VertexShader, vertSrc);
+        uint fs = Compile(ShaderType.FragmentShader, fragSrc);
 
         uint prog = _gl.CreateProgram();
         _gl.AttachShader(prog, vs);
@@ -470,5 +614,6 @@ public sealed unsafe class Renderer3D : IDisposable
         if (_vbo != 0) { _gl.DeleteBuffer(_vbo); _vbo = 0; }
         if (_vao != 0) { _gl.DeleteVertexArray(_vao); _vao = 0; }
         if (_program != 0) { _gl.DeleteProgram(_program); _program = 0; }
+        if (_depthProgram != 0) { _gl.DeleteProgram(_depthProgram); _depthProgram = 0; }
     }
 }

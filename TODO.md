@@ -45,7 +45,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] **Specular mapping** - `specularMap` stage type with Blinn-Phong specular highlights. Specular map sampled in fragment shader, combined with view-dependent half-vector lighting. `CPX 3`
 - [x] **PBR (Physically Based Rendering)** - Metallic/roughness workflow controlled by `r_pbr` cvar. Specular map reinterpreted: .r=gloss, .g=metallic. GGX microfacet BRDF replaces Blinn-Phong. sRGB↔linear conversions for correct lighting. `CPX 4`
 - [x] **Parallax mapping** - Steep parallax mapping with 16-step linear search and interpolation. Height data from normal map alpha channel. Controlled by `r_parallaxMapping` cvar (default off). `CPX 3`
-- [ ] **Shadow mapping** - Projection shadows (512×512 maps), sun shadow framework. Partially implemented in GL2 itself. `CPX 5`
+- [x] **Shadow mapping** - Projection shadows (512×512 maps), sun shadow framework. Partially implemented in GL2 itself. `CPX 5`
 - [ ] **Cubemap reflections** - GL2 loads/renders cubemaps for environment reflections with parallax correction. `CPX 4`
 - [x] **Deluxe mapping** - World deluxe maps store per-pixel light direction. Detected automatically from interleaved BSP lightmaps (even=lightmap, odd=deluxe). Enhances normal-mapped surfaces with per-texel lighting and specular direction. Controlled by `r_deluxeMapping` cvar (default on). `CPX 3`
 - [x] **SSAO** - Screen-space ambient occlusion with Poisson disc sampling (9-tap), bilateral blur, and multiplicative compositing. Depth texture from scene FBO sampled at half resolution. Controlled by `r_ssao` cvar (default off). `CPX 3`
@@ -158,7 +158,7 @@ The cgame DLL interface is:
 
 - [x] **HUD customization cvars** - Global HUD scaling (`cg_hudScale`), per-element enable/disable (`cg_drawPowerups`, `cg_drawPickupItem`, `cg_drawHoldableItem`, `cg_drawScores`). Centered-scaling approach with crosshair viewport centering. `CPX 4`
 - [ ] **Enable Freetype font rendering by default** - `USE_FREETYPE` is OFF by default. Evaluate and enable for improved font quality. `CPX 2`
-- [ ] **Complete shadow mapping in .NET renderer** - Take the GL2 one as a base. Multiple unimplemented shadow features in `code/renderergl2/tr_shadows.c`. Sun shadows also render incorrectly in cubemaps (`tr_main.c`, `tr_bsp.c`). `CPX 4`
+- [x] **Complete shadow mapping in .NET renderer** - Take the GL2 one as a base. Multiple unimplemented shadow features in `code/renderergl2/tr_shadows.c`. Sun shadows also render incorrectly in cubemaps (`tr_main.c`, `tr_bsp.c`). `CPX 4`
 
 ### Medium Priority
 
@@ -266,6 +266,7 @@ The cgame DLL interface is:
 - [x] Event handler wiring — 11 event types fully implemented: EV_CHANGE_WEAPON, EV_MISSILE_HIT/MISS/MISS_METAL, EV_BULLET_HIT_WALL/FLESH, EV_SHOTGUN, EV_RAILTRAIL, EV_GIB_PLAYER, EV_PLAYER_TELEPORT_IN/OUT, EV_JUMP_PAD, EV_SCOREPLUM
 - [x] Player angles — CG_PlayerAngles/CG_SwingAngles with swing damping for smooth head/torso/legs rotation and velocity-based lean
 - [x] HUD customization cvars — global HUD scaling (cg_hudScale) with centered-scaling, per-element toggles (cg_drawPowerups, cg_drawPickupItem, cg_drawHoldableItem, cg_drawScores), crosshair bypasses bias for viewport centering
+- [x] Shadow mapping — projected shadows (pshadows) with 16×512px depth FBOs, screen-space application with 3×3 PCF, light grid sampling, entity merging, distance fade
 
 ### Improvements
 
