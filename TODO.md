@@ -80,7 +80,6 @@ A list of planned features, improvements, and tasks for this project.
 ### Code Refactoring
 
 - [ ] **Refactor global botlib state** - Remove global structure in `code/botlib/be_interface.h`, refactor to instance-based. 530+ refs across 28 files. `CPX 5`
-- [ ] **UI subsystem architecture** - Consolidate common data into unified structures, separate text vs window rendering concerns (`code/ui/ui_shared.h`). `CPX 4`
 
 ---
 
@@ -143,7 +142,9 @@ A list of planned features, improvements, and tasks for this project.
 - [x] R_ColorShiftLightingBytes, inline BSP models, model shader blend modes, BSP transparent surface detection
 - [x] GL2 VBO hash optimization, shaderTime float→int fix, sky clearing optimization
 
-### Fixed Bugs
+### Code Cleanup
+
+- [x] UI subsystem: organized WINDOW_* flags by concern, renamed animation fields, extracted windowTransition_t sub-struct
 
 - [x] Missing S_Respatialize in cgame_dotnet, continuous rocket smoke trail, single lightmap fullbright (dotnet + GL1)
 - [x] Transparent surfaces with surfaceparm trans rendered opaque, items not visible in cgame_dotnet
