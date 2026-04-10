@@ -507,6 +507,7 @@ public sealed unsafe class SceneManager
                         uint texId = _shaders.GetTextureId(shaderHandle);
                         bool envMap = _shaders.GetHasEnvMap(shaderHandle);
                         BlendMode blend = _shaders.GetBlendMode(shaderHandle);
+                        int cullMode = _shaders.GetCullMode(shaderHandle);
 
                         fixed (float* mvpPtr = mvp)
                         fixed (float* modelPtr = modelMat)
@@ -514,7 +515,7 @@ public sealed unsafe class SceneManager
                         {
                             _renderer3D.DrawIqmSurface(surface, iqmModel, posePtr, numJoints,
                                 mvpPtr, modelPtr, texId, ent.R, ent.G, ent.B, ent.A,
-                                envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend,
+                                envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend, cullMode,
                                 ambR, ambG, ambB, dLightR, dLightG, dLightB, ldX, ldY, ldZ);
                         }
                     }
@@ -541,6 +542,7 @@ public sealed unsafe class SceneManager
                     uint texId = _shaders.GetTextureId(shaderHandle);
                     bool envMap = _shaders.GetHasEnvMap(shaderHandle);
                     BlendMode blend = _shaders.GetBlendMode(shaderHandle);
+                    int cullMode = _shaders.GetCullMode(shaderHandle);
 
                     float r = ent.R;
                     float g = ent.G;
@@ -552,7 +554,7 @@ public sealed unsafe class SceneManager
                     {
                         _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
                             mvpPtr, modelPtr, texId, r, g, b, a,
-                            envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend,
+                            envMap, viewOrg[0], viewOrg[1], viewOrg[2], blend, cullMode,
                             ambR, ambG, ambB, dLightR, dLightG, dLightB, ldX, ldY, ldZ);
                     }
                 }
@@ -688,7 +690,6 @@ public sealed unsafe class SceneManager
         void main() {
             vec4 texColor = texture(uTex, vUV);
             oColor = texColor * vColor;
-            if (oColor.a < 0.01) discard;
         }
         """;
 
@@ -1271,6 +1272,7 @@ public sealed unsafe class SceneManager
                         uint texId = _shaders.GetTextureId(shaderHandle);
                         bool envMap = _shaders.GetHasEnvMap(shaderHandle);
                         BlendMode blend = _shaders.GetBlendMode(shaderHandle);
+                        int cullMode = _shaders.GetCullMode(shaderHandle);
 
                         fixed (float* mvpPtr = mvp)
                         fixed (float* modelPtr = modelMat)
@@ -1278,7 +1280,7 @@ public sealed unsafe class SceneManager
                         {
                             _renderer3D!.DrawIqmSurface(surface, iqmModel, posePtr, numJoints,
                                 mvpPtr, modelPtr, texId, ent.R, ent.G, ent.B, ent.A,
-                                envMap, newViewOrg[0], newViewOrg[1], newViewOrg[2], blend,
+                                envMap, newViewOrg[0], newViewOrg[1], newViewOrg[2], blend, cullMode,
                                 ambR, ambG, ambB, dLR, dLG, dLB, ldX, ldY, ldZ);
                         }
                     }
@@ -1298,13 +1300,14 @@ public sealed unsafe class SceneManager
                     uint texId = _shaders.GetTextureId(shaderHandle);
                     bool envMap = _shaders.GetHasEnvMap(shaderHandle);
                     BlendMode blend = _shaders.GetBlendMode(shaderHandle);
+                    int cullMode = _shaders.GetCullMode(shaderHandle);
 
                     fixed (float* mvpPtr = mvp)
                     fixed (float* modelPtr = modelMat)
                     {
                         _renderer3D!.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
                             mvpPtr, modelPtr, texId, ent.R, ent.G, ent.B, ent.A,
-                            envMap, newViewOrg[0], newViewOrg[1], newViewOrg[2], blend,
+                            envMap, newViewOrg[0], newViewOrg[1], newViewOrg[2], blend, cullMode,
                             ambR, ambG, ambB, dLR, dLG, dLB, ldX, ldY, ldZ);
                     }
                 }

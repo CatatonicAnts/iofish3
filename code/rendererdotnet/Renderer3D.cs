@@ -135,7 +135,7 @@ public sealed unsafe class Renderer3D : IDisposable
                             float* mvp, float* modelMatrix, uint textureId,
                             float r, float g, float b, float a,
                             bool envMap = false, float viewX = 0, float viewY = 0, float viewZ = 0,
-                            BlendMode blend = default,
+                            BlendMode blend = default, int cullMode = 0,
                             float ambR = 0.5f, float ambG = 0.5f, float ambB = 0.5f,
                             float dirLightR = 0.5f, float dirLightG = 0.5f, float dirLightB = 0.5f,
                             float lightDirX = 0.57735f, float lightDirY = 0.57735f, float lightDirZ = 0.57735f)
@@ -221,8 +221,16 @@ public sealed unsafe class Renderer3D : IDisposable
                 (nuint)(numTris * 3 * sizeof(int)), p, BufferUsageARB.StreamDraw);
 
         _gl.Enable(EnableCap.DepthTest);
-        _gl.Enable(EnableCap.CullFace);
-        _gl.CullFace(TriangleFace.Front); // Q3 uses clockwise winding
+        // Apply per-shader cull mode: 0=front (Q3 CW default), 1=back, 2=none
+        if (cullMode == 2)
+        {
+            _gl.Disable(EnableCap.CullFace);
+        }
+        else
+        {
+            _gl.Enable(EnableCap.CullFace);
+            _gl.CullFace(cullMode == 1 ? TriangleFace.Back : TriangleFace.Front);
+        }
 
         // Enable blending from shader blend mode or entity alpha
         if (blend.NeedsBlending)
@@ -270,7 +278,7 @@ public sealed unsafe class Renderer3D : IDisposable
                                 float* mvp, float* modelMatrix, uint textureId,
                                 float r, float g, float b, float a,
                                 bool envMap = false, float viewX = 0, float viewY = 0, float viewZ = 0,
-                                BlendMode blend = default,
+                                BlendMode blend = default, int cullMode = 0,
                                 float ambR = 0.5f, float ambG = 0.5f, float ambB = 0.5f,
                                 float dirLightR = 0.5f, float dirLightG = 0.5f, float dirLightB = 0.5f,
                                 float lightDirX = 0.57735f, float lightDirY = 0.57735f, float lightDirZ = 0.57735f)
@@ -376,8 +384,16 @@ public sealed unsafe class Renderer3D : IDisposable
                 (nuint)(numIdx * sizeof(int)), p, BufferUsageARB.StreamDraw);
 
         _gl.Enable(EnableCap.DepthTest);
-        _gl.Enable(EnableCap.CullFace);
-        _gl.CullFace(TriangleFace.Front);
+        // Apply per-shader cull mode: 0=front (Q3 CW default), 1=back, 2=none
+        if (cullMode == 2)
+        {
+            _gl.Disable(EnableCap.CullFace);
+        }
+        else
+        {
+            _gl.Enable(EnableCap.CullFace);
+            _gl.CullFace(cullMode == 1 ? TriangleFace.Back : TriangleFace.Front);
+        }
 
         if (blend.NeedsBlending)
         {

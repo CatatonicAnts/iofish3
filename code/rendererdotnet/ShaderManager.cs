@@ -365,7 +365,14 @@ public unsafe class ShaderManager
         var texResult = ImageLoader.LoadTextureFromEngineFS(entry.Name);
 
         // Look up shader script for metadata (blend, alpha test, transparency)
+        // Q3 strips file extensions before shader script lookup
         ShaderDef? def = _scriptParser?.GetShaderDef(entry.Name);
+        if (def == null && _scriptParser != null)
+        {
+            int dotIdx = entry.Name.LastIndexOf('.');
+            if (dotIdx > 0)
+                def = _scriptParser.GetShaderDef(entry.Name[..dotIdx]);
+        }
 
         // If direct load failed, try the script's image path
         if (texResult == null && def?.ImagePath != null && !def.ImagePath.StartsWith('*'))
@@ -394,6 +401,14 @@ public unsafe class ShaderManager
             entry.Deforms = def.Deforms;
             entry.NoDLight = def.NoDLight;
             entry.NoMarks = def.NoMarks;
+
+            // Log blend mode for model shaders (diagnostic for flash/effect rendering)
+            if (entry.Name.StartsWith("models/", StringComparison.OrdinalIgnoreCase) &&
+                entry.Blend.NeedsBlending)
+            {
+                Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
+                    $"[.NET] Shader '{entry.Name}' blend: src=0x{entry.Blend.SrcFactor:X}, dst=0x{entry.Blend.DstFactor:X}, cull={entry.CullMode}\n");
+            }
 
             // Load normal map if specified
             if (def.NormalMapPath != null && _renderer != null)
@@ -487,6 +502,12 @@ public unsafe class ShaderManager
                 }
                 entry.Stages = runtimeStages;
             }
+        }
+        else if (entry.Name.StartsWith("models/", StringComparison.OrdinalIgnoreCase))
+        {
+            // No shader script found for a model shader — blend defaults to Opaque
+            Interop.EngineImports.Printf(Interop.EngineImports.PRINT_WARNING,
+                $"[.NET] WARNING: No shader script for model shader '{entry.Name}' (will render opaque)\n");
         }
 
         if (texResult == null)

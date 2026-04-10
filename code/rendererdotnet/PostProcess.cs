@@ -67,8 +67,8 @@ public sealed unsafe class PostProcess : IDisposable
     private int _ssaoBlurTexelLoc;
 
     // Bloom settings
-    private const float BloomThreshold = 0.7f;
-    private const float BloomStrength = 0.35f;
+    private const float BloomThreshold = 0.85f;
+    private const float BloomStrength = 0.15f;
     private const float ExposureBlendFactor = 0.03f;
 
     #region GLSL Shaders
