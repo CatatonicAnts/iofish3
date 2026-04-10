@@ -842,6 +842,51 @@ void Cmd_List_f (void)
 }
 
 /*
+===============
+Cmd_Find_f
+
+Searches both commands and cvars for a substring match.
+===============
+*/
+static void Cmd_Find_f( void ) {
+	extern cvar_t *cvar_vars;
+	cmd_function_t	*cmd;
+	cvar_t			*var;
+	const char		*pattern;
+	int				cmdCount, cvarCount;
+
+	if ( Cmd_Argc() != 2 ) {
+		Com_Printf( "usage: find <pattern>\n" );
+		return;
+	}
+
+	pattern = Cmd_Argv( 1 );
+	cmdCount = 0;
+	cvarCount = 0;
+
+	Com_Printf( "--- Commands ---\n" );
+	for ( cmd = cmd_functions; cmd; cmd = cmd->next ) {
+		if ( Q_stristr( cmd->name, pattern ) ) {
+			Com_Printf( "  %s\n", cmd->name );
+			cmdCount++;
+		}
+	}
+
+	Com_Printf( "--- Variables ---\n" );
+	for ( var = cvar_vars; var; var = var->next ) {
+		if ( !var->name )
+			continue;
+		if ( Q_stristr( var->name, pattern ) ) {
+			Com_Printf( "  %s = \"%s\"\n", var->name, var->string );
+			cvarCount++;
+		}
+	}
+
+	Com_Printf( "\nFound %i commands and %i variables matching '%s'\n",
+		cmdCount, cvarCount, pattern );
+}
+
+/*
 ==================
 Cmd_CompleteCfgName
 ==================
@@ -859,6 +904,7 @@ Cmd_Init
 */
 void Cmd_Init (void) {
 	Cmd_AddCommand ("cmdlist",Cmd_List_f);
+	Cmd_AddCommand ("find",Cmd_Find_f);
 	Cmd_AddCommand ("exec",Cmd_Exec_f);
 	Cmd_AddCommand ("execq",Cmd_Exec_f);
 	Cmd_SetCommandCompletionFunc( "exec", Cmd_CompleteCfgName );

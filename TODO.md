@@ -31,6 +31,7 @@ A list of planned features, improvements, and tasks for this project.
 
 - [ ] **MDR model format** - Advanced skeletal model format with bone matrices. `CPX 3`
 - [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
+- [ ] **Exclude effects from shadow mapping** - Skip shooting effect models (plasma hit, shotgun bullet hit cones, lightning sparks) in shadow pass. ShadowMapper.cs already filters by RF_NOSHADOW; need to flag effect entities in cgame or check shader properties. `CPX 2`
 
 *Tier 4 complete (videoMap, nopicmip, anisotropic, greyscale, screenshots, surfaceparm, entityMergable). See Completed section.*
 
@@ -60,7 +61,15 @@ A list of planned features, improvements, and tasks for this project.
 
 - [ ] **HUD offset cvars** - Global offsets (cg_hudOffsetX, cg_hudOffsetY) and per-element Y offsets (cg_hudStatusOffsetY, cg_hudWeaponOffsetY, cg_hudAmmoWarningOffsetY) implemented. Remaining: test in-game at various HUD scales. `CPX 2 (mostly done)`
 
-- [ ] **Widescreen FOV verification** - Hor+ FOV implemented (cg_fov as 4:3 reference, vertical stays constant, horizontal expands for widescreen). Added cg_fovViewmodel cvar for independent weapon FOV. Weapon pull-back uses actual rendered fov_x. Remaining: test on ultra-wide (21:9) display, verify zoom transitions feel natural with Hor+ active. `CPX 2 (mostly done)`
+- [x] **Widescreen FOV verification** - Hor+ FOV implemented (cg_fov as 4:3 reference, vertical stays constant, horizontal expands for widescreen). Added cg_fovViewmodel cvar for independent weapon FOV. Weapon pull-back uses actual rendered fov_x. Remaining: test on ultra-wide (21:9) display, verify zoom transitions feel natural with Hor+ active. `CPX 2 (mostly done)`
+
+- [ ] **Skirmish menu map filter** - Add filter in skirmish/start server menu to show only downloaded maps (not in base pak .pk3 files). Add a flag/toggle to load the map using `devmap` instead of `map`. Requires tracking map origin (pk3 vs loose file) in UI_LoadArenasIntoMapList and adding filter UI. `CPX 3`
+
+### Low Priority
+
+- [ ] **Find console command** - `find <pattern>` searches both commands and cvars matching a substring, printing all matches. Similar to existing `cmdlist`/`cvarlist` filtering but combined. `CPX 1`
+
+- [ ] **.NET cgame mod loading** - Load .NET mod assemblies from `baseq3/mods/cgame/` directory, allowing HUD extensions and game event hooks without modifying base cgame. Requires plugin interface design, dynamic AssemblyLoadContext loading, registration API for commands/cvars/hooks. `CPX 4`
 
 ---
 
@@ -100,10 +109,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### Uncategorized (Analyze and create TODO entries in above appropriate sections with priority. Do not fix or implement them just yet. Assign complexity points where applicable. Do not delete this section when you are done, just empty it)
 
-- Shooting effect models should be excluded from shadow mapping, like the plasma hit or shotgun bullet hit cones, or lighting sparks
-- Add a filter in the skrimish menu to show only downloaded maps (not in pak .pk3 files), add a flag that will load the map using devmap instead of normal
-- Implement "find" console command, when used like "find debug" it will print all console commands/variables which have "debug" in them
-- Add for cgame the ability to load .NET mods from a "baseq3/mods/cgame" directory. This would allow for changes without having to modify the base game. One use case would be adding custom GUI elements to the HUD without having to change the base cgame code, by loading a mod that adds new elements and hooks into existing ones. This would require a way for the mod to register new console commands and variables, and to hook into existing game events.
+*(empty)*
 
 ---
 
