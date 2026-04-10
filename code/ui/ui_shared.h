@@ -39,30 +39,41 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define MAX_COLOR_RANGES 10
 #define MAX_OPEN_MENUS 16
 
-#define WINDOW_MOUSEOVER			0x00000001	// mouse is over it, non exclusive
-#define WINDOW_HASFOCUS				0x00000002	// has cursor focus, exclusive
+// Window flags — visibility
 #define WINDOW_VISIBLE				0x00000004	// is visible
-#define WINDOW_GREY						0x00000008	// is visible but grey ( non-active )
-#define WINDOW_DECORATION			0x00000010	// for decoration only, no mouse, keyboard, etc.. 
+#define WINDOW_GREY					0x00000008	// is visible but grey (non-active)
 #define WINDOW_FADINGOUT			0x00000020	// fading out, non-active
 #define WINDOW_FADINGIN				0x00000040	// fading in
-#define WINDOW_MOUSEOVERTEXT	0x00000080	// mouse is over it, non exclusive
-#define WINDOW_INTRANSITION		0x00000100	// window is in transition
-#define WINDOW_FORECOLORSET		0x00000200	// forecolor was explicitly set ( used to color alpha images or not )
-#define WINDOW_HORIZONTAL			0x00000400	// for list boxes and sliders, vertical is default this is set of horizontal
-#define WINDOW_LB_LEFTARROW		0x00000800	// mouse is over left/up arrow
-#define WINDOW_LB_RIGHTARROW	0x00001000	// mouse is over right/down arrow
+#define WINDOW_TIMEDVISIBLE			0x00800000	// visibility timing (NOT implemented)
+#define WINDOW_FORCED				0x00100000	// forced open
+#define WINDOW_POPUP				0x00200000	// popup
+
+// Window flags — mouse/focus state
+#define WINDOW_MOUSEOVER			0x00000001	// mouse is over it, non exclusive
+#define WINDOW_HASFOCUS				0x00000002	// has cursor focus, exclusive
+#define WINDOW_MOUSEOVERTEXT		0x00000080	// mouse is over it, non exclusive
+
+// Window flags — animation/transition
+#define WINDOW_INTRANSITION			0x00000100	// window is in transition
+#define WINDOW_ORBITING				0x00010000	// item is in orbit
+
+// Window flags — listbox scrollbar regions
+#define WINDOW_LB_LEFTARROW			0x00000800	// mouse is over left/up arrow
+#define WINDOW_LB_RIGHTARROW		0x00001000	// mouse is over right/down arrow
 #define WINDOW_LB_THUMB				0x00002000	// mouse is over thumb
 #define WINDOW_LB_PGUP				0x00004000	// mouse is over page up
 #define WINDOW_LB_PGDN				0x00008000	// mouse is over page down
-#define WINDOW_ORBITING				0x00010000	// item is in orbit
-#define WINDOW_OOB_CLICK			0x00020000	// close on out of bounds click
+
+// Window flags — text
 #define WINDOW_WRAPPED				0x00040000	// manually wrap text
 #define WINDOW_AUTOWRAPPED			0x00080000	// auto wrap text
-#define WINDOW_FORCED					0x00100000	// forced open
-#define WINDOW_POPUP					0x00200000	// popup
-#define WINDOW_BACKCOLORSET		0x00400000	// backcolor was explicitly set 
-#define WINDOW_TIMEDVISIBLE		0x00800000	// visibility timing ( NOT implemented )
+
+// Window flags — style/layout
+#define WINDOW_DECORATION			0x00000010	// for decoration only, no mouse, keyboard, etc.
+#define WINDOW_FORECOLORSET			0x00000200	// forecolor was explicitly set (used to color alpha images)
+#define WINDOW_HORIZONTAL			0x00000400	// for list boxes and sliders, vertical is default
+#define WINDOW_OOB_CLICK			0x00020000	// close on out of bounds click
+#define WINDOW_BACKCOLORSET			0x00400000	// backcolor was explicitly set
 
 
 // CGAME cursor type bits
@@ -120,10 +131,11 @@ typedef struct {
 
 typedef rectDef_t Rectangle;
 
-// FIXME: do something to separate text vs window stuff
+// NOTE: windowDef_t contains both layout and appearance data. A future
+// refactoring could separate text/animation concerns into sub-structs.
 typedef struct {
   Rectangle rect;                 // client coord rectangle
-  Rectangle rectClient;           // screen coord rectangle
+  Rectangle rectClient;           // screen coord rectangle (after scaling)
   const char *name;               //
   const char *group;              // if it belongs to a group
   const char *cinematicName;		  // cinematic name
@@ -133,15 +145,15 @@ typedef struct {
   int ownerDraw;									// ownerDraw style
 	int ownerDrawFlags;							// show flags for ownerdraw items
   float borderSize;               // 
-  int flags;                      // visible, focus, mouseover, cursor
-  Rectangle rectEffects;          // for various effects
-  Rectangle rectEffects2;         // for various effects
-  int offsetTime;                 // time based value for various effects
-  int nextTime;                   // time next effect should cycle
+  int flags;                      // WINDOW_* bitmask (visibility, focus, animation, etc.)
+  Rectangle rectTarget;           // transition target rect / orbit center point
+  Rectangle rectStep;             // per-step delta towards rectTarget
+  int transitionInterval;         // time between transition steps (ms)
+  int nextTransitionTime;         // time when next transition/fade step occurs
   vec4_t foreColor;               // text color
-  vec4_t backColor;               // border color
+  vec4_t backColor;               // background fill color
   vec4_t borderColor;             // border color
-  vec4_t outlineColor;            // border color
+  vec4_t outlineColor;            // highlight color (e.g. listbox selected item)
   qhandle_t background;           // background asset  
 } windowDef_t;
 
@@ -153,16 +165,9 @@ typedef struct {
 	float		high;
 } colorRangeDef_t;
 
-// FIXME: combine flags into bitfields to save space
-// FIXME: consolidate all of the common stuff in one structure for menus and items
-// THINKABOUTME: is there any compelling reason not to have items contain items
-// and do away with a menu per say.. major issue is not being able to dynamically allocate 
-// and destroy stuff.. Another point to consider is adding an alloc free call for vm's and have 
-// the engine just allocate the pool for it based on a cvar
-// many of the vars are re-used for different item types, as such they are not always named appropriately
-// the benefits of c++ in DOOM will greatly help crap like this
-// FIXME: need to put a type ptr that points to specific type info per type
-// 
+// NOTE: many vars are re-used for different item types; they are not always
+// named appropriately. A future refactoring could split into per-type structs
+// and use a union or typed pointer (typeData) more consistently.
 #define MAX_LB_COLUMNS 16
 
 typedef struct columnInfo_s {

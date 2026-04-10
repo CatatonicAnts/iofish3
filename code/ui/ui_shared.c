@@ -639,7 +639,7 @@ void Window_Paint(Window *w, float fadeAmount, float fadeClamp, float fadeCycle)
   if (w->style == WINDOW_STYLE_FILLED) {
     // box, but possible a shader that needs filled
 		if (w->background) {
-		  Fade(&w->flags, &w->backColor[3], fadeClamp, &w->nextTime, fadeCycle, qtrue, fadeAmount);
+		  Fade(&w->flags, &w->backColor[3], fadeClamp, &w->nextTransitionTime, fadeCycle, qtrue, fadeAmount);
       DC->setColor(w->backColor);
 	    DC->drawHandlePic(fillRect.x, fillRect.y, fillRect.w, fillRect.h, w->background);
 		  DC->setColor(NULL);
@@ -1121,13 +1121,13 @@ void Menu_TransitionItemByName(menuDef_t *menu, const char *p, rectDef_t rectFro
     item = Menu_GetMatchingItemByNumber(menu, i, p);
     if (item != NULL) {
       item->window.flags |= (WINDOW_INTRANSITION | WINDOW_VISIBLE);
-      item->window.offsetTime = time;
+      item->window.transitionInterval = time;
 			memcpy(&item->window.rectClient, &rectFrom, sizeof(rectDef_t));
-			memcpy(&item->window.rectEffects, &rectTo, sizeof(rectDef_t));
-			item->window.rectEffects2.x = fabs(rectTo.x - rectFrom.x) / amt;
-			item->window.rectEffects2.y = fabs(rectTo.y - rectFrom.y) / amt;
-			item->window.rectEffects2.w = fabs(rectTo.w - rectFrom.w) / amt;
-			item->window.rectEffects2.h = fabs(rectTo.h - rectFrom.h) / amt;
+			memcpy(&item->window.rectTarget, &rectTo, sizeof(rectDef_t));
+			item->window.rectStep.x = fabs(rectTo.x - rectFrom.x) / amt;
+			item->window.rectStep.y = fabs(rectTo.y - rectFrom.y) / amt;
+			item->window.rectStep.w = fabs(rectTo.w - rectFrom.w) / amt;
+			item->window.rectStep.h = fabs(rectTo.h - rectFrom.h) / amt;
       Item_UpdatePosition(item);
     }
   }
@@ -1156,9 +1156,9 @@ void Menu_OrbitItemByName(menuDef_t *menu, const char *p, float x, float y, floa
     item = Menu_GetMatchingItemByNumber(menu, i, p);
     if (item != NULL) {
       item->window.flags |= (WINDOW_ORBITING | WINDOW_VISIBLE);
-      item->window.offsetTime = time;
-      item->window.rectEffects.x = cx;
-      item->window.rectEffects.y = cy;
+      item->window.transitionInterval = time;
+      item->window.rectTarget.x = cx;
+      item->window.rectTarget.y = cy;
       item->window.rectClient.x = x;
       item->window.rectClient.y = y;
       Item_UpdatePosition(item);
@@ -2898,7 +2898,7 @@ void Item_TextColor(itemDef_t *item, vec4_t *newColor) {
 	vec4_t lowLight;
 	menuDef_t *parent = (menuDef_t*)item->parent;
 
-	Fade(&item->window.flags, &item->window.foreColor[3], parent->fadeClamp, &item->window.nextTime, parent->fadeCycle, qtrue, parent->fadeAmount);
+	Fade(&item->window.flags, &item->window.foreColor[3], parent->fadeClamp, &item->window.nextTransitionTime, parent->fadeCycle, qtrue, parent->fadeAmount);
 
 	if (item->window.flags & WINDOW_HASFOCUS) {
 		lowLight[0] = 0.8 * parent->focusColor[0]; 
@@ -3092,14 +3092,14 @@ void Item_Text_Paint(itemDef_t *item) {
 	}
 
 	if (item->textStyle == ITEM_TEXTSTYLE_SHADOWED || item->textStyle == ITEM_TEXTSTYLE_OUTLINESHADOWED) {
-		Fade(&item->window.flags, &DC->Assets.shadowColor[3], DC->Assets.fadeClamp, &item->window.nextTime, DC->Assets.fadeCycle, qfalse);
+		Fade(&item->window.flags, &DC->Assets.shadowColor[3], DC->Assets.fadeClamp, &item->window.nextTransitionTime, DC->Assets.fadeCycle, qfalse);
 		DC->drawText(item->textRect.x + DC->Assets.shadowX, item->textRect.y + DC->Assets.shadowY, item->textscale, DC->Assets.shadowColor, textPtr, adjust);
 	}
 */
 
 
 //	if (item->textStyle == ITEM_TEXTSTYLE_OUTLINED || item->textStyle == ITEM_TEXTSTYLE_OUTLINESHADOWED) {
-//		Fade(&item->window.flags, &item->window.outlineColor[3], DC->Assets.fadeClamp, &item->window.nextTime, DC->Assets.fadeCycle, qfalse);
+//		Fade(&item->window.flags, &item->window.outlineColor[3], DC->Assets.fadeClamp, &item->window.nextTransitionTime, DC->Assets.fadeCycle, qfalse);
 //		/*
 //		Text_Paint(item->textRect.x-1, item->textRect.y-1, item->textscale, item->window.foreColor, textPtr, adjust);
 //		Text_Paint(item->textRect.x, item->textRect.y-1, item->textscale, item->window.foreColor, textPtr, adjust);
@@ -3715,8 +3715,8 @@ void Item_Model_Paint(itemDef_t *item) {
 
 	// use item storage to track
 	if (modelPtr->rotationSpeed) {
-		if (DC->realTime > item->window.nextTime) {
-			item->window.nextTime = DC->realTime + modelPtr->rotationSpeed;
+		if (DC->realTime > item->window.nextTransitionTime) {
+			item->window.nextTransitionTime = DC->realTime + modelPtr->rotationSpeed;
 			modelPtr->angle = (int)(modelPtr->angle + 1) % 360;
 		}
 	}
@@ -3904,7 +3904,7 @@ void Item_OwnerDraw_Paint(itemDef_t *item) {
 	if (DC->ownerDrawItem) {
 		vec4_t color, lowLight;
 		menuDef_t *parent = (menuDef_t*)item->parent;
-		Fade(&item->window.flags, &item->window.foreColor[3], parent->fadeClamp, &item->window.nextTime, parent->fadeCycle, qtrue, parent->fadeAmount);
+		Fade(&item->window.flags, &item->window.foreColor[3], parent->fadeClamp, &item->window.nextTransitionTime, parent->fadeCycle, qtrue, parent->fadeAmount);
 		memcpy(&color, &item->window.foreColor, sizeof(color));
 		if (item->numColors > 0 && DC->getValue) {
 			// if the value is within one of the ranges then set color to that, otherwise leave at default
@@ -3965,20 +3965,20 @@ void Item_Paint(itemDef_t *item) {
   parent = (menuDef_t*)item->parent;
 
   if (item->window.flags & WINDOW_ORBITING) {
-    if (DC->realTime > item->window.nextTime) {
+    if (DC->realTime > item->window.nextTransitionTime) {
       float rx, ry, a, c, s, w, h;
       
-      item->window.nextTime = DC->realTime + item->window.offsetTime;
+      item->window.nextTransitionTime = DC->realTime + item->window.transitionInterval;
       // translate
       w = item->window.rectClient.w / 2;
       h = item->window.rectClient.h / 2;
-      rx = item->window.rectClient.x + w - item->window.rectEffects.x;
-      ry = item->window.rectClient.y + h - item->window.rectEffects.y;
+      rx = item->window.rectClient.x + w - item->window.rectTarget.x;
+      ry = item->window.rectClient.y + h - item->window.rectTarget.y;
       a = 3 * M_PI / 180;
   	  c = cos(a);
       s = sin(a);
-      item->window.rectClient.x = (rx * c - ry * s) + item->window.rectEffects.x - w;
-      item->window.rectClient.y = (rx * s + ry * c) + item->window.rectEffects.y - h;
+      item->window.rectClient.x = (rx * c - ry * s) + item->window.rectTarget.x - w;
+      item->window.rectClient.y = (rx * s + ry * c) + item->window.rectTarget.y - h;
       Item_UpdatePosition(item);
 
     }
@@ -3986,74 +3986,74 @@ void Item_Paint(itemDef_t *item) {
 
 
   if (item->window.flags & WINDOW_INTRANSITION) {
-    if (DC->realTime > item->window.nextTime) {
+    if (DC->realTime > item->window.nextTransitionTime) {
       int done = 0;
-      item->window.nextTime = DC->realTime + item->window.offsetTime;
+      item->window.nextTransitionTime = DC->realTime + item->window.transitionInterval;
 			// transition the x,y
-			if (item->window.rectClient.x == item->window.rectEffects.x) {
+			if (item->window.rectClient.x == item->window.rectTarget.x) {
 				done++;
 			} else {
-				if (item->window.rectClient.x < item->window.rectEffects.x) {
-					item->window.rectClient.x += item->window.rectEffects2.x;
-					if (item->window.rectClient.x > item->window.rectEffects.x) {
-						item->window.rectClient.x = item->window.rectEffects.x;
+				if (item->window.rectClient.x < item->window.rectTarget.x) {
+					item->window.rectClient.x += item->window.rectStep.x;
+					if (item->window.rectClient.x > item->window.rectTarget.x) {
+						item->window.rectClient.x = item->window.rectTarget.x;
 						done++;
 					}
 				} else {
-					item->window.rectClient.x -= item->window.rectEffects2.x;
-					if (item->window.rectClient.x < item->window.rectEffects.x) {
-						item->window.rectClient.x = item->window.rectEffects.x;
+					item->window.rectClient.x -= item->window.rectStep.x;
+					if (item->window.rectClient.x < item->window.rectTarget.x) {
+						item->window.rectClient.x = item->window.rectTarget.x;
 						done++;
 					}
 				}
 			}
-			if (item->window.rectClient.y == item->window.rectEffects.y) {
+			if (item->window.rectClient.y == item->window.rectTarget.y) {
 				done++;
 			} else {
-				if (item->window.rectClient.y < item->window.rectEffects.y) {
-					item->window.rectClient.y += item->window.rectEffects2.y;
-					if (item->window.rectClient.y > item->window.rectEffects.y) {
-						item->window.rectClient.y = item->window.rectEffects.y;
+				if (item->window.rectClient.y < item->window.rectTarget.y) {
+					item->window.rectClient.y += item->window.rectStep.y;
+					if (item->window.rectClient.y > item->window.rectTarget.y) {
+						item->window.rectClient.y = item->window.rectTarget.y;
 						done++;
 					}
 				} else {
-					item->window.rectClient.y -= item->window.rectEffects2.y;
-					if (item->window.rectClient.y < item->window.rectEffects.y) {
-						item->window.rectClient.y = item->window.rectEffects.y;
+					item->window.rectClient.y -= item->window.rectStep.y;
+					if (item->window.rectClient.y < item->window.rectTarget.y) {
+						item->window.rectClient.y = item->window.rectTarget.y;
 						done++;
 					}
 				}
 			}
-			if (item->window.rectClient.w == item->window.rectEffects.w) {
+			if (item->window.rectClient.w == item->window.rectTarget.w) {
 				done++;
 			} else {
-				if (item->window.rectClient.w < item->window.rectEffects.w) {
-					item->window.rectClient.w += item->window.rectEffects2.w;
-					if (item->window.rectClient.w > item->window.rectEffects.w) {
-						item->window.rectClient.w = item->window.rectEffects.w;
+				if (item->window.rectClient.w < item->window.rectTarget.w) {
+					item->window.rectClient.w += item->window.rectStep.w;
+					if (item->window.rectClient.w > item->window.rectTarget.w) {
+						item->window.rectClient.w = item->window.rectTarget.w;
 						done++;
 					}
 				} else {
-					item->window.rectClient.w -= item->window.rectEffects2.w;
-					if (item->window.rectClient.w < item->window.rectEffects.w) {
-						item->window.rectClient.w = item->window.rectEffects.w;
+					item->window.rectClient.w -= item->window.rectStep.w;
+					if (item->window.rectClient.w < item->window.rectTarget.w) {
+						item->window.rectClient.w = item->window.rectTarget.w;
 						done++;
 					}
 				}
 			}
-			if (item->window.rectClient.h == item->window.rectEffects.h) {
+			if (item->window.rectClient.h == item->window.rectTarget.h) {
 				done++;
 			} else {
-				if (item->window.rectClient.h < item->window.rectEffects.h) {
-					item->window.rectClient.h += item->window.rectEffects2.h;
-					if (item->window.rectClient.h > item->window.rectEffects.h) {
-						item->window.rectClient.h = item->window.rectEffects.h;
+				if (item->window.rectClient.h < item->window.rectTarget.h) {
+					item->window.rectClient.h += item->window.rectStep.h;
+					if (item->window.rectClient.h > item->window.rectTarget.h) {
+						item->window.rectClient.h = item->window.rectTarget.h;
 						done++;
 					}
 				} else {
-					item->window.rectClient.h -= item->window.rectEffects2.h;
-					if (item->window.rectClient.h < item->window.rectEffects.h) {
-						item->window.rectClient.h = item->window.rectEffects.h;
+					item->window.rectClient.h -= item->window.rectStep.h;
+					if (item->window.rectClient.h < item->window.rectTarget.h) {
+						item->window.rectClient.h = item->window.rectTarget.h;
 						done++;
 					}
 				}
