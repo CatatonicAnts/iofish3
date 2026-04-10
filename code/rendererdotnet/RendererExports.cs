@@ -52,8 +52,10 @@ public static unsafe class RendererExports
     private static readonly int[] _scratchWidths = new int[MAX_SCRATCH_IMAGES];
     private static readonly int[] _scratchHeights = new int[MAX_SCRATCH_IMAGES];
 
-    private const int WIDTH = 1280;
-    private const int HEIGHT = 720;
+    private const int WIDTH = 1280;  // fallback only
+    private const int HEIGHT = 720;   // fallback only
+    private static int _currentWidth = WIDTH;
+    private static int _currentHeight = HEIGHT;
 
     private static int _screenshotCount;
     private static bool _screenshotPending;
@@ -130,6 +132,30 @@ public static unsafe class RendererExports
     {
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] ----- R_Init (.NET Renderer) -----\n");
 
+        // Read resolution from cvars (set by engine on resize or from config)
+        EngineImports.Cvar_Get("r_customwidth", "1280", 0x01 | 0x02);  // ARCHIVE | LATCH
+        EngineImports.Cvar_Get("r_customheight", "720", 0x01 | 0x02);
+        EngineImports.Cvar_Get("r_mode", "-1", 0x01 | 0x02);
+        int rMode = EngineImports.Cvar_VariableIntegerValue("r_mode");
+        if (rMode == -1)
+        {
+            _currentWidth = EngineImports.Cvar_VariableIntegerValue("r_customwidth");
+            _currentHeight = EngineImports.Cvar_VariableIntegerValue("r_customheight");
+        }
+        else if (rMode == -2)
+        {
+            // Desktop resolution — use fallback for now, SDL will report actual size
+            _currentWidth = WIDTH;
+            _currentHeight = HEIGHT;
+        }
+        else
+        {
+            _currentWidth = WIDTH;
+            _currentHeight = HEIGHT;
+        }
+        if (_currentWidth < 320) _currentWidth = 320;
+        if (_currentHeight < 240) _currentHeight = 240;
+
         // Only create SDL window + GL context if we don't already have one
         if (_window == null)
         {
@@ -150,8 +176,8 @@ public static unsafe class RendererExports
             _window = _sdl.CreateWindow(
                 "ioquake3 (.NET Renderer)",
                 Sdl.WindowposCentered, Sdl.WindowposCentered,
-                WIDTH, HEIGHT,
-                (uint)(WindowFlags.Opengl | WindowFlags.Shown));
+                _currentWidth, _currentHeight,
+                (uint)(WindowFlags.Opengl | WindowFlags.Shown | WindowFlags.Resizable));
 
             if (_window == null)
             {
@@ -179,12 +205,13 @@ public static unsafe class RendererExports
         {
             EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] Reusing existing window\n");
             _sdl!.GLMakeCurrent(_window, _glContext);
+            _sdl.SetWindowSize(_window, _currentWidth, _currentHeight);
         }
 
         // (Re)initialize subsystems — these are lightweight and safe to recreate
         _renderer2D?.Dispose();
         _renderer2D = new Renderer2D();
-        _renderer2D.Init(_gl!, WIDTH, HEIGHT);
+        _renderer2D.Init(_gl!, _currentWidth, _currentHeight);
 
         _shaders = new ShaderManager();
         _shaders.WhiteTexture = _renderer2D.WhiteTexture;
@@ -211,12 +238,12 @@ public static unsafe class RendererExports
         _skyboxRenderer.Init(_gl!);
 
         _scene = new SceneManager();
-        _scene.Init(_models, _shaders, _skins, _renderer3D, _bspRenderer, _skyboxRenderer, _gl!, WIDTH, HEIGHT);
+        _scene.Init(_models, _shaders, _skins, _renderer3D, _bspRenderer, _skyboxRenderer, _gl!, _currentWidth, _currentHeight);
 
         // Initialize post-processing (bloom)
         _postProcess?.Dispose();
         _postProcess = new PostProcess();
-        _postProcess.Init(_gl!, WIDTH, HEIGHT);
+        _postProcess.Init(_gl!, _currentWidth, _currentHeight);
         _scene.SetPostProcess(_postProcess);
 
         // Fill glconfig_t so the engine doesn't crash
@@ -232,20 +259,20 @@ public static unsafe class RendererExports
         *(int*)(cfg + GLC_COLOR_BITS) = 32;
         *(int*)(cfg + GLC_DEPTH_BITS) = 24;
         *(int*)(cfg + GLC_STENCIL_BITS) = 8;
-        *(int*)(cfg + GLC_VID_WIDTH) = WIDTH;
-        *(int*)(cfg + GLC_VID_HEIGHT) = HEIGHT;
-        *(float*)(cfg + GLC_WINDOW_ASPECT) = (float)WIDTH / HEIGHT;
+        *(int*)(cfg + GLC_VID_WIDTH) = _currentWidth;
+        *(int*)(cfg + GLC_VID_HEIGHT) = _currentHeight;
+        *(float*)(cfg + GLC_WINDOW_ASPECT) = (float)_currentWidth / _currentHeight;
         *(int*)(cfg + GLC_DISPLAY_FREQUENCY) = 60;
 
         EngineImports.IN_Init((nint)_window);
 
-        _gl.Viewport(0, 0, (uint)WIDTH, (uint)HEIGHT);
+        _gl.Viewport(0, 0, (uint)_currentWidth, (uint)_currentHeight);
         _gl.ClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
         _sdl.GLSwapWindow(_window);
 
         EngineImports.Printf(EngineImports.PRINT_ALL,
-            $"[.NET] Window created: {WIDTH}x{HEIGHT}, OpenGL 4.5 Core\n");
+            $"[.NET] Window created: {_currentWidth}x{_currentHeight}, OpenGL 4.5 Core\n");
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] ----- finished R_Init -----\n");
 
         // Register screenshot console command
@@ -549,7 +576,7 @@ public static unsafe class RendererExports
             _screenshotCount++;
         } while (_screenshotCount < 10000);
 
-        int w = WIDTH, h = HEIGHT;
+        int w = _currentWidth, h = _currentHeight;
         int pixelSize = w * h * 3;
         byte[] pixels = new byte[pixelSize];
 
