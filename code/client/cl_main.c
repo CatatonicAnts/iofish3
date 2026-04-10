@@ -3560,7 +3560,7 @@ void CL_Init( void ) {
 	// register our variables
 	//
 	cl_noprint = Cvar_Get( "cl_noprint", "0", 0 );
-	cl_cgame = Cvar_Get( "cl_cgame", "", CVAR_ARCHIVE | CVAR_LATCH );
+	cl_cgame = Cvar_Get( "cl_cgame", "", CVAR_LATCH );
 #ifdef UPDATE_SERVER_NAME
 	cl_motd = Cvar_Get ("cl_motd", "1", 0);
 #endif

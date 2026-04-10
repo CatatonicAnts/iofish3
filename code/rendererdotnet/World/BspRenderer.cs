@@ -448,6 +448,7 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform int uPortalMap;   // 1=use screen-space UVs from gl_FragCoord
         uniform vec2 uScreenSize; // viewport size for portal mapping
         uniform int uUsePBR;      // 1=metallic/roughness PBR workflow
+        uniform float uTime;
 
         out vec4 oColor;
 
@@ -2198,6 +2199,15 @@ public sealed unsafe class BspRenderer : IDisposable
         uint vs = Compile(ShaderType.VertexShader, VertSrc);
         uint fs = Compile(ShaderType.FragmentShader, FragSrc);
 
+        if (vs == 0 || fs == 0)
+        {
+            EngineImports.Printf(EngineImports.PRINT_ERROR,
+                "[.NET] BSP shader compilation failed, world will not render!\n");
+            if (vs != 0) _gl.DeleteShader(vs);
+            if (fs != 0) _gl.DeleteShader(fs);
+            return 0;
+        }
+
         uint prog = _gl.CreateProgram();
         _gl.AttachShader(prog, vs);
         _gl.AttachShader(prog, fs);
@@ -2209,6 +2219,10 @@ public sealed unsafe class BspRenderer : IDisposable
             string log = _gl.GetProgramInfoLog(prog);
             EngineImports.Printf(EngineImports.PRINT_ERROR,
                 $"[.NET] BSP shader link error: {log}\n");
+            _gl.DeleteProgram(prog);
+            _gl.DeleteShader(vs);
+            _gl.DeleteShader(fs);
+            return 0;
         }
 
         _gl.DeleteShader(vs);
@@ -2228,6 +2242,8 @@ public sealed unsafe class BspRenderer : IDisposable
             string log = _gl.GetShaderInfoLog(s);
             EngineImports.Printf(EngineImports.PRINT_ERROR,
                 $"[.NET] BSP shader compile error ({type}): {log}\n");
+            _gl.DeleteShader(s);
+            return 0;
         }
         return s;
     }

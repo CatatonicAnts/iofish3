@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <AssemblyName>cgame_dotnetx86_64</AssemblyName>
+    <AssemblyName>cgame_dotnet</AssemblyName>
     <RootNamespace>CGameDotNet</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>enable</ImplicitUsings>
