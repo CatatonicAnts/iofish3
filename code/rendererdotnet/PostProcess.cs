@@ -63,8 +63,9 @@ public sealed unsafe class PostProcess : IDisposable
     // SSAO
     private uint _ssaoFbo, _ssaoTex;           // half-res SSAO result
     private uint _ssaoBlurFbo, _ssaoBlurTex;   // blurred SSAO
-    private int _ssaoViewInfoLoc;              // zNear, zFar, 1/width, 1/height
+    private int _ssaoViewInfoLoc;              // zFar/zNear, zFar, 1/width, 1/height
     private int _ssaoBlurTexelLoc;
+    private int _ssaoBlurZFarDivZNearLoc;
 
     // Bloom settings
     private const float BloomThreshold = 0.85f;
@@ -230,66 +231,78 @@ public sealed unsafe class PostProcess : IDisposable
         }
         """;
 
-    // SSAO: depth-based ambient occlusion with Poisson disc sampling
+    // SSAO: depth-based ambient occlusion (ported from GL2's ssao_fp.glsl)
+    // Uses normalized depth, slope-based self-occlusion prevention, and proper range checks.
     private const string SsaoFragSrc = """
         #version 450 core
         in vec2 vUV;
         uniform sampler2D uDepth;
-        uniform vec4 uViewInfo; // x=zNear, y=zFar, z=1/width, w=1/height
+        uniform vec4 uViewInfo; // x=zFar/zNear, y=zFar, z=1/width, w=1/height
         out vec4 oColor;
 
-        float linearizeDepth(float d) {
-            float zNear = uViewInfo.x;
-            float zFar = uViewInfo.y;
-            return zNear * zFar / (zFar - d * (zFar - zNear));
+        // Returns normalized linear depth in [zNear/zFar, 1.0] range
+        float getLinearDepth(vec2 tex) {
+            float d = texture(uDepth, tex).r;
+            return 1.0 / mix(uViewInfo.x, 1.0, d);
         }
 
-        // Hash-based pseudo-random rotation
-        float random(vec2 co) {
-            return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+        float random(vec2 p) {
+            const vec2 r = vec2(23.1406926327792690, 2.6651441426902251);
+            return mod(123456789.0, 1e-7 + 256.0 * dot(p, r));
         }
+
+        mat2 randomRotation(vec2 p) {
+            float r = random(p);
+            float sr = sin(r), cr = cos(r);
+            return mat2(cr, sr, -sr, cr);
+        }
+
+        #define NUM_SAMPLES 9
 
         void main() {
             float depth = texture(uDepth, vUV).r;
-            if (depth >= 0.9999) { oColor = vec4(1.0); return; } // skip skybox
+            if (depth >= 0.9999) { oColor = vec4(1.0); return; }
 
-            float z = linearizeDepth(depth);
-            float zFar = uViewInfo.y;
-            vec2 texelSize = uViewInfo.zw;
-
-            // Poisson disc samples (9 points)
-            vec2 disc[9] = vec2[](
-                vec2(-0.7071,  0.7071), vec2( 0.0, -0.875), vec2( 0.5303,  0.5303),
-                vec2(-0.625,  -0.0), vec2( 0.8660, -0.25), vec2(-0.25,   0.433),
-                vec2( 0.25,    0.25), vec2(-0.433, -0.433), vec2( 0.0,    0.625)
+            vec2 poissonDisc[9] = vec2[](
+                vec2(-0.7055767, 0.196515),    vec2(0.3524343, -0.7791386),
+                vec2(0.2391056, 0.9189604),    vec2(-0.07580382, -0.09224417),
+                vec2(0.5784913, -0.002528916), vec2(0.192888, 0.4064181),
+                vec2(-0.6335801, -0.5247476),  vec2(-0.5579782, 0.7491854),
+                vec2(0.7320465, 0.6317794)
             );
 
-            // Random rotation per pixel
-            float angle = random(vUV) * 6.283185;
-            float sa = sin(angle), ca = cos(angle);
-            mat2 rot = mat2(ca, sa, -sa, ca);
+            float zFarDivZNear = uViewInfo.x;
+            float zFar = uViewInfo.y;
+            vec2 scale = uViewInfo.wz; // height, width (matching GL2 convention)
 
-            // Adaptive radius based on depth
-            float radius = 24.0 * texelSize.x * zFar / z;
-            radius = clamp(radius, 2.0 * texelSize.x, 48.0 * texelSize.x);
+            float sampleZ = getLinearDepth(vUV);
+            float scaleZ = zFarDivZNear * sampleZ;
 
-            float occlusion = 0.0;
-            int samples = 9;
-            for (int i = 0; i < samples; i++) {
-                vec2 offset = rot * disc[i] * radius;
-                float sampleDepth = texture(uDepth, vUV + offset).r;
-                float sampleZ = linearizeDepth(sampleDepth);
-
-                float diff = z - sampleZ;
-                // Occlude if sample is closer and within range
-                float rangeCheck = smoothstep(0.0, 1.0, radius * zFar / abs(diff));
-                occlusion += step(0.001 * z, diff) * rangeCheck;
+            // Surface slope detection to prevent self-occlusion on angled surfaces
+            vec2 slope = vec2(dFdx(sampleZ), dFdy(sampleZ)) / vec2(dFdx(vUV.x), dFdy(vUV.y));
+            if (length(slope) * zFar > 5000.0) {
+                oColor = vec4(1.0);
+                return;
             }
 
-            float ao = 1.0 - occlusion / float(samples);
-            ao = clamp(ao, 0.0, 1.0);
-            ao = pow(ao, 1.5); // contrast boost
-            oColor = vec4(ao, ao, ao, 1.0);
+            vec2 offsetScale = scale * 1024.0 / scaleZ;
+            mat2 rmat = randomRotation(vUV);
+
+            float invZFar = 1.0 / zFar;
+            float zLimit = 20.0 * invZFar;
+            float result = 0.0;
+
+            for (int i = 0; i < NUM_SAMPLES; i++) {
+                vec2 offset = rmat * poissonDisc[i] * offsetScale;
+                float sampleDiff = getLinearDepth(vUV + offset) - sampleZ;
+
+                bool s1 = abs(sampleDiff) > zLimit;
+                bool s2 = sampleDiff + invZFar > dot(slope, offset);
+                result += float(s1 || s2);
+            }
+
+            result /= float(NUM_SAMPLES);
+            oColor = vec4(vec3(result), 1.0);
         }
         """;
 
@@ -300,27 +313,27 @@ public sealed unsafe class PostProcess : IDisposable
         uniform sampler2D uTex;
         uniform sampler2D uDepth;
         uniform vec2 uTexelSize;
+        uniform float uZFarDivZNear;
         out vec4 oColor;
 
-        float linearizeDepth(float d, float zNear, float zFar) {
-            return zNear * zFar / (zFar - d * (zFar - zNear));
+        float getLinearDepth(vec2 tex) {
+            float d = texture(uDepth, tex).r;
+            return 1.0 / mix(uZFarDivZNear, 1.0, d);
         }
 
         void main() {
             float result = 0.0;
             float totalWeight = 0.0;
-            float centerDepth = texture(uDepth, vUV).r;
-            float centerZ = linearizeDepth(centerDepth, 1.0, 4096.0);
+            float centerZ = getLinearDepth(vUV);
 
             for (int x = -2; x <= 2; x++) {
                 for (int y = -2; y <= 2; y++) {
                     vec2 offset = vec2(float(x), float(y)) * uTexelSize;
                     float sampleAO = texture(uTex, vUV + offset).r;
-                    float sampleDepth = texture(uDepth, vUV + offset).r;
-                    float sampleZ = linearizeDepth(sampleDepth, 1.0, 4096.0);
+                    float sampleZ = getLinearDepth(vUV + offset);
 
                     float depthDiff = abs(centerZ - sampleZ);
-                    float w = exp(-depthDiff * 10.0 / max(centerZ, 0.1));
+                    float w = exp(-depthDiff * 10.0 / max(centerZ, 0.001));
                     result += sampleAO * w;
                     totalWeight += w;
                 }
@@ -448,6 +461,7 @@ public sealed unsafe class PostProcess : IDisposable
 
             _ssaoBlurProgram = CreateProgram(QuadVertSrc, SsaoBlurFragSrc);
             _ssaoBlurTexelLoc = _gl.GetUniformLocation(_ssaoBlurProgram, "uTexelSize");
+            _ssaoBlurZFarDivZNearLoc = _gl.GetUniformLocation(_ssaoBlurProgram, "uZFarDivZNear");
             _gl.UseProgram(_ssaoBlurProgram);
             _gl.Uniform1(_gl.GetUniformLocation(_ssaoBlurProgram, "uTex"), 0);
             _gl.Uniform1(_gl.GetUniformLocation(_ssaoBlurProgram, "uDepth"), 1);
@@ -548,7 +562,8 @@ public sealed unsafe class PostProcess : IDisposable
             _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _ssaoFbo);
             _gl.Viewport(0, 0, (uint)_halfW, (uint)_halfH);
             _gl.UseProgram(_ssaoProgram);
-            _gl.Uniform4(_ssaoViewInfoLoc, 1.0f, 4096.0f, 1.0f / _halfW, 1.0f / _halfH);
+            // GL2 convention: x=zFar/zNear, y=zFar, z=1/width, w=1/height
+            _gl.Uniform4(_ssaoViewInfoLoc, 8192.0f / 1.0f, 8192.0f, 1.0f / _halfW, 1.0f / _halfH);
             _gl.BindTexture(TextureTarget.Texture2D, _sceneDepthTex);
             _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
@@ -556,6 +571,7 @@ public sealed unsafe class PostProcess : IDisposable
             _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _ssaoBlurFbo);
             _gl.UseProgram(_ssaoBlurProgram);
             _gl.Uniform2(_ssaoBlurTexelLoc, 1.0f / _halfW, 1.0f / _halfH);
+            _gl.Uniform1(_ssaoBlurZFarDivZNearLoc, 8192.0f / 1.0f);
             _gl.ActiveTexture(TextureUnit.Texture0);
             _gl.BindTexture(TextureTarget.Texture2D, _ssaoTex);
             _gl.ActiveTexture(TextureUnit.Texture1);

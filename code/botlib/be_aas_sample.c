@@ -606,27 +606,26 @@ aas_trace_t AAS_TraceClientBBox(vec3_t start, vec3_t end, int presencetype,
 		plane = &aasworld.planes[aasnode->planenum];
 
 		switch(plane->type)
-		{/*FIXME: wtf doesn't this work? obviously the axial node planes aren't always facing positive!!!
-			//check for axial planes
+		{
 			case PLANE_X:
 			{
-				front = cur_start[0] - plane->dist;
-				back = cur_end[0] - plane->dist;
+				front = plane->normal[0] * cur_start[0] - plane->dist;
+				back = plane->normal[0] * cur_end[0] - plane->dist;
 				break;
 			} //end case
 			case PLANE_Y:
 			{
-				front = cur_start[1] - plane->dist;
-				back = cur_end[1] - plane->dist;
+				front = plane->normal[1] * cur_start[1] - plane->dist;
+				back = plane->normal[1] * cur_end[1] - plane->dist;
 				break;
 			} //end case
 			case PLANE_Z:
 			{
-				front = cur_start[2] - plane->dist;
-				back = cur_end[2] - plane->dist;
+				front = plane->normal[2] * cur_start[2] - plane->dist;
+				back = plane->normal[2] * cur_end[2] - plane->dist;
 				break;
-			} //end case*/
-			default: //gee it's not an axial plane
+			} //end case
+			default:
 			{
 				front = DotProduct(cur_start, plane->normal) - plane->dist;
 				back = DotProduct(cur_end, plane->normal) - plane->dist;
@@ -797,27 +796,26 @@ int AAS_TraceAreas(vec3_t start, vec3_t end, int *areas, vec3_t *points, int max
 		plane = &aasworld.planes[aasnode->planenum];
 
 		switch(plane->type)
-		{/*FIXME: wtf doesn't this work? obviously the node planes aren't always facing positive!!!
-			//check for axial planes
+		{
 			case PLANE_X:
 			{
-				front = cur_start[0] - plane->dist;
-				back = cur_end[0] - plane->dist;
+				front = plane->normal[0] * cur_start[0] - plane->dist;
+				back = plane->normal[0] * cur_end[0] - plane->dist;
 				break;
 			} //end case
 			case PLANE_Y:
 			{
-				front = cur_start[1] - plane->dist;
-				back = cur_end[1] - plane->dist;
+				front = plane->normal[1] * cur_start[1] - plane->dist;
+				back = plane->normal[1] * cur_end[1] - plane->dist;
 				break;
 			} //end case
 			case PLANE_Z:
 			{
-				front = cur_start[2] - plane->dist;
-				back = cur_end[2] - plane->dist;
+				front = plane->normal[2] * cur_start[2] - plane->dist;
+				back = plane->normal[2] * cur_end[2] - plane->dist;
 				break;
-			} //end case*/
-			default: //gee it's not an axial plane
+			} //end case
+			default:
 			{
 				front = DotProduct(cur_start, plane->normal) - plane->dist;
 				back = DotProduct(cur_end, plane->normal) - plane->dist;

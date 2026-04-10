@@ -45,16 +45,19 @@ A list of planned features, improvements, and tasks for this project.
 - [x] **Specular mapping** - `specularMap` stage type with Blinn-Phong specular highlights. Specular map sampled in fragment shader, combined with view-dependent half-vector lighting. `CPX 3`
 - [x] **PBR (Physically Based Rendering)** - Metallic/roughness workflow controlled by `r_pbr` cvar. Specular map reinterpreted: .r=gloss, .g=metallic. GGX microfacet BRDF replaces Blinn-Phong. sRGB↔linear conversions for correct lighting. `CPX 4`
 - [x] **Parallax mapping** - Steep parallax mapping with 16-step linear search and interpolation. Height data from normal map alpha channel. Controlled by `r_parallaxMapping` cvar (default off). `CPX 3`
-- [ ] **Cubemap reflections** - GL2 loads/renders cubemaps for environment reflections with parallax correction. `CPX 4`
 - [ ] **Shadow mapping** - Projection shadows (512×512 maps), sun shadow framework. Partially implemented in GL2 itself. `CPX 5`
+- [ ] **Cubemap reflections** - GL2 loads/renders cubemaps for environment reflections with parallax correction. `CPX 4`
 - [x] **Deluxe mapping** - World deluxe maps store per-pixel light direction. Detected automatically from interleaved BSP lightmaps (even=lightmap, odd=deluxe). Enhances normal-mapped surfaces with per-texel lighting and specular direction. Controlled by `r_deluxeMapping` cvar (default on). `CPX 3`
 - [x] **SSAO** - Screen-space ambient occlusion with Poisson disc sampling (9-tap), bilateral blur, and multiplicative compositing. Depth texture from scene FBO sampled at half resolution. Controlled by `r_ssao` cvar (default off). `CPX 3`
 - [x] **IQM model format** - Inter-Quake Model format with CPU bone skinning. Loader, ModelManager integration, Renderer3D rendering, and LerpTag support. `CPX 4`
-- [ ] **MDR model format** - Advanced skeletal model format with bone matrices. `CPX 3`
-- [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
 - [x] **VBO caching / batching** - Shader-sorted deferred opaque rendering. Visible surfaces collected during BSP walk, sorted by shader+lightmap, drawn with minimal state changes. Same-state surfaces share a single bind, reducing GL state transitions. Static geometry uploaded once at load time. `CPX 3`
 - [x] **DDS texture format** - DDS file loading with S3TC (DXT1/3/5), RGTC (BC4/5), BPTC (BC6H/7), and uncompressed RGBA support. DX10 extended header support. DDS tried first for all texture loads (preferred for GPU memory/performance). `CPX 2`
 - [x] **FBO pipeline** - Framebuffer objects for render-to-texture, multi-pass effects, post-processing. Foundation for HDR/bloom/portals. `CPX 3`
+
+### ON HOLD
+
+- [ ] **MDR model format** - Advanced skeletal model format with bone matrices. `CPX 3`
+- [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
 
 ### Tier 4 — Minor / Polish
 
@@ -151,17 +154,20 @@ The cgame DLL interface is:
 
 ## Other Features
 
+### High Priority
+
+- [ ] **HUD customization cvars** - Implement cvars and console commands for flexible HUD control: global HUD scaling (`cg_hudScale`), per-element enable/disable, individual element scaling, and position overrides for crosshair, powerup timers, health/armor/ammo, lagometer, etc. `CPX 4`
+- [ ] **Enable Freetype font rendering by default** - `USE_FREETYPE` is OFF by default. Evaluate and enable for improved font quality. `CPX 2`
+- [ ] **Complete shadow mapping in .NET renderer** - Take the GL2 one as a base. Multiple unimplemented shadow features in `code/renderergl2/tr_shadows.c`. Sun shadows also render incorrectly in cubemaps (`tr_main.c`, `tr_bsp.c`). `CPX 4`
+
 ### Medium Priority
 
-- [ ] **Implement player blacklist** - Add server-side player blacklist for DoS/harassment prevention (`code/server/sv_client.c:483`). `CPX 2`
-- [ ] **Complete GL2 shadow mapping** - Multiple unimplemented shadow features in `code/renderergl2/tr_shadows.c`. Sun shadows also render incorrectly in cubemaps (`tr_main.c`, `tr_bsp.c`). `CPX 4`
-- [ ] **Enable Freetype font rendering by default** - `USE_FREETYPE` is OFF by default. Evaluate and enable for improved font quality. `CPX 2`
+- [ ] **Local gravity support** - Implement per-entity gravity instead of only global (`code/game/bg_pmove.c`). `CPX 2`
+- [ ] **Bot AI improvements** - Fix flag carrier defense logic, bridge traversal, and radial damage teammate checking (`code/game/ai_dmq3.c`). `CPX 3`
 
 ### Lower Priority
 
 - [ ] **DDS cubemap loading** - Complete DDS cubemap support in `code/renderergl2/tr_image_dds.c`. `CPX 2`
-- [ ] **Bot AI improvements** - Fix flag carrier defense logic, bridge traversal, and radial damage teammate checking (`code/game/ai_dmq3.c`). `CPX 3`
-- [ ] **Local gravity support** - Implement per-entity gravity instead of only global (`code/game/bg_pmove.c`). `CPX 2`
 
 ---
 
@@ -202,7 +208,7 @@ The cgame DLL interface is:
 
 ### Active Bugs
 
-*No active bugs*
+- [ ] **AAS plane orientation** - Axial node planes don't always face positive direction, causing pathfinding errors (`code/botlib/be_aas_sample.c`). `CPX 2`
 
 ### ON HOLD
 
@@ -210,11 +216,9 @@ The cgame DLL interface is:
 - [ ] **Single lightmap fullbright (GL1)** - Maps with only one lightmap render as fullbright in GL1 (`code/renderergl1/tr_bsp.c`). Fixed in dotnet renderer. `CPX 2`
 - [ ] **Cgame event loop race** - Server restart during cgame event processing causes undefined behavior (`code/client/cl_cgame.c`). `CPX 3`
 - [ ] **screenShadowImage null crash** - Potential crash when framebuffers unavailable in GL2 (`code/renderergl2/tr_shade.c`). `CPX 1`
-- [ ] **AAS plane orientation** - Axial node planes don't always face positive direction, causing pathfinding errors (`code/botlib/be_aas_sample.c`). `CPX 2`
 
 ### Uncategorized (Analyze and create TODO entries in above appropriate sections with priority. Do not fix or implement them just yet. Assign complexity points where applicable. Do not delete this section when you are done, just empty it)
 
-*No uncategorized items*
 
 ---
 
