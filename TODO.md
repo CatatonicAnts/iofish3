@@ -66,12 +66,9 @@ A list of planned features, improvements, and tasks for this project.
 
 ---
 
-## Documentation **LOW PRIORITY**
+## Documentation
 
-- [ ] Architecture overview covering subsystem relationships (renderer, game, botlib)
-- [ ] GL1 vs GL2 vs dotnet renderer comparison and migration notes
-- [ ] Document AAS magic number constants in `code/botlib/be_aas_reach.c`
-- [ ] Build and testing guide for contributors
+*All completed. See `docs/` directory.*
 
 ---
 
@@ -145,6 +142,12 @@ A list of planned features, improvements, and tasks for this project.
 ### Code Cleanup
 
 - [x] UI subsystem: organized WINDOW_* flags by concern, renamed animation fields, extracted windowTransition_t sub-struct
+- [x] Botlib: encapsulated `botlibglobals` and `botDeveloper` as file-scope statics with accessor functions
+- [x] AAS reachability: replaced magic numbers with named constants (surface normals, fall damage, prediction, travel times)
+
+### Documentation
+
+- [x] Architecture overview (`docs/architecture.md`), renderer comparison (`docs/renderer-comparison.md`), build guide (`docs/building.md`), AAS magic number constants documented in source
 
 - [x] Missing S_Respatialize in cgame_dotnet, continuous rocket smoke trail, single lightmap fullbright (dotnet + GL1)
 - [x] Transparent surfaces with surfaceparm trans rendered opaque, items not visible in cgame_dotnet
