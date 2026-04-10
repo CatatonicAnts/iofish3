@@ -200,6 +200,17 @@ public static unsafe class EngineImports
         }
     }
 
+    /// <summary>
+    /// Call CM_DrawDebugSurface, passing a managed callback that the engine will invoke
+    /// for each debug polygon. The callback signature is: void drawPoly(int color, int numPoints, float* points)
+    /// </summary>
+    public static void CM_DrawDebugSurface(delegate* unmanaged[Cdecl]<int, int, float*, void> drawPoly)
+    {
+        if (!_initialized || _ri.CM_DrawDebugSurface == 0)
+            return;
+        ((delegate* unmanaged[Cdecl]<delegate* unmanaged[Cdecl]<int, int, float*, void>, void>)_ri.CM_DrawDebugSurface)(drawPoly);
+    }
+
     /// <summary>Whether the engine imports have been initialized.</summary>
     public static bool IsInitialized => _initialized;
 

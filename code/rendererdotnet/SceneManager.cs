@@ -36,6 +36,18 @@ public sealed unsafe class SceneManager
     private int _spriteMvpLoc;
     private int _spriteTexLoc;
 
+    // GL resources for debug polygon rendering (bot_debug / r_debugSurface)
+    private uint _debugVao;
+    private uint _debugVbo;
+    private uint _debugEbo;
+    private uint _debugProgram;
+    private int _debugMvpLoc;
+    private int _debugColorLoc;
+
+    // Static reference so the unmanaged callback can access the current SceneManager
+    private static SceneManager? _activeDebugInstance;
+    private float[] _debugVpMatrix = new float[16];
+
     private const int RF_THIRD_PERSON = 0x0002;
     private const int RF_FIRST_PERSON = 0x0004;
     private const int RF_DEPTHHACK = 0x0008;
@@ -76,6 +88,7 @@ public sealed unsafe class SceneManager
         _screenH = screenH;
 
         InitSpriteRenderer(gl);
+        InitDebugRenderer(gl);
     }
 
     public void SetWorld(World.BspWorld? world)
@@ -607,6 +620,9 @@ public sealed unsafe class SceneManager
             DrawPolys(vp);
         }
 
+        // Draw bot AAS debug polygons and collision debug surfaces
+        DrawDebugGraphics(vp, rdflags);
+
         // Apply projected shadows via screen-space pass
         if (_shadowMapper?.IsEnabled == true && hasWorld && usePostProcess)
         {
@@ -732,6 +748,29 @@ public sealed unsafe class SceneManager
         }
         """;
 
+    // Simple color-only shader for debug polygon rendering
+    private const string DebugVertSrc = """
+        #version 450 core
+        layout(location = 0) in vec3 aPos;
+
+        uniform mat4 uMVP;
+
+        void main() {
+            gl_Position = uMVP * vec4(aPos, 1.0);
+        }
+        """;
+
+    private const string DebugFragSrc = """
+        #version 450 core
+        uniform vec4 uColor;
+
+        out vec4 oColor;
+
+        void main() {
+            oColor = uColor;
+        }
+        """;
+
     private void InitSpriteRenderer(GL gl)
     {
         // Compile shader
@@ -773,6 +812,115 @@ public sealed unsafe class SceneManager
         gl.ShaderSource(s, src);
         gl.CompileShader(s);
         return s;
+    }
+
+    private void InitDebugRenderer(GL gl)
+    {
+        uint vs = CompileShader(gl, ShaderType.VertexShader, DebugVertSrc);
+        uint fs = CompileShader(gl, ShaderType.FragmentShader, DebugFragSrc);
+        _debugProgram = gl.CreateProgram();
+        gl.AttachShader(_debugProgram, vs);
+        gl.AttachShader(_debugProgram, fs);
+        gl.LinkProgram(_debugProgram);
+        gl.DeleteShader(vs);
+        gl.DeleteShader(fs);
+
+        _debugMvpLoc = gl.GetUniformLocation(_debugProgram, "uMVP");
+        _debugColorLoc = gl.GetUniformLocation(_debugProgram, "uColor");
+
+        _debugVao = gl.GenVertexArray();
+        _debugVbo = gl.GenBuffer();
+        _debugEbo = gl.GenBuffer();
+
+        gl.BindVertexArray(_debugVao);
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, _debugVbo);
+        gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _debugEbo);
+
+        // Per vertex: x,y,z = 3 floats
+        gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
+        gl.EnableVertexAttribArray(0);
+
+        gl.BindVertexArray(0);
+    }
+
+    /// <summary>
+    /// Call CM_DrawDebugSurface from the engine, which draws bot AAS debug polys
+    /// and collision debug surfaces.
+    /// </summary>
+    private void DrawDebugGraphics(ReadOnlySpan<float> vp, int rdflags)
+    {
+        if (_gl == null) return;
+        if ((rdflags & RDF_NOWORLDMODEL) != 0) return;
+
+        int debugVal = EngineImports.Cvar_VariableIntegerValue("r_debugSurface");
+        if (debugVal == 0) return;
+
+        // Store state for the static callback
+        _activeDebugInstance = this;
+        vp.CopyTo(_debugVpMatrix);
+
+        // Set up GL state for debug drawing
+        _gl.UseProgram(_debugProgram);
+        fixed (float* vpPtr = _debugVpMatrix)
+            _gl.UniformMatrix4(_debugMvpLoc, 1, false, vpPtr);
+
+        _gl.BindVertexArray(_debugVao);
+        _gl.Enable(EnableCap.Blend);
+        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
+        _gl.Disable(EnableCap.CullFace);
+        _gl.DepthMask(false);
+
+        EngineImports.CM_DrawDebugSurface(&DebugPolygonCallback);
+
+        _gl.DepthMask(true);
+        _gl.Disable(EnableCap.Blend);
+        _gl.BindVertexArray(0);
+        _activeDebugInstance = null;
+    }
+
+    /// <summary>
+    /// Static callback invoked by the engine for each debug polygon.
+    /// Matches: void drawPoly(int color, int numPoints, float *points)
+    /// Color bits: bit0=red, bit1=green, bit2=blue (same as Q3 GL1 renderer).
+    /// </summary>
+    [System.Runtime.InteropServices.UnmanagedCallersOnly(CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+    private static void DebugPolygonCallback(int color, int numPoints, float* points)
+    {
+        var inst = _activeDebugInstance;
+        if (inst == null || inst._gl == null || numPoints < 3) return;
+
+        var gl = inst._gl;
+
+        // Upload vertex positions
+        gl.BindBuffer(BufferTargetARB.ArrayBuffer, inst._debugVbo);
+        gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(numPoints * 3 * sizeof(float)), points, BufferUsageARB.StreamDraw);
+
+        // Build triangle fan indices
+        int numTris = numPoints - 2;
+        uint* indices = stackalloc uint[numTris * 3];
+        for (int i = 0; i < numTris; i++)
+        {
+            indices[i * 3] = 0;
+            indices[i * 3 + 1] = (uint)(i + 1);
+            indices[i * 3 + 2] = (uint)(i + 2);
+        }
+        gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, inst._debugEbo);
+        gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(numTris * 3 * sizeof(uint)), indices, BufferUsageARB.StreamDraw);
+
+        // Draw solid fill with color from bit flags
+        float r = (color & 1) != 0 ? 1.0f : 0.0f;
+        float g = (color & 2) != 0 ? 1.0f : 0.0f;
+        float b = (color & 4) != 0 ? 1.0f : 0.0f;
+        gl.Uniform4(inst._debugColorLoc, r, g, b, 0.3f);
+        gl.DrawElements(PrimitiveType.Triangles, (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
+
+        // Draw wireframe outline on top (closer to camera)
+        gl.DepthRange(0.0, 0.0);
+        gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
+        gl.Uniform4(inst._debugColorLoc, 1.0f, 1.0f, 1.0f, 0.5f);
+        gl.DrawElements(PrimitiveType.Triangles, (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
+        gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
+        gl.DepthRange(0.0, 1.0);
     }
 
     /// <summary>
