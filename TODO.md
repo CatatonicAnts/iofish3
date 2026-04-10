@@ -208,7 +208,7 @@ The cgame DLL interface is:
 
 ### Active Bugs
 
-- [ ] **AAS plane orientation** - Axial node planes don't always face positive direction, causing pathfinding errors (`code/botlib/be_aas_sample.c`). `CPX 2`
+(none)
 
 ### ON HOLD
 
@@ -314,3 +314,4 @@ The cgame DLL interface is:
 - [x] **Single lightmap fullbright (dotnet renderer)** — DetectAndSplitDeluxeMaps returned early for maps with 1 lightmap. Added GL1's workaround: duplicate the single lightmap entry so the array has 2 entries. `CPX 1`
 - [x] **Transparent surfaces with surfaceparm trans rendered opaque** — BSP surfaces marked `surfaceparm trans` but without explicit blendFunc fell through to the opaque pass. Now defaults to alpha blending for such surfaces. `CPX 2`
 - [x] **Items not visible in cgame_dotnet** — AddItem used _gameModels[modelIndex] but item entities have modelIndex = bg_itemlist index, not CS_MODELS index. Added item model cache with bg_itemlist world_model paths and lazy registration. `CPX 3`
+- [x] **AAS axial plane orientation** — Axial plane optimization was disabled (commented out) because AAS planes can have negative-facing normals unlike BSP. Fixed by multiplying by `plane->normal[axis]` to handle both signs. `CPX 2`
