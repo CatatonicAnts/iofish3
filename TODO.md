@@ -100,6 +100,10 @@ A list of planned features, improvements, and tasks for this project.
 
 ### Uncategorized (Analyze and create TODO entries in above appropriate sections with priority. Do not fix or implement them just yet. Assign complexity points where applicable. Do not delete this section when you are done, just empty it)
 
+- Shooting effect models should be excluded from shadow mapping, like the plasma hit or shotgun bullet hit cones, or lighting sparks
+- Add a filter in the skrimish menu to show only downloaded maps (not in pak .pk3 files), add a flag that will load the map using devmap instead of normal
+- Implement "find" console command, when used like "find debug" it will print all console commands/variables which have "debug" in them
+- Add for cgame the ability to load .NET mods from a "baseq3/mods/cgame" directory. This would allow for changes without having to modify the base game. One use case would be adding custom GUI elements to the HUD without having to change the base cgame code, by loading a mod that adds new elements and hooks into existing ones. This would require a way for the mod to register new console commands and variables, and to hook into existing game events.
 
 ---
 
