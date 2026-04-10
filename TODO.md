@@ -156,7 +156,7 @@ The cgame DLL interface is:
 
 ### High Priority
 
-- [ ] **HUD customization cvars** - Implement cvars and console commands for flexible HUD control: global HUD scaling (`cg_hudScale`), per-element enable/disable, individual element scaling, and position overrides for crosshair, powerup timers, health/armor/ammo, lagometer, etc. `CPX 4`
+- [x] **HUD customization cvars** - Global HUD scaling (`cg_hudScale`), per-element enable/disable (`cg_drawPowerups`, `cg_drawPickupItem`, `cg_drawHoldableItem`, `cg_drawScores`). Centered-scaling approach with crosshair viewport centering. `CPX 4`
 - [ ] **Enable Freetype font rendering by default** - `USE_FREETYPE` is OFF by default. Evaluate and enable for improved font quality. `CPX 2`
 - [ ] **Complete shadow mapping in .NET renderer** - Take the GL2 one as a base. Multiple unimplemented shadow features in `code/renderergl2/tr_shadows.c`. Sun shadows also render incorrectly in cubemaps (`tr_main.c`, `tr_bsp.c`). `CPX 4`
 
@@ -265,6 +265,7 @@ The cgame DLL interface is:
 - [x] Bubble trail — underwater bullet bubble puffs
 - [x] Event handler wiring — 11 event types fully implemented: EV_CHANGE_WEAPON, EV_MISSILE_HIT/MISS/MISS_METAL, EV_BULLET_HIT_WALL/FLESH, EV_SHOTGUN, EV_RAILTRAIL, EV_GIB_PLAYER, EV_PLAYER_TELEPORT_IN/OUT, EV_JUMP_PAD, EV_SCOREPLUM
 - [x] Player angles — CG_PlayerAngles/CG_SwingAngles with swing damping for smooth head/torso/legs rotation and velocity-based lean
+- [x] HUD customization cvars — global HUD scaling (cg_hudScale) with centered-scaling, per-element toggles (cg_drawPowerups, cg_drawPickupItem, cg_drawHoldableItem, cg_drawScores), crosshair bypasses bias for viewport centering
 
 ### Improvements
 
