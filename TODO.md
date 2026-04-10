@@ -52,7 +52,15 @@ A list of planned features, improvements, and tasks for this project.
 
 ## Other Features
 
-*All completed (HUD cvars, FreeType, shadow mapping, local gravity, bot AI, DDS cubemaps). See Completed section.*
+### High Priority
+
+- [ ] **Runtime AAS generation** - BSPC integrated as a build target (git submodule at `code/bspc/`). Console commands: `aas_generate [mapname]` spawns BSPC as a background process to convert BSP→AAS, `aas_status` checks progress. Auto-reloads AAS into botlib on completion. Remaining: test with maps that lack AAS files, verify pk3-embedded BSP path handling. `CPX 5 (partially done)`
+
+### Normal Priority
+
+- [ ] **HUD offset cvars** - Global offsets (cg_hudOffsetX, cg_hudOffsetY) and per-element Y offsets (cg_hudStatusOffsetY, cg_hudWeaponOffsetY, cg_hudAmmoWarningOffsetY) implemented. Remaining: test in-game at various HUD scales. `CPX 2 (mostly done)`
+
+- [ ] **Widescreen FOV verification** - Hor+ FOV implemented (cg_fov as 4:3 reference, vertical stays constant, horizontal expands for widescreen). Added cg_fovViewmodel cvar for independent weapon FOV. Weapon pull-back uses actual rendered fov_x. Remaining: test on ultra-wide (21:9) display, verify zoom transitions feel natural with Hor+ active. `CPX 2 (mostly done)`
 
 ---
 
@@ -125,10 +133,14 @@ A list of planned features, improvements, and tasks for this project.
 ### Other Features
 
 - [x] HUD customization cvars (cg_hudScale, per-element toggles), FreeType font rendering, shadow mapping, local gravity, bot AI improvements, DDS cubemaps
+- [x] Hor+ widescreen FOV (4:3 reference, expands horizontal on widescreen), cg_fovViewmodel cvar
+- [x] HUD offset cvars (cg_hudOffsetX/Y global, cg_hudStatusOffsetY, cg_hudWeaponOffsetY, cg_hudAmmoWarningOffsetY)
 
 ### Improvements
 
 - [x] CMake build with Visual Studio 2022, .NET 9 NativeAOT renderer DLL with full refexport/refimport interop
+- [x] FreeType font rendering built from source (git submodule at `code/libs/freetype`)
+- [x] BSPC tool built as part of VS solution (git submodule at `code/bspc/`, cmake/bspc.cmake)
 - [x] 2D rendering pipeline, Q3 shader script parser, texture loading from pk3 (TGA/JPEG/PNG/BMP/DDS)
 - [x] MD3 model loading with frame interpolation, scene management, BSP world rendering with PVS culling
 - [x] Skybox, shader blending (11 GL factors), entity types (MODEL/SPRITE/BEAM/LIGHTNING/RAIL/POLY)

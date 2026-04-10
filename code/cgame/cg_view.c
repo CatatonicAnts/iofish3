@@ -529,10 +529,10 @@ static int CG_CalcFov( void ) {
 		float refAspect = 4.0f / 3.0f;
 		if ( aspect > refAspect ) {
 			float halfFov = fov_x / 360.0f * M_PI;
-			// vertical FOV from 4:3 reference
-			fov_y = atan( tan( halfFov ) / refAspect ) * 2.0f * 180.0f / M_PI;
-			// horizontal FOV for current aspect ratio
-			fov_x = atan( tan( fov_y * M_PI / 360.0f ) * aspect ) * 360.0f / M_PI;
+			// vertical FOV from 4:3 reference: atan(tan(halfFov) / refAspect)
+			fov_y = atan2( tan( halfFov ), refAspect ) * 2.0f * 180.0f / M_PI;
+			// horizontal FOV for current aspect: atan(tan(fov_y/2) * aspect)
+			fov_x = atan2( tan( fov_y * M_PI / 360.0f ) * aspect, 1.0f ) * 360.0f / M_PI;
 			if ( fov_x > 160.0f ) {
 				fov_x = 160.0f;
 			}
