@@ -21,6 +21,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
 #include "server.h"
+#include "../botlib/botlib.h"
+#include "../sys/sys_local.h"
 
 /*
 ===============================================================================
@@ -1509,6 +1511,349 @@ static void SV_CompletePlayerName( char *args, int argNum ) {
 
 /*
 ==================
+SV_GenerateAAS_f
+
+Generate AAS navigation file for the current map (or specified map) using BSPC.
+Usage: aas_generate [mapname]
+==================
+*/
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+static qboolean aasGenerationInProgress = qfalse;
+
+#ifdef _WIN32
+static HANDLE aasProcessHandle = NULL;
+#else
+static pid_t aasProcessPid = 0;
+#endif
+
+static char aasGenerationMapName[MAX_QPATH];
+
+extern botlib_export_t	*botlib_export;
+
+static void SV_GenerateAAS_f( void ) {
+	char		mapname[MAX_QPATH];
+	char		bspcPath[MAX_OSPATH];
+	char		bspPath[MAX_OSPATH];
+	char		outputPath[MAX_OSPATH];
+	const char	*basepath;
+	const char	*gamedir;
+
+	if ( aasGenerationInProgress ) {
+		Com_Printf( "AAS generation already in progress for '%s'\n", aasGenerationMapName );
+		return;
+	}
+
+	// Get map name from argument or current map
+	if ( Cmd_Argc() >= 2 ) {
+		Q_strncpyz( mapname, Cmd_Argv(1), sizeof(mapname) );
+	} else {
+		Q_strncpyz( mapname, sv_mapname->string, sizeof(mapname) );
+	}
+
+	if ( !mapname[0] || !Q_stricmp( mapname, "nomap" ) ) {
+		Com_Printf( "No map specified and no map currently loaded.\n" );
+		Com_Printf( "Usage: aas_generate [mapname]\n" );
+		return;
+	}
+
+	// Locate bspc executable next to game binary
+#ifdef _WIN32
+	Com_sprintf( bspcPath, sizeof(bspcPath), "%s%cbspc.exe",
+		Sys_BinaryPath(), PATH_SEP );
+#else
+	Com_sprintf( bspcPath, sizeof(bspcPath), "%s%cbspc",
+		Sys_BinaryPath(), PATH_SEP );
+#endif
+
+	// Check if bspc exists
+	{
+		FILE *f = fopen( bspcPath, "rb" );
+		if ( !f ) {
+			Com_Printf( S_COLOR_RED "Error: bspc not found at '%s'\n", bspcPath );
+			Com_Printf( "Build the bspc target first.\n" );
+			return;
+		}
+		fclose( f );
+	}
+
+	basepath = Cvar_VariableString( "fs_basepath" );
+	gamedir = FS_GetCurrentGameDir();
+
+	// Build BSP file path - try loose file first
+	Com_sprintf( bspPath, sizeof(bspPath), "%s%c%s%cmaps%c%s.bsp",
+		basepath, PATH_SEP, gamedir, PATH_SEP, PATH_SEP, mapname );
+
+	{
+		FILE *f = fopen( bspPath, "rb" );
+		if ( !f ) {
+			// BSP not found as loose file - it may be in a pk3
+			// BSPC can handle pk3 paths, but we need to find which pk3
+			Com_Printf( S_COLOR_YELLOW "Warning: BSP not found as loose file at '%s'\n", bspPath );
+			Com_Printf( "Searching pk3 files...\n" );
+
+			// Try common pak files
+			{
+				const char *pakNames[] = { "pak0", "pak1", "pak2", "pak3", "pak4",
+					"pak5", "pak6", "pak7", "pak8", NULL };
+				qboolean found = qfalse;
+				int p;
+
+				for ( p = 0; pakNames[p]; p++ ) {
+					char pakPath[MAX_OSPATH];
+					Com_sprintf( pakPath, sizeof(pakPath), "%s%c%s%c%s.pk3",
+						basepath, PATH_SEP, gamedir, PATH_SEP, pakNames[p] );
+					f = fopen( pakPath, "rb" );
+					if ( f ) {
+						fclose( f );
+						// Use BSPC's pk3 path format: <pk3path>/maps/<mapname>.bsp
+						Com_sprintf( bspPath, sizeof(bspPath),
+							"%s%c%s%c%s.pk3%cmaps%c%s.bsp",
+							basepath, PATH_SEP, gamedir, PATH_SEP,
+							pakNames[p], PATH_SEP, PATH_SEP, mapname );
+						found = qtrue;
+						break;
+					}
+				}
+
+				if ( !found ) {
+					Com_Printf( S_COLOR_RED "Error: Could not find BSP for map '%s'\n", mapname );
+					return;
+				}
+			}
+		} else {
+			fclose( f );
+		}
+	}
+
+	// Output AAS to the writable game directory
+	Com_sprintf( outputPath, sizeof(outputPath), "%s%c%s%cmaps",
+		basepath, PATH_SEP, gamedir, PATH_SEP );
+
+	Q_strncpyz( aasGenerationMapName, mapname, sizeof(aasGenerationMapName) );
+
+	Com_Printf( "Generating AAS for '%s'...\n", mapname );
+	Com_Printf( "  BSP: %s\n", bspPath );
+	Com_Printf( "  Output: %s\n", outputPath );
+
+	// Spawn BSPC process
+#ifdef _WIN32
+	{
+		STARTUPINFOA si;
+		PROCESS_INFORMATION pi;
+		char cmdline[MAX_OSPATH * 3];
+
+		memset( &si, 0, sizeof(si) );
+		si.cb = sizeof(si);
+		memset( &pi, 0, sizeof(pi) );
+
+		Com_sprintf( cmdline, sizeof(cmdline),
+			"\"%s\" -bsp2aas \"%s\" -output \"%s\"",
+			bspcPath, bspPath, outputPath );
+
+		if ( !CreateProcessA( NULL, cmdline, NULL, NULL, FALSE,
+				CREATE_NO_WINDOW, NULL, NULL, &si, &pi ) ) {
+			Com_Printf( S_COLOR_RED "Error: Failed to launch bspc (error %lu)\n",
+				GetLastError() );
+			return;
+		}
+
+		CloseHandle( pi.hThread );
+		aasProcessHandle = pi.hProcess;
+		aasGenerationInProgress = qtrue;
+		Com_Printf( "BSPC started (PID %lu). Use 'aas_status' to check progress.\n",
+			pi.dwProcessId );
+	}
+#else
+	{
+		pid_t pid = fork();
+		if ( pid == -1 ) {
+			Com_Printf( S_COLOR_RED "Error: Failed to fork for bspc\n" );
+			return;
+		} else if ( pid == 0 ) {
+			// Child process
+			execl( bspcPath, "bspc", "-bsp2aas", bspPath,
+				"-output", outputPath, (char *)NULL );
+			_exit( 1 ); // execl failed
+		}
+		aasProcessPid = pid;
+		aasGenerationInProgress = qtrue;
+		Com_Printf( "BSPC started (PID %d). Use 'aas_status' to check progress.\n",
+			(int)pid );
+	}
+#endif
+}
+
+/*
+==================
+SV_AASStatus_f
+
+Check status of AAS generation and reload if complete.
+==================
+*/
+static void SV_AASStatus_f( void ) {
+	if ( !aasGenerationInProgress ) {
+		Com_Printf( "No AAS generation in progress.\n" );
+		return;
+	}
+
+#ifdef _WIN32
+	{
+		DWORD exitCode;
+		if ( !GetExitCodeProcess( aasProcessHandle, &exitCode ) ) {
+			Com_Printf( S_COLOR_RED "Error: Failed to query bspc process\n" );
+			CloseHandle( aasProcessHandle );
+			aasProcessHandle = NULL;
+			aasGenerationInProgress = qfalse;
+			return;
+		}
+
+		if ( exitCode == STILL_ACTIVE ) {
+			Com_Printf( "AAS generation still in progress for '%s'...\n",
+				aasGenerationMapName );
+			return;
+		}
+
+		CloseHandle( aasProcessHandle );
+		aasProcessHandle = NULL;
+		aasGenerationInProgress = qfalse;
+
+		if ( exitCode == 0 ) {
+			Com_Printf( S_COLOR_GREEN "AAS generation completed for '%s'.\n",
+				aasGenerationMapName );
+		} else {
+			Com_Printf( S_COLOR_RED "AAS generation failed for '%s' (exit code %lu).\n",
+				aasGenerationMapName, exitCode );
+			return;
+		}
+	}
+#else
+	{
+		int status;
+		pid_t result = waitpid( aasProcessPid, &status, WNOHANG );
+
+		if ( result == 0 ) {
+			Com_Printf( "AAS generation still in progress for '%s'...\n",
+				aasGenerationMapName );
+			return;
+		}
+
+		aasProcessPid = 0;
+		aasGenerationInProgress = qfalse;
+
+		if ( result == -1 ) {
+			Com_Printf( S_COLOR_RED "Error: Failed to query bspc process\n" );
+			return;
+		}
+
+		if ( WIFEXITED(status) && WEXITSTATUS(status) == 0 ) {
+			Com_Printf( S_COLOR_GREEN "AAS generation completed for '%s'.\n",
+				aasGenerationMapName );
+		} else {
+			Com_Printf( S_COLOR_RED "AAS generation failed for '%s'.\n",
+				aasGenerationMapName );
+			return;
+		}
+	}
+#endif
+
+	// Auto-reload AAS if the generated map matches the current map
+	if ( !Q_stricmp( aasGenerationMapName, sv_mapname->string ) ) {
+		Com_Printf( "Reloading AAS for current map...\n" );
+		if ( botlib_export ) {
+			botlib_export->BotLibLoadMap( aasGenerationMapName );
+			Com_Printf( S_COLOR_GREEN "AAS reloaded successfully.\n" );
+		} else {
+			Com_Printf( S_COLOR_YELLOW "Note: botlib not initialized, AAS will load on next map start.\n" );
+		}
+	}
+}
+
+/*
+==================
+SV_CheckAASGeneration
+
+Called from the server frame loop to auto-detect when AAS generation completes.
+==================
+*/
+void SV_CheckAASGeneration( void ) {
+	if ( !aasGenerationInProgress ) {
+		return;
+	}
+
+#ifdef _WIN32
+	{
+		DWORD exitCode;
+		if ( !GetExitCodeProcess( aasProcessHandle, &exitCode ) ) {
+			CloseHandle( aasProcessHandle );
+			aasProcessHandle = NULL;
+			aasGenerationInProgress = qfalse;
+			return;
+		}
+
+		if ( exitCode == STILL_ACTIVE ) {
+			return;
+		}
+
+		CloseHandle( aasProcessHandle );
+		aasProcessHandle = NULL;
+		aasGenerationInProgress = qfalse;
+
+		if ( exitCode == 0 ) {
+			Com_Printf( S_COLOR_GREEN "AAS generation completed for '%s'.\n",
+				aasGenerationMapName );
+		} else {
+			Com_Printf( S_COLOR_RED "AAS generation failed for '%s' (exit code %lu).\n",
+				aasGenerationMapName, exitCode );
+			return;
+		}
+	}
+#else
+	{
+		int status;
+		pid_t result = waitpid( aasProcessPid, &status, WNOHANG );
+
+		if ( result == 0 ) {
+			return; // still running
+		}
+
+		aasProcessPid = 0;
+		aasGenerationInProgress = qfalse;
+
+		if ( result == -1 ) {
+			return;
+		}
+
+		if ( WIFEXITED(status) && WEXITSTATUS(status) == 0 ) {
+			Com_Printf( S_COLOR_GREEN "AAS generation completed for '%s'.\n",
+				aasGenerationMapName );
+		} else {
+			Com_Printf( S_COLOR_RED "AAS generation failed for '%s'.\n",
+				aasGenerationMapName );
+			return;
+		}
+	}
+#endif
+
+	// Auto-reload AAS if the generated map matches the current map
+	if ( !Q_stricmp( aasGenerationMapName, sv_mapname->string ) ) {
+		Com_Printf( "Reloading AAS for current map...\n" );
+		if ( botlib_export ) {
+			botlib_export->BotLibLoadMap( aasGenerationMapName );
+			Com_Printf( S_COLOR_GREEN "AAS reloaded successfully.\n" );
+		}
+	}
+}
+
+/*
+==================
 SV_AddOperatorCommands
 ==================
 */
@@ -1564,6 +1909,10 @@ void SV_AddOperatorCommands( void ) {
 	Cmd_AddCommand("bandel", SV_BanDel_f);
 	Cmd_AddCommand("exceptdel", SV_ExceptDel_f);
 	Cmd_AddCommand("flushbans", SV_FlushBans_f);
+
+	Cmd_AddCommand("aas_generate", SV_GenerateAAS_f);
+	Cmd_SetCommandCompletionFunc( "aas_generate", SV_CompleteMapName );
+	Cmd_AddCommand("aas_status", SV_AASStatus_f);
 }
 
 /*

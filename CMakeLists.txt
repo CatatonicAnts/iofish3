@@ -106,6 +106,9 @@ include(missionpack)
 include(post_configure)
 include(installer)
 
+# Build BSPC (BSP-to-AAS compiler) tool
+include(bspc)
+
 # Include .NET projects in Visual Studio solution (NativeAOT, built via dotnet publish)
 if(MSVC)
     include_external_msproject(RendererDotNet

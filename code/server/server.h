@@ -390,6 +390,7 @@ int SV_SendQueuedMessages(void);
 // sv_ccmds.c
 //
 void SV_Heartbeat_f( void );
+void SV_CheckAASGeneration( void );
 
 //
 // sv_snapshot.c
