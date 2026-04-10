@@ -1,3 +1,6 @@
 [submodule "code/bspc"]
 	path = code/bspc
 	url = https://github.com/TTimo/bspc.git
+[submodule "code/libs/freetype"]
+	path = code/libs/freetype
+	url = https://github.com/freetype/freetype.git
