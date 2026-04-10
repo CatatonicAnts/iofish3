@@ -996,6 +996,7 @@ typedef struct {
 	float			screenXScale;		// derived from glconfig
 	float			screenYScale;
 	float			screenXBias;
+	float			screenYBias;
 
 	int				serverCommandSequence;	// reliable command stream counter
 	int				processedSnapshotNum;// the number of snapshots cgame has requested
@@ -1103,6 +1104,11 @@ extern	vmCvar_t		cg_drawCrosshair;
 extern	vmCvar_t		cg_drawCrosshairNames;
 extern	vmCvar_t		cg_drawRewards;
 extern	vmCvar_t		cg_drawTeamOverlay;
+extern	vmCvar_t		cg_drawPowerups;
+extern	vmCvar_t		cg_drawPickupItem;
+extern	vmCvar_t		cg_drawHoldableItem;
+extern	vmCvar_t		cg_drawScores;
+extern	vmCvar_t		cg_hudScale;
 extern	vmCvar_t		cg_teamOverlayUserinfo;
 extern	vmCvar_t		cg_crosshairX;
 extern	vmCvar_t		cg_crosshairY;

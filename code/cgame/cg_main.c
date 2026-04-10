@@ -112,6 +112,11 @@ vmCvar_t	cg_crosshairSize;
 vmCvar_t	cg_crosshairX;
 vmCvar_t	cg_crosshairY;
 vmCvar_t	cg_crosshairHealth;
+vmCvar_t	cg_drawPowerups;
+vmCvar_t	cg_drawPickupItem;
+vmCvar_t	cg_drawHoldableItem;
+vmCvar_t	cg_drawScores;
+vmCvar_t	cg_hudScale;
 vmCvar_t	cg_draw2D;
 vmCvar_t	cg_drawStatus;
 vmCvar_t	cg_animSpeed;
@@ -228,6 +233,11 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_drawCrosshair, "cg_drawCrosshair", "4", CVAR_ARCHIVE },
 	{ &cg_drawCrosshairNames, "cg_drawCrosshairNames", "1", CVAR_ARCHIVE },
 	{ &cg_drawRewards, "cg_drawRewards", "1", CVAR_ARCHIVE },
+	{ &cg_drawPowerups, "cg_drawPowerups", "1", CVAR_ARCHIVE },
+	{ &cg_drawPickupItem, "cg_drawPickupItem", "1", CVAR_ARCHIVE },
+	{ &cg_drawHoldableItem, "cg_drawHoldableItem", "1", CVAR_ARCHIVE },
+	{ &cg_drawScores, "cg_drawScores", "1", CVAR_ARCHIVE },
+	{ &cg_hudScale, "cg_hudScale", "1", CVAR_ARCHIVE },
 	{ &cg_crosshairSize, "cg_crosshairSize", "24", CVAR_ARCHIVE },
 	{ &cg_crosshairHealth, "cg_crosshairHealth", "1", CVAR_ARCHIVE },
 	{ &cg_crosshairX, "cg_crosshairX", "0", CVAR_ARCHIVE },

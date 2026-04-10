@@ -1284,8 +1284,12 @@ static void CG_DrawLowerRight( void ) {
 		y = CG_DrawTeamOverlay( y, qtrue, qfalse );
 	} 
 
-	y = CG_DrawScores( y );
-	CG_DrawPowerups( y );
+	if ( cg_drawScores.integer ) {
+		y = CG_DrawScores( y );
+	}
+	if ( cg_drawPowerups.integer ) {
+		CG_DrawPowerups( y );
+	}
 }
 #endif // MISSIONPACK
 
@@ -1337,8 +1341,9 @@ static void CG_DrawLowerLeft( void ) {
 		y = CG_DrawTeamOverlay( y, qfalse, qfalse );
 	} 
 
-
-	CG_DrawPickupItem( y );
+	if ( cg_drawPickupItem.integer ) {
+		CG_DrawPickupItem( y );
+	}
 }
 #endif // MISSIONPACK
 
@@ -1901,9 +1906,12 @@ static void CG_DrawCrosshair(void)
 		h *= ( 1 + f );
 	}
 
-	x = cg_crosshairX.integer;
-	y = cg_crosshairY.integer;
-	CG_AdjustFrom640( &x, &y, &w, &h );
+	// scale crosshair offset and size directly (bypass bias since
+	// the crosshair centers itself on the viewport via cg.refdef)
+	x = cg_crosshairX.integer * cgs.screenXScale;
+	y = cg_crosshairY.integer * cgs.screenYScale;
+	w *= cgs.screenXScale;
+	h *= cgs.screenYScale;
 
 	ca = cg_drawCrosshair.integer;
 	if (ca < 0) {
@@ -2521,6 +2529,9 @@ CG_Draw2D
 */
 static void CG_Draw2D(stereoFrame_t stereoFrame)
 {
+	float	savedXScale, savedYScale, savedXBias, savedYBias;
+	float	hudScale;
+
 #ifdef MISSIONPACK
 	if (cgs.orderPending && cg.time > cgs.orderTime) {
 		CG_CheckOrderPending();
@@ -2535,14 +2546,31 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 		return;
 	}
 
+	// apply HUD scale: temporarily modify screen scale/bias
+	savedXScale = cgs.screenXScale;
+	savedYScale = cgs.screenYScale;
+	savedXBias = cgs.screenXBias;
+	savedYBias = cgs.screenYBias;
+
+	hudScale = cg_hudScale.value;
+	if ( hudScale <= 0.0f ) {
+		hudScale = 1.0f;
+	}
+	if ( hudScale != 1.0f ) {
+		cgs.screenXScale = savedXScale * hudScale;
+		cgs.screenYScale = savedYScale * hudScale;
+		cgs.screenXBias = ( cgs.glconfig.vidWidth - 640.0f * cgs.screenXScale ) * 0.5f;
+		cgs.screenYBias = ( cgs.glconfig.vidHeight - 480.0f * cgs.screenYScale ) * 0.5f;
+	}
+
 	if ( cg.snap->ps.pm_type == PM_INTERMISSION ) {
 		CG_DrawIntermission();
-		return;
+		goto restore;
 	}
 
 /*
 	if (cg.cameraMode) {
-		return;
+		goto restore;
 	}
 */
 	if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
@@ -2576,7 +2604,9 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 			CG_DrawWeaponSelect();
 
 #ifndef MISSIONPACK
-			CG_DrawHoldableItem();
+			if ( cg_drawHoldableItem.integer ) {
+				CG_DrawHoldableItem();
+			}
 #else
 			//CG_DrawPersistantPowerup();
 #endif
@@ -2617,6 +2647,13 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 	if ( !cg.scoreBoardShowing) {
 		CG_DrawCenterString();
 	}
+
+restore:
+	// restore original screen scale/bias
+	cgs.screenXScale = savedXScale;
+	cgs.screenYScale = savedYScale;
+	cgs.screenXBias = savedXBias;
+	cgs.screenYBias = savedYBias;
 }
 
 
