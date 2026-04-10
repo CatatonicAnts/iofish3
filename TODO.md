@@ -162,7 +162,7 @@ The cgame DLL interface is:
 
 ### Medium Priority
 
-- [ ] **Local gravity support** - Implement per-entity gravity instead of only global (`code/game/bg_pmove.c`). `CPX 2`
+- [x] **Local gravity support** - Implement per-entity gravity via `trigger_gravity` brush entity (`code/game/bg_pmove.c`). `CPX 2`
 - [ ] **Bot AI improvements** - Fix flag carrier defense logic, bridge traversal, and radial damage teammate checking (`code/game/ai_dmq3.c`). `CPX 3`
 
 ### Lower Priority
@@ -268,6 +268,7 @@ The cgame DLL interface is:
 - [x] HUD customization cvars — global HUD scaling (cg_hudScale) with centered-scaling, per-element toggles (cg_drawPowerups, cg_drawPickupItem, cg_drawHoldableItem, cg_drawScores), crosshair bypasses bias for viewport centering
 - [x] Shadow mapping — projected shadows (pshadows) with 16×512px depth FBOs, screen-space application with 3×3 PCF, light grid sampling, entity merging, distance fade
 - [x] FreeType font rendering — bundled FreeType 2.13.3, enabled by default in both GL1/GL2 renderers (BUILD_FREETYPE), static library linked into renderer DLLs
+- [x] Local gravity support — trigger_gravity brush entity sets per-player gravity override, gclient_t.localGravity field, respawn resets to global
 
 ### Improvements
 

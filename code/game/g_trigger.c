@@ -405,6 +405,43 @@ void SP_trigger_hurt( gentity_t *self ) {
 /*
 ==============================================================================
 
+trigger_gravity
+
+==============================================================================
+*/
+
+/*QUAKED trigger_gravity (.5 .5 .5) ?
+Any player that touches this will have their gravity set to the value of "gravity".
+The gravity value persists until the player enters another trigger_gravity
+or returns to global gravity (if no trigger_gravity is active).
+
+"gravity"	gravity value (default 800)
+*/
+void trigger_gravity_touch( gentity_t *self, gentity_t *other, trace_t *trace ) {
+	if ( !other->client ) {
+		return;
+	}
+
+	other->client->localGravity = self->count;
+}
+
+void SP_trigger_gravity( gentity_t *self ) {
+	char *s;
+
+	InitTrigger( self );
+
+	G_SpawnString( "gravity", "800", &s );
+	self->count = atoi( s );
+
+	self->touch = trigger_gravity_touch;
+
+	trap_LinkEntity( self );
+}
+
+
+/*
+==============================================================================
+
 timer
 
 ==============================================================================

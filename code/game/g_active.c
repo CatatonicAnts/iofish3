@@ -837,7 +837,11 @@ void ClientThink_real( gentity_t *ent ) {
 		client->ps.pm_type = PM_NORMAL;
 	}
 
-	client->ps.gravity = g_gravity.value;
+	if ( client->localGravity ) {
+		client->ps.gravity = client->localGravity;
+	} else {
+		client->ps.gravity = g_gravity.value;
+	}
 
 	// set speed
 	client->ps.speed = g_speed.value;

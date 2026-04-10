@@ -317,6 +317,8 @@ struct gclient_s {
 #endif
 
 	char		*areabits;
+
+	int			localGravity;		// per-entity gravity override (0 = use global g_gravity)
 };
 
 
