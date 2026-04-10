@@ -2709,6 +2709,10 @@ void Com_Init( char *commandLine ) {
 
 	Com_InitJournaling();
 
+	// Initialize logfile early so config exec messages are captured
+	Com_StartupVariable("logfile");
+	com_logfile = Cvar_Get ("logfile", "0", CVAR_TEMP );
+
 	// Add some commands here already so users can use them from config files
 	Cmd_AddCommand ("setenv", Com_Setenv_f);
 	if (com_developer && com_developer->integer)
@@ -2757,7 +2761,7 @@ void Com_Init( char *commandLine ) {
 #endif
 	com_blood = Cvar_Get ("com_blood", "1", CVAR_ARCHIVE);
 
-	com_logfile = Cvar_Get ("logfile", "0", CVAR_TEMP );
+	// com_logfile already initialized early (before Com_ExecuteCfg)
 
 	com_timescale = Cvar_Get ("timescale", "1", CVAR_CHEAT | CVAR_SYSTEMINFO );
 	com_fixedtime = Cvar_Get ("fixedtime", "0", CVAR_CHEAT);
