@@ -2563,6 +2563,10 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 		cgs.screenYBias = ( cgs.glconfig.vidHeight - 480.0f * cgs.screenYScale ) * 0.5f;
 	}
 
+	// apply global HUD offset (in virtual 640x480 coordinates)
+	cgs.screenXBias += cg_hudOffsetX.value * cgs.screenXScale;
+	cgs.screenYBias += cg_hudOffsetY.value * cgs.screenYScale;
+
 	if ( cg.snap->ps.pm_type == PM_INTERMISSION ) {
 		CG_DrawIntermission();
 		goto restore;
@@ -2590,10 +2594,16 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 				CG_DrawTimedMenus();
 			}
 #else
+			// per-element Y offset for status bar
+			cgs.screenYBias += cg_hudStatusOffsetY.value * cgs.screenYScale;
 			CG_DrawStatusBar();
+			cgs.screenYBias -= cg_hudStatusOffsetY.value * cgs.screenYScale;
 #endif
       
+			// per-element Y offset for ammo warning
+			cgs.screenYBias += cg_hudAmmoWarningOffsetY.value * cgs.screenYScale;
 			CG_DrawAmmoWarning();
+			cgs.screenYBias -= cg_hudAmmoWarningOffsetY.value * cgs.screenYScale;
 
 #ifdef MISSIONPACK
 			CG_DrawProxWarning();
@@ -2601,7 +2611,11 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 			if(stereoFrame == STEREO_CENTER)
 				CG_DrawCrosshair();
 			CG_DrawCrosshairNames();
+
+			// per-element Y offset for weapon select
+			cgs.screenYBias += cg_hudWeaponOffsetY.value * cgs.screenYScale;
 			CG_DrawWeaponSelect();
+			cgs.screenYBias -= cg_hudWeaponOffsetY.value * cgs.screenYScale;
 
 #ifndef MISSIONPACK
 			if ( cg_drawHoldableItem.integer ) {

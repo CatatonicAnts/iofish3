@@ -117,6 +117,11 @@ vmCvar_t	cg_drawPickupItem;
 vmCvar_t	cg_drawHoldableItem;
 vmCvar_t	cg_drawScores;
 vmCvar_t	cg_hudScale;
+vmCvar_t	cg_hudOffsetX;
+vmCvar_t	cg_hudOffsetY;
+vmCvar_t	cg_hudStatusOffsetY;
+vmCvar_t	cg_hudWeaponOffsetY;
+vmCvar_t	cg_hudAmmoWarningOffsetY;
 vmCvar_t	cg_draw2D;
 vmCvar_t	cg_drawStatus;
 vmCvar_t	cg_animSpeed;
@@ -238,6 +243,11 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_drawHoldableItem, "cg_drawHoldableItem", "1", CVAR_ARCHIVE },
 	{ &cg_drawScores, "cg_drawScores", "1", CVAR_ARCHIVE },
 	{ &cg_hudScale, "cg_hudScale", "1", CVAR_ARCHIVE },
+	{ &cg_hudOffsetX, "cg_hudOffsetX", "0", CVAR_ARCHIVE },
+	{ &cg_hudOffsetY, "cg_hudOffsetY", "0", CVAR_ARCHIVE },
+	{ &cg_hudStatusOffsetY, "cg_hudStatusOffsetY", "0", CVAR_ARCHIVE },
+	{ &cg_hudWeaponOffsetY, "cg_hudWeaponOffsetY", "0", CVAR_ARCHIVE },
+	{ &cg_hudAmmoWarningOffsetY, "cg_hudAmmoWarningOffsetY", "0", CVAR_ARCHIVE },
 	{ &cg_crosshairSize, "cg_crosshairSize", "24", CVAR_ARCHIVE },
 	{ &cg_crosshairHealth, "cg_crosshairHealth", "1", CVAR_ARCHIVE },
 	{ &cg_crosshairX, "cg_crosshairX", "0", CVAR_ARCHIVE },
