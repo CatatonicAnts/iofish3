@@ -845,15 +845,14 @@ public sealed unsafe class SceneManager
 
     /// <summary>
     /// Call CM_DrawDebugSurface from the engine, which draws bot AAS debug polys
-    /// and collision debug surfaces.
+    /// and collision debug surfaces. The engine handles all gating internally:
+    /// - r_debugSurface 1 → collision debug surfaces
+    /// - Any other value → BotDrawDebugPolygons (uses bot_debug cvar)
     /// </summary>
     private void DrawDebugGraphics(ReadOnlySpan<float> vp, int rdflags)
     {
         if (_gl == null) return;
         if ((rdflags & RDF_NOWORLDMODEL) != 0) return;
-
-        int debugVal = EngineImports.Cvar_VariableIntegerValue("r_debugSurface");
-        if (debugVal == 0) return;
 
         // Store state for the static callback
         _activeDebugInstance = this;
@@ -873,6 +872,7 @@ public sealed unsafe class SceneManager
         EngineImports.CM_DrawDebugSurface(&DebugPolygonCallback);
 
         _gl.DepthMask(true);
+        _gl.Enable(EnableCap.CullFace);
         _gl.Disable(EnableCap.Blend);
         _gl.BindVertexArray(0);
         _activeDebugInstance = null;
