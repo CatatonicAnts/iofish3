@@ -52,9 +52,9 @@ typedef struct botlib_globals_s
 float BotLib_Time(void);
 int BotLib_MaxClients(void);
 int BotLib_MaxEntities(void);
+qboolean BotLib_IsDeveloper(void);
 
 extern botlib_import_t botimport;
-extern int botDeveloper;					//true if developer is on
 
 //
 int Sys_MilliSeconds(void);

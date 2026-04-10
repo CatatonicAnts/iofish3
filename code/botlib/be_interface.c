@@ -58,14 +58,15 @@ static botlib_globals_t botlibglobals;
 botlib_export_t be_botlib_export;
 botlib_import_t botimport;
 //
-int botDeveloper;
+static int botDeveloper;
 
 //===========================================================================
-// Accessor functions for botlibglobals (encapsulate the global state)
+// Accessor functions for botlib state (encapsulate globals)
 //===========================================================================
 float BotLib_Time(void) { return botlibglobals.time; }
 int BotLib_MaxClients(void) { return botlibglobals.maxclients; }
 int BotLib_MaxEntities(void) { return botlibglobals.maxentities; }
+qboolean BotLib_IsDeveloper(void) { return botDeveloper ? qtrue : qfalse; }
 
 //===========================================================================
 //
