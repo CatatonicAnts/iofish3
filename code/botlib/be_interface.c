@@ -53,14 +53,19 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "be_ai_gen.h"
 
 //library globals in a structure
-botlib_globals_t botlibglobals;
+static botlib_globals_t botlibglobals;
 
 botlib_export_t be_botlib_export;
 botlib_import_t botimport;
 //
 int botDeveloper;
-//qtrue if the library is setup
-int botlibsetup = qfalse;
+
+//===========================================================================
+// Accessor functions for botlibglobals (encapsulate the global state)
+//===========================================================================
+float BotLib_Time(void) { return botlibglobals.time; }
+int BotLib_MaxClients(void) { return botlibglobals.maxclients; }
+int BotLib_MaxEntities(void) { return botlibglobals.maxentities; }
 
 //===========================================================================
 //
@@ -165,7 +170,6 @@ int Export_BotLibSetup(void)
 	errnum = BotSetupMoveAI();		//be_ai_move.c
 	if (errnum != BLERR_NOERROR) return errnum;
 
-	botlibsetup = qtrue;
 	botlibglobals.botlibsetup = qtrue;
 
 	return BLERR_NOERROR;
@@ -206,7 +210,6 @@ int Export_BotLibShutdown(void)
 	//shut down library log file
 	Log_Shutdown();
 	//
-	botlibsetup = qfalse;
 	botlibglobals.botlibsetup = qfalse;
 	// print any files still open
 	PC_CheckOpenSourceHandles();

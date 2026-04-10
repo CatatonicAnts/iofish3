@@ -47,8 +47,12 @@ typedef struct botlib_globals_s
 #endif
 } botlib_globals_t;
 
+// Accessor functions — botlibglobals is file-scope static in be_interface.c.
+// External files should use these instead of accessing the struct directly.
+float BotLib_Time(void);
+int BotLib_MaxClients(void);
+int BotLib_MaxEntities(void);
 
-extern botlib_globals_t botlibglobals;
 extern botlib_import_t botimport;
 extern int botDeveloper;					//true if developer is on
 

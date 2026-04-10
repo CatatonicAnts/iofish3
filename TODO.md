@@ -79,7 +79,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### Code Refactoring
 
-- [ ] **Refactor global botlib state** - Remove global structure in `code/botlib/be_interface.h`, refactor to instance-based. 530+ refs across 28 files. `CPX 5`
+- [ ] **Refactor global botlib state** - `botlibglobals` encapsulated (static + accessor functions). Remaining: `botimport` (500+ refs, 26 files), `aasworld` (1247 refs, 13 files), per-subsystem statics (goal/weapon/chat/move states). `CPX 5`
 
 ---
 
