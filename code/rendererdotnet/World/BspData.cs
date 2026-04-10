@@ -47,6 +47,9 @@ public sealed class BspWorld
     // Fog volumes from BSP
     public BspFog[] Fogs { get; set; } = [];
 
+    // Cubemap probes for environment reflections
+    public BspCubemap[] Cubemaps { get; set; } = [];
+
     /// <summary>
     /// Sample the light grid at a world position using trilinear interpolation.
     /// Returns ambient RGB (0-1), directed RGB (0-1), and light direction vector.
@@ -243,6 +246,7 @@ public struct BspSurface
     public int NumIndices;
     public int LightmapIndex;     // -1 = no lightmap
     public int ShaderHandle;      // Resolved shader handle from ShaderManager
+    public int CubemapIndex;      // Index into BspWorld.Cubemaps (-1 = none)
 
     // For patches
     public int PatchWidth;
@@ -333,4 +337,15 @@ public struct BspFog
     // Visible surface plane (for gradient fog)
     public bool HasSurface;
     public float SurfNX, SurfNY, SurfNZ, SurfD; // Plane equation
+}
+
+/// <summary>
+/// A cubemap probe used for environment reflections.
+/// Parsed from misc_cubemap entities or info_player_deathmatch fallback.
+/// </summary>
+public struct BspCubemap
+{
+    public string Name;
+    public float OriginX, OriginY, OriginZ;
+    public float ParallaxRadius;    // For parallax correction (default 1000)
 }

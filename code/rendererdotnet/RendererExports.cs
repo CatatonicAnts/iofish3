@@ -392,6 +392,10 @@ public static unsafe class RendererExports
             if (skyBoxName != null)
                 _skyboxRenderer.LoadSkyTextures(skyBoxName, _renderer2D);
         }
+
+        // Load cubemap reflections after world geometry is ready
+        if (_renderer2D != null)
+            _bspRenderer.LoadCubemaps(_renderer2D);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

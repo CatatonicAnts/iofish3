@@ -111,6 +111,9 @@ public static unsafe class BspLoader
         if (entLen > 0)
             world.EntityString = System.Text.Encoding.UTF8.GetString(buf + entOfs, entLen).TrimEnd('\0');
 
+        // Parse cubemap entities from entity string
+        ParseCubemapEntities(world);
+
         EngineImports.Printf(EngineImports.PRINT_ALL,
             $"[.NET] Loaded BSP: {path} ({world.Vertices.Length} verts, {world.Surfaces.Length} surfs, " +
             $"{world.Nodes.Length} nodes, {world.Leafs.Length} leafs, {world.Lightmaps.Length} lightmaps)\n");
@@ -298,6 +301,7 @@ public static unsafe class BspLoader
             result[i].FirstIndex = s[5];
             result[i].NumIndices = s[6];
             result[i].LightmapIndex = s[7];
+            result[i].CubemapIndex = -1;     // No cubemap by default
             result[i].PatchWidth = s[24];   // offset 96
             result[i].PatchHeight = s[25];  // offset 100
 
@@ -887,5 +891,94 @@ public static unsafe class BspLoader
             verts[i].TZ = tz;
             verts[i].TS = sign;
         }
+    }
+
+    /// <summary>
+    /// Parse cubemap entities from the BSP entity string.
+    /// Looks for misc_cubemap first, falls back to info_player_deathmatch spawn points.
+    /// </summary>
+    private static void ParseCubemapEntities(BspWorld world)
+    {
+        if (string.IsNullOrEmpty(world.EntityString)) return;
+
+        var cubemaps = ParseEntitiesByClassname(world.EntityString, "misc_cubemap");
+        if (cubemaps.Count == 0)
+            cubemaps = ParseEntitiesByClassname(world.EntityString, "info_player_deathmatch");
+        if (cubemaps.Count == 0) return;
+
+        world.Cubemaps = cubemaps.ToArray();
+    }
+
+    private static List<BspCubemap> ParseEntitiesByClassname(string entityString, string classname)
+    {
+        var result = new List<BspCubemap>();
+        int pos = 0;
+
+        while (pos < entityString.Length)
+        {
+            int braceStart = entityString.IndexOf('{', pos);
+            if (braceStart < 0) break;
+            int braceEnd = entityString.IndexOf('}', braceStart);
+            if (braceEnd < 0) break;
+
+            string block = entityString.Substring(braceStart + 1, braceEnd - braceStart - 1);
+            pos = braceEnd + 1;
+
+            string? foundClass = null;
+            float ox = 0, oy = 0, oz = 0;
+            float radius = 1000f;
+            bool originSet = false;
+
+            // Parse key-value pairs from the entity block
+            int linePos = 0;
+            while (linePos < block.Length)
+            {
+                // Find key
+                int q1 = block.IndexOf('"', linePos);
+                if (q1 < 0) break;
+                int q2 = block.IndexOf('"', q1 + 1);
+                if (q2 < 0) break;
+                string key = block.Substring(q1 + 1, q2 - q1 - 1);
+
+                // Find value
+                int q3 = block.IndexOf('"', q2 + 1);
+                if (q3 < 0) break;
+                int q4 = block.IndexOf('"', q3 + 1);
+                if (q4 < 0) break;
+                string value = block.Substring(q3 + 1, q4 - q3 - 1);
+
+                linePos = q4 + 1;
+
+                if (key == "classname")
+                    foundClass = value;
+                else if (key == "origin")
+                {
+                    var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 3 &&
+                        float.TryParse(parts[0], System.Globalization.CultureInfo.InvariantCulture, out ox) &&
+                        float.TryParse(parts[1], System.Globalization.CultureInfo.InvariantCulture, out oy) &&
+                        float.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture, out oz))
+                        originSet = true;
+                }
+                else if (key == "radius" || key == "parallaxRadius")
+                {
+                    float.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out radius);
+                }
+            }
+
+            if (foundClass == classname && originSet)
+            {
+                result.Add(new BspCubemap
+                {
+                    Name = classname,
+                    OriginX = ox,
+                    OriginY = oy,
+                    OriginZ = oz,
+                    ParallaxRadius = radius > 0 ? radius : 1000f,
+                });
+            }
+        }
+
+        return result;
     }
 }

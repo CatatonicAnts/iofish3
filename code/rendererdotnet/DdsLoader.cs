@@ -101,6 +101,7 @@ public static unsafe class DdsLoader
         public int NumMips { get; init; }
         public uint GlFormat { get; init; }
         public bool IsCompressed { get; init; }
+        public bool IsCubemap { get; init; }
         public byte[] Data { get; init; } = Array.Empty<byte>();
     }
 
@@ -171,6 +172,11 @@ public static unsafe class DdsLoader
         int height = (int)header.Height;
         int numMips = (header.Flags & DDSFLAGS_MIPMAPCOUNT) != 0 ? (int)header.NumMips : 1;
 
+        // Detect cubemap: all 6 faces must be present
+        bool isCubemap = (header.Caps2 & DDSCAPS2_CUBEMAP) == DDSCAPS2_CUBEMAP;
+        if (isCubemap && width != height)
+            return null; // Cubemap faces must be square
+
         // Determine GL format
         uint glFormat;
         bool isCompressed;
@@ -211,6 +217,7 @@ public static unsafe class DdsLoader
             NumMips = numMips,
             GlFormat = glFormat,
             IsCompressed = isCompressed,
+            IsCubemap = isCubemap,
             Data = result,
         };
     }

@@ -52,6 +52,9 @@ public sealed unsafe class BspRenderer : IDisposable
     private int _portalMapLoc;
     private int _screenSizeLoc;
     private int _usePBRLoc;
+    private int _texCubeMapLoc;
+    private int _useCubeMapLoc;
+    private int _cubeMapInfoLoc;
     private float _greyscaleValue; // 0.0=color, 1.0=fully greyscale
 
     private uint _vao;
@@ -62,6 +65,7 @@ public sealed unsafe class BspRenderer : IDisposable
     private uint[] _lightmapTextures = [];
     private uint[] _deluxeMapTextures = [];
     private bool _hasDeluxeMapping;
+    private uint[] _cubemapTextures = [];     // OpenGL cubemap texture handles
 
     // Per-vertex: x,y,z, nx,ny,nz, u,v, lmU,lmV, r,g,b,a, tx,ty,tz,ts = 18 floats
     private const int FLOATS_PER_VERT = 18;
@@ -449,6 +453,9 @@ public sealed unsafe class BspRenderer : IDisposable
         uniform vec2 uScreenSize; // viewport size for portal mapping
         uniform int uUsePBR;      // 1=metallic/roughness PBR workflow
         uniform float uTime;
+        uniform samplerCube uTexCubeMap;
+        uniform int uUseCubeMap;       // 1=cubemap reflection enabled for this surface
+        uniform vec4 uCubeMapInfo;     // xyz = cubemapOrigin - viewOrigin, w = 1/parallaxRadius
 
         out vec4 oColor;
 
@@ -462,6 +469,13 @@ public sealed unsafe class BspRenderer : IDisposable
             if (func == 3) return fract(phase) * 2.0 - 1.0;         // sawtooth
             if (func == 4) return 1.0 - fract(phase) * 2.0;         // inverseSawtooth
             return sin(phase * 6.283185);
+        }
+
+        // Environment BRDF approximation for cubemap reflections
+        vec3 EnvironmentBRDF(float roughness, float NE, vec3 specular) {
+            float v = 1.0 - max(roughness, NE);
+            v *= v * v;
+            return vec3(v) + specular;
         }
 
         // Steep parallax mapping: 16-step linear search + interpolation
@@ -661,6 +675,39 @@ public sealed unsafe class BspRenderer : IDisposable
                 oColor.rgb = sqrt(max(oColor.rgb, vec3(0.0)));
             }
 
+            // Cubemap reflections (parallax-corrected)
+            if (uUseCubeMap != 0) {
+                vec3 V = normalize(uViewPos - vWorldPos);
+                vec3 N2 = normalize(vNormal);
+                float NE = max(dot(N2, V), 0.0);
+
+                float roughness = 0.5;
+                vec3 specColor = vec3(0.04);
+                if (uUseSpecularMap != 0) {
+                    vec4 specSamp = texture(uTexSpecularMap, vUV);
+                    if (uUsePBR != 0) {
+                        roughness = exp2(-3.0 * specSamp.r);
+                        specColor = specSamp.g * texColor.rgb + vec3(0.04 - 0.04 * specSamp.g);
+                    } else {
+                        roughness = 1.0 - specSamp.r * 0.5;
+                        specColor = specSamp.rgb * 0.3 + vec3(0.04);
+                    }
+                }
+
+                vec3 reflectance = EnvironmentBRDF(roughness, NE, specColor);
+                vec3 R = reflect(-V, N2);
+
+                // Parallax correction
+                vec3 parallax = uCubeMapInfo.xyz + uCubeMapInfo.w * (-V);
+                float mipLevel = 7.0 * roughness;
+                vec3 cubeLightColor = textureLod(uTexCubeMap, R + parallax, mipLevel).rgb;
+
+                if (uUsePBR != 0)
+                    cubeLightColor *= cubeLightColor; // sRGB to linear
+
+                oColor.rgb += cubeLightColor * reflectance;
+            }
+
             // Greyscale desaturation
             if (uGreyscale > 0.0) {
                 float luma = dot(oColor.rgb, vec3(0.299, 0.587, 0.114));
@@ -711,6 +758,9 @@ public sealed unsafe class BspRenderer : IDisposable
         _portalMapLoc = _gl.GetUniformLocation(_program, "uPortalMap");
         _screenSizeLoc = _gl.GetUniformLocation(_program, "uScreenSize");
         _usePBRLoc = _gl.GetUniformLocation(_program, "uUsePBR");
+        _texCubeMapLoc = _gl.GetUniformLocation(_program, "uTexCubeMap");
+        _useCubeMapLoc = _gl.GetUniformLocation(_program, "uUseCubeMap");
+        _cubeMapInfoLoc = _gl.GetUniformLocation(_program, "uCubeMapInfo");
 
         // Set texture unit bindings (static)
         _gl.UseProgram(_program);
@@ -719,6 +769,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _gl.Uniform1(_texNormalMapLoc, 2); // GL_TEXTURE2
         _gl.Uniform1(_texSpecularMapLoc, 3); // GL_TEXTURE3
         _gl.Uniform1(_texDeluxeMapLoc, 4); // GL_TEXTURE4
+        _gl.Uniform1(_texCubeMapLoc, 5);  // GL_TEXTURE5
         _gl.UseProgram(0);
 
         // Register r_greyscale cvar (0.0 = color, 1.0 = fully grey)
@@ -728,6 +779,7 @@ public sealed unsafe class BspRenderer : IDisposable
         EngineImports.Cvar_Get("r_deluxeMapping", "1", 1);
         EngineImports.Cvar_Get("r_pbr", "0", 1); // PBR metallic/roughness workflow
         EngineImports.Cvar_Get("r_mapOverBrightBits", "2", 0x02); // CVAR_LATCH
+        EngineImports.Cvar_Get("r_cubeMapping", "1", 1); // 1 = CVAR_ARCHIVE
 
         // Dlight shader program
         _dlightProgram = CreateDlightProgram();
@@ -926,6 +978,111 @@ public sealed unsafe class BspRenderer : IDisposable
             _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
 
             _deluxeMapTextures[i] = tex;
+        }
+    }
+
+    /// <summary>
+    /// Load cubemap DDS textures and assign cubemaps to world surfaces.
+    /// Must be called after LoadWorld. Requires a Renderer2D for texture upload.
+    /// </summary>
+    public void LoadCubemaps(Renderer2D renderer2D)
+    {
+        if (_world == null) return;
+
+        int cubeMappingEnabled = EngineImports.Cvar_VariableIntegerValue("r_cubeMapping");
+        if (cubeMappingEnabled == 0 || _world.Cubemaps.Length == 0)
+        {
+            _cubemapTextures = [];
+            return;
+        }
+
+        // Extract map base name (e.g., "maps/q3dm1.bsp" -> "q3dm1")
+        string baseName = _world.Name;
+        int lastSlash = baseName.LastIndexOfAny(['/', '\\']);
+        if (lastSlash >= 0) baseName = baseName[(lastSlash + 1)..];
+        int dotIdx = baseName.LastIndexOf('.');
+        if (dotIdx >= 0) baseName = baseName[..dotIdx];
+
+        // Load cubemap DDS textures
+        _cubemapTextures = new uint[_world.Cubemaps.Length];
+        int loaded = 0;
+        for (int i = 0; i < _world.Cubemaps.Length; i++)
+        {
+            string path = $"cubemaps/{baseName}/{i:D3}";
+            var dds = DdsLoader.LoadFromEngineFS(path);
+            if (dds != null && dds.IsCubemap)
+            {
+                _cubemapTextures[i] = renderer2D.CreateCubemapTexture(dds);
+                if (_cubemapTextures[i] != 0) loaded++;
+            }
+        }
+
+        // Assign cubemaps to surfaces (find nearest cubemap for each surface center)
+        AssignCubemapsToSurfaces();
+
+        if (loaded > 0)
+        {
+            EngineImports.Printf(EngineImports.PRINT_ALL,
+                $"[.NET] Loaded {loaded}/{_world.Cubemaps.Length} cubemaps for reflections\n");
+        }
+        else
+        {
+            EngineImports.Printf(EngineImports.PRINT_ALL,
+                $"[.NET] {_world.Cubemaps.Length} cubemap probes found (no DDS files, will use fallback)\n");
+        }
+    }
+
+    /// <summary>
+    /// For each surface, find the nearest cubemap probe and store the index.
+    /// Convention: CubemapIndex = -1 means no cubemap.
+    /// </summary>
+    private void AssignCubemapsToSurfaces()
+    {
+        if (_world == null || _world.Cubemaps.Length == 0) return;
+
+        var verts = _world.Vertices;
+        var cubemaps = _world.Cubemaps;
+
+        for (int si = 0; si < _world.Surfaces.Length; si++)
+        {
+            ref var surf = ref _world.Surfaces[si];
+            if (surf.NumVertices < 1 || surf.SurfaceType == SurfaceTypes.MST_FLARE)
+            {
+                surf.CubemapIndex = -1;
+                continue;
+            }
+
+            // Compute surface center from vertex bounds
+            float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
+            int end = surf.FirstVertex + surf.NumVertices;
+            for (int vi = surf.FirstVertex; vi < end; vi++)
+            {
+                ref var v = ref verts[vi];
+                if (v.X < minX) minX = v.X; if (v.X > maxX) maxX = v.X;
+                if (v.Y < minY) minY = v.Y; if (v.Y > maxY) maxY = v.Y;
+                if (v.Z < minZ) minZ = v.Z; if (v.Z > maxZ) maxZ = v.Z;
+            }
+            float cx = (minX + maxX) * 0.5f;
+            float cy = (minY + maxY) * 0.5f;
+            float cz = (minZ + maxZ) * 0.5f;
+
+            // Find nearest cubemap
+            float bestDist = float.MaxValue;
+            int bestIdx = -1;
+            for (int ci = 0; ci < cubemaps.Length; ci++)
+            {
+                float dx = cx - cubemaps[ci].OriginX;
+                float dy = cy - cubemaps[ci].OriginY;
+                float dz = cz - cubemaps[ci].OriginZ;
+                float distSq = dx * dx + dy * dy + dz * dz;
+                if (distSq < bestDist)
+                {
+                    bestDist = distSq;
+                    bestIdx = ci;
+                }
+            }
+            surf.CubemapIndex = bestIdx;
         }
     }
 
@@ -1623,6 +1780,20 @@ public sealed unsafe class BspRenderer : IDisposable
             _gl.BindTexture(TextureTarget.Texture2D, specTexId);
         }
 
+        // Bind cubemap if available for this surface
+        bool hasCubeMap = surf.CubemapIndex >= 0 && surf.CubemapIndex < _cubemapTextures.Length
+            && _cubemapTextures[surf.CubemapIndex] != 0;
+        _gl.Uniform1(_useCubeMapLoc, hasCubeMap ? 1 : 0);
+        if (hasCubeMap)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture5);
+            _gl.BindTexture(TextureTarget.TextureCubeMap, _cubemapTextures[surf.CubemapIndex]);
+            ref var cm = ref _world!.Cubemaps[surf.CubemapIndex];
+            float invRadius = cm.ParallaxRadius > 0 ? 1f / cm.ParallaxRadius : 0.001f;
+            _gl.Uniform4(_cubeMapInfoLoc,
+                cm.OriginX - _viewX, cm.OriginY - _viewY, cm.OriginZ - _viewZ, invRadius);
+        }
+
         // Set alpha test mode
         _gl.Uniform1(_alphaFuncLoc, alphaFunc);
 
@@ -1723,6 +1894,20 @@ public sealed unsafe class BspRenderer : IDisposable
         {
             _gl.ActiveTexture(TextureUnit.Texture4);
             _gl.BindTexture(TextureTarget.Texture2D, _deluxeMapTextures[surf.LightmapIndex]);
+        }
+
+        // Bind cubemap for multi-stage
+        bool hasCubeMap = surf.CubemapIndex >= 0 && surf.CubemapIndex < _cubemapTextures.Length
+            && _cubemapTextures[surf.CubemapIndex] != 0;
+        _gl.Uniform1(_useCubeMapLoc, hasCubeMap ? 1 : 0);
+        if (hasCubeMap)
+        {
+            _gl.ActiveTexture(TextureUnit.Texture5);
+            _gl.BindTexture(TextureTarget.TextureCubeMap, _cubemapTextures[surf.CubemapIndex]);
+            ref var cm = ref _world!.Cubemaps[surf.CubemapIndex];
+            float invRadius = cm.ParallaxRadius > 0 ? 1f / cm.ParallaxRadius : 0.001f;
+            _gl.Uniform4(_cubeMapInfoLoc,
+                cm.OriginX - _viewX, cm.OriginY - _viewY, cm.OriginZ - _viewZ, invRadius);
         }
 
         float timeSec = _currentTimeSec;
@@ -2631,6 +2816,10 @@ public sealed unsafe class BspRenderer : IDisposable
         foreach (uint tex in _deluxeMapTextures)
             if (tex != 0) _gl.DeleteTexture(tex);
         _deluxeMapTextures = [];
+
+        foreach (uint tex in _cubemapTextures)
+            if (tex != 0) _gl.DeleteTexture(tex);
+        _cubemapTextures = [];
 
         if (_dlightTexture != 0) { _gl.DeleteTexture(_dlightTexture); _dlightTexture = 0; }
         if (_dlightProgram != 0) { _gl.DeleteProgram(_dlightProgram); _dlightProgram = 0; }

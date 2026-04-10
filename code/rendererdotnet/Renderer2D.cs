@@ -340,6 +340,73 @@ public sealed unsafe class Renderer2D : System.IDisposable
         return tex;
     }
 
+    /// <summary>
+    /// Create an OpenGL cubemap texture from a DDS cubemap (6 faces, each with mip chain).
+    /// </summary>
+    public uint CreateCubemapTexture(DdsLoader.DdsResult dds)
+    {
+        if (!dds.IsCubemap) return 0;
+
+        uint tex = _gl.GenTexture();
+        _gl.BindTexture(TextureTarget.TextureCubeMap, tex);
+
+        int faceSize = dds.Data.Length / 6;
+        int w = dds.Width, h = dds.Height;
+
+        fixed (byte* ptr = dds.Data)
+        {
+            for (int face = 0; face < 6; face++)
+            {
+                int faceOffset = face * faceSize;
+                int mipW = w, mipH = h;
+                int mipOffset = 0;
+
+                for (int mip = 0; mip < dds.NumMips; mip++)
+                {
+                    var target = (TextureTarget)((int)TextureTarget.TextureCubeMapPositiveX + face);
+
+                    if (dds.IsCompressed)
+                    {
+                        int mipSize = DdsLoader.CompressedMipSize(dds.GlFormat, mipW, mipH);
+                        if (faceOffset + mipOffset + mipSize > dds.Data.Length) break;
+
+                        _gl.CompressedTexImage2D(target, mip,
+                            (InternalFormat)dds.GlFormat, (uint)mipW, (uint)mipH, 0,
+                            (uint)mipSize, ptr + faceOffset + mipOffset);
+                        mipOffset += mipSize;
+                    }
+                    else
+                    {
+                        int mipSize = mipW * mipH * 4;
+                        if (faceOffset + mipOffset + mipSize > dds.Data.Length) break;
+
+                        _gl.TexImage2D(target, mip, InternalFormat.Rgba8,
+                            (uint)mipW, (uint)mipH, 0, PixelFormat.Rgba,
+                            PixelType.UnsignedByte, ptr + faceOffset + mipOffset);
+                        mipOffset += mipSize;
+                    }
+
+                    mipW = Math.Max(1, mipW >> 1);
+                    mipH = Math.Max(1, mipH >> 1);
+                }
+            }
+        }
+
+        bool hasMips = dds.NumMips > 1;
+        _gl.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureMinFilter,
+            hasMips ? (int)GLEnum.LinearMipmapLinear : (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureMagFilter,
+            (int)GLEnum.Linear);
+        _gl.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureWrapS,
+            (int)GLEnum.ClampToEdge);
+        _gl.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureWrapT,
+            (int)GLEnum.ClampToEdge);
+        _gl.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureWrapR,
+            (int)GLEnum.ClampToEdge);
+
+        return tex;
+    }
+
     public void DeleteTexture(uint tex)
     {
         if (tex != 0 && tex != _whiteTexture)
