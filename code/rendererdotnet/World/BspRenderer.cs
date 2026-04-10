@@ -2574,17 +2574,25 @@ public sealed unsafe class BspRenderer : IDisposable
             // Set fog color
             _gl.Uniform4(_fogColorLoc, fog.ColorR, fog.ColorG, fog.ColorB, 1f);
 
-            // Compute fog distance vector (view forward direction scaled by tcScale)
-            // Simplified: use view-to-vertex distance instead of full model-space transform
-            // fogDistance = -viewForward * tcScale (we approximate with world-Z)
-            _gl.Uniform4(_fogDistanceLoc, 0f, 0f, -fog.TcScale, fog.TcScale * viewZ);
+            // Compute fog distance vector: use negated view up direction (matches C renderer)
+            // C renderer: fogDistanceVector = (-modelMatrix[2], -modelMatrix[6], -modelMatrix[10], 0) * tcScale
+            // For world entity, modelMatrix row 2 = camera up axis, so this is -viewUp * tcScale
+            float fogDistX = -_viewUp[0] * fog.TcScale;
+            float fogDistY = -_viewUp[1] * fog.TcScale;
+            float fogDistZ = -_viewUp[2] * fog.TcScale;
+            _gl.Uniform4(_fogDistanceLoc, fogDistX, fogDistY, fogDistZ, 0f);
 
             // Compute fog depth vector from fog surface plane
             float eyeT;
             if (fog.HasSurface)
             {
-                _gl.Uniform4(_fogDepthLoc, fog.SurfNX, fog.SurfNY, fog.SurfNZ, fog.SurfD);
-                eyeT = viewX * fog.SurfNX + viewY * fog.SurfNY + viewZ * fog.SurfNZ + fog.SurfD;
+                // C renderer: fogDepthVector.w = -surface[3] + dot(origin, surface)
+                // For world entity: origin = camera position, surface = (surfNX, surfNY, surfNZ)
+                float fogDepthW = -fog.SurfD + (viewX * fog.SurfNX + viewY * fog.SurfNY + viewZ * fog.SurfNZ);
+                _gl.Uniform4(_fogDepthLoc, fog.SurfNX, fog.SurfNY, fog.SurfNZ, fogDepthW);
+                // C renderer: eyeT = dot(viewOrigin, fogDepthVector) + fogDepthVector[3]
+                // For world entity: viewOrigin = (0,0,0), so eyeT = fogDepthVector.w
+                eyeT = fogDepthW;
             }
             else
             {
