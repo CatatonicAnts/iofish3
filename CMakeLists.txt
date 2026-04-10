@@ -105,3 +105,15 @@ include(missionpack)
 
 include(post_configure)
 include(installer)
+
+# Include .NET projects in Visual Studio solution (NativeAOT, built via dotnet publish)
+if(MSVC)
+    include_external_msproject(RendererDotNet
+        "${CMAKE_SOURCE_DIR}/code/rendererdotnet/RendererDotNet.csproj"
+        GUID "8536048D-9926-4F59-B825-8D54A596B548"
+        PLATFORM "AnyCPU")
+    include_external_msproject(CGameDotNet
+        "${CMAKE_SOURCE_DIR}/code/cgamedotnet/CGameDotNet.csproj"
+        GUID "A7B2F3E1-6D4C-4E5A-9F8B-1C2D3E4F5A6B"
+        PLATFORM "AnyCPU")
+endif()
