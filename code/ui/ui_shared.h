@@ -131,8 +131,15 @@ typedef struct {
 
 typedef rectDef_t Rectangle;
 
-// NOTE: windowDef_t contains both layout and appearance data. A future
-// refactoring could separate text/animation concerns into sub-structs.
+// Animation/transition state for a window element (rect transitions, fades,
+// model rotation timing). Separated from core layout to clarify concerns.
+typedef struct {
+  Rectangle target;               // transition destination rect / orbit center
+  Rectangle step;                 // per-step delta towards target
+  int interval;                   // time between transition steps (ms)
+  int nextTime;                   // time when next transition/fade step occurs
+} windowTransition_t;
+
 typedef struct {
   Rectangle rect;                 // client coord rectangle
   Rectangle rectClient;           // screen coord rectangle (after scaling)
@@ -146,10 +153,7 @@ typedef struct {
 	int ownerDrawFlags;							// show flags for ownerdraw items
   float borderSize;               // 
   int flags;                      // WINDOW_* bitmask (visibility, focus, animation, etc.)
-  Rectangle rectTarget;           // transition target rect / orbit center point
-  Rectangle rectStep;             // per-step delta towards rectTarget
-  int transitionInterval;         // time between transition steps (ms)
-  int nextTransitionTime;         // time when next transition/fade step occurs
+  windowTransition_t transition;  // animation/transition state
   vec4_t foreColor;               // text color
   vec4_t backColor;               // background fill color
   vec4_t borderColor;             // border color
