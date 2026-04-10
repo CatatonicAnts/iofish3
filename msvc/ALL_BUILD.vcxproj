@@ -175,6 +175,16 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\code\cgamedotnet\CGameDotNet.csproj">
+      <Project>{A7B2F3E1-6D4C-4E5A-9F8B-1C2D3E4F5A6B}</Project>
+      <Name>CGameDotNet</Name>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+    </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\code\rendererdotnet\RendererDotNet.csproj">
+      <Project>{8536048D-9926-4F59-B825-8D54A596B548}</Project>
+      <Name>RendererDotNet</Name>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+    </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\cgame_baseq3.vcxproj">
       <Project>{DB82DCB5-2FA7-3FA4-BFF3-97E8FAE4E74D}</Project>
       <Name>cgame_baseq3</Name>
