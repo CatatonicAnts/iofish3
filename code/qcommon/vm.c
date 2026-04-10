@@ -745,6 +745,13 @@ void VM_Forced_Unload_Done(void) {
 	forced_unload = 0;
 }
 
+qboolean VM_IsRunning( vm_t *vm ) {
+	if ( !vm ) {
+		return qfalse;
+	}
+	return vm->callLevel > 0;
+}
+
 void *VM_ArgPtr( intptr_t intValue ) {
 	if ( !intValue ) {
 		return NULL;

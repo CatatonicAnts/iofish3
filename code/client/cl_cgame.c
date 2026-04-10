@@ -262,6 +262,11 @@ qboolean CL_GetServerCommand( int serverCommandNumber ) {
 	static char bigConfigString[BIG_INFO_STRING];
 	int argc;
 
+	// bail if cgame is shutting down (e.g., connection dropped mid-frame)
+	if ( !cls.cgameStarted ) {
+		return qfalse;
+	}
+
 	// if we have irretrievably lost a reliable command, drop the connection
 	if ( serverCommandNumber <= clc.serverCommandSequence - MAX_RELIABLE_COMMANDS ) {
 		// when a demo record was started after the client got a whole bunch of
@@ -389,7 +394,13 @@ void CL_ShutdownCGame( void ) {
 	if ( !cgvm ) {
 		return;
 	}
-	VM_Call( cgvm, CG_SHUTDOWN );
+	// Skip CG_SHUTDOWN callback if cgvm is already mid-execution
+	// (e.g., Com_Error during event processing). The longjmp in
+	// Com_Error will abandon the current call stack, so re-entering
+	// the VM for shutdown could corrupt partially-modified state.
+	if ( !VM_IsRunning( cgvm ) ) {
+		VM_Call( cgvm, CG_SHUTDOWN );
+	}
 	VM_Free( cgvm );
 	cgvm = NULL;
 }

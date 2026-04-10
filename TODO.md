@@ -197,7 +197,7 @@ The cgame DLL interface is:
 
 ### Code Refactoring
 
-- [ ] **Refactor global botlib state** - Remove global structure in `code/botlib/be_interface.h`, refactor to instance-based. `CPX 3`
+- [ ] **Refactor global botlib state** - Remove global structure in `code/botlib/be_interface.h`, refactor to instance-based. 530+ refs across 28 files. `CPX 5`
 - [ ] **UI subsystem architecture** - Consolidate common data into unified structures, separate text vs window rendering concerns (`code/ui/ui_shared.h`). `CPX 4`
 - [x] **Initialize botgoalstates** - Fixed uninitialized global pointer array in `code/botlib/be_ai_goal.c:179` with `= {NULL}`. `CPX 1`
 - [x] **Fix shader parser fragility** - `COM_ParseExt` now treats `{`/`}` as single-char delimiters; `ParseWaveForm` skips `(`/`)` tokens in both GL1 and GL2. `CPX 2`
@@ -214,7 +214,7 @@ The cgame DLL interface is:
 
 - [x] **Client disconnect message loss** - Added `SV_SendServerCommand` with disconnect reason before `SV_DropClient` in broken download handler. `CPX 2`
 - [x] **Single lightmap fullbright (GL1)** - Rewrote `R_LoadLightmaps` to only create images from actual data and duplicate lightmap[0] for remaining slots. `CPX 2`
-- [ ] **Cgame event loop race** - Server restart during cgame event processing causes undefined behavior (`code/client/cl_cgame.c`). `CPX 3`
+- [x] **Cgame event loop race** - Added `VM_IsRunning()` guard to skip re-entrant `CG_SHUTDOWN` during forced unload; added `cls.cgameStarted` check in `CL_GetServerCommand()`. `CPX 3`
 - [x] **screenShadowImage null crash** - Added `tr.whiteImage` fallback when `screenShadowImage` is NULL (no framebuffers) in GL2 `tr_shade.c`. `CPX 1`
 
 ### Uncategorized (Analyze and create TODO entries in above appropriate sections with priority. Do not fix or implement them just yet. Assign complexity points where applicable. Do not delete this section when you are done, just empty it)
