@@ -163,7 +163,7 @@ The cgame DLL interface is:
 ### Medium Priority
 
 - [x] **Local gravity support** - Implement per-entity gravity via `trigger_gravity` brush entity (`code/game/bg_pmove.c`). `CPX 2`
-- [ ] **Bot AI improvements** - Fix flag carrier defense logic, bridge traversal, and radial damage teammate checking (`code/game/ai_dmq3.c`). `CPX 3`
+- [x] **Bot AI improvements** - Fix flag carrier defense logic, bridge traversal, and radial damage teammate checking (`code/game/ai_dmq3.c`). `CPX 3`
 
 ### Lower Priority
 
@@ -269,6 +269,7 @@ The cgame DLL interface is:
 - [x] Shadow mapping — projected shadows (pshadows) with 16×512px depth FBOs, screen-space application with 3×3 PCF, light grid sampling, entity merging, distance fade
 - [x] FreeType font rendering — bundled FreeType 2.13.3, enabled by default in both GL1/GL2 renderers (BUILD_FREETYPE), static library linked into renderer DLLs
 - [x] Local gravity support — trigger_gravity brush entity sets per-player gravity override, gclient_t.localGravity field, respawn resets to global
+- [x] Bot AI improvements — flag carrier/cube carrier targeting, bridge traversal activation, radial damage teammate proximity check in ai_dmq3.c
 
 ### Improvements
 

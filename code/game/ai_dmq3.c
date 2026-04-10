@@ -593,7 +593,12 @@ void BotCTFSeekGoals(bot_state_t *bs) {
 			//if enemy flag carrier is visible
 			c = BotEnemyFlagCarrierVisible(bs);
 			if (c >= 0) {
-				//FIXME: fight enemy flag carrier
+				//attack the enemy flag carrier
+				bs->enemy = c;
+				bs->enemysight_time = FloatTime();
+				bs->enemysuicide = qfalse;
+				bs->enemydeath_time = 0;
+				bs->enemyvisible_time = FloatTime();
 			}
 			//if not already doing something important
 			if (bs->ltgtype != LTG_GETFLAG &&
@@ -897,7 +902,12 @@ void Bot1FCTFSeekGoals(bot_state_t *bs) {
 		if (bs->owndecision_time < FloatTime()) {
 			c = BotEnemyFlagCarrierVisible(bs);
 			if (c >= 0) {
-				//FIXME: attack enemy flag carrier
+				//attack the enemy flag carrier
+				bs->enemy = c;
+				bs->enemysight_time = FloatTime();
+				bs->enemysuicide = qfalse;
+				bs->enemydeath_time = 0;
+				bs->enemyvisible_time = FloatTime();
 			}
 			//if already a CTF or team goal
 			if (bs->ltgtype == LTG_TEAMHELP ||
@@ -1229,7 +1239,12 @@ void BotHarvesterSeekGoals(bot_state_t *bs) {
 	//
 	c = BotEnemyCubeCarrierVisible(bs);
 	if (c >= 0) {
-		//FIXME: attack enemy cube carrier
+		//attack the enemy cube carrier
+		bs->enemy = c;
+		bs->enemysight_time = FloatTime();
+		bs->enemysuicide = qfalse;
+		bs->enemydeath_time = 0;
+		bs->enemyvisible_time = FloatTime();
 	}
 	if (bs->ltgtype != LTG_TEAMACCOMPANY) {
 		//if there is a visible team mate carrying cubes
@@ -3659,7 +3674,25 @@ void BotCheckAttack(bot_state_t *bs) {
 					return;
 				}
 			}
-			//FIXME: check if a teammate gets radial damage
+			//check if a teammate gets radial damage
+			if (gametype >= GT_TEAM) {
+				int i;
+				float radius;
+				vec3_t diff;
+				aas_entityinfo_t tminfo;
+
+				radius = wi.proj.radius;
+				for (i = 0; i < level.maxclients; i++) {
+					if (i == bs->client) continue;
+					if (!BotSameTeam(bs, i)) continue;
+					BotEntityInfo(i, &tminfo);
+					if (!tminfo.valid) continue;
+					VectorSubtract(tminfo.origin, trace.endpos, diff);
+					if (VectorLengthSquared(diff) < radius * radius) {
+						return;
+					}
+				}
+			}
 		}
 	}
 	//if fire has to be release to activate weapon
@@ -4597,7 +4630,25 @@ int BotAIPredictObstacles(bot_state_t *bs, bot_goal_t *goal) {
 	}
 	else if (route.stopevent & RSE_USETRAVELTYPE) {
 		if (route.endtravelflags & TFL_BRIDGE) {
-			//FIXME: check if the bridge is available to travel over
+			//check if the bridge is available to travel over
+			modelnum = (route.endcontents & AREACONTENTS_MODELNUM) >> AREACONTENTS_MODELNUMSHIFT;
+			if (modelnum) {
+				entitynum = BotModelMinsMaxs(modelnum, ET_MOVER, 0, NULL, NULL);
+				if (entitynum) {
+					bspent = BotGetActivateGoal(bs, entitynum, &activategoal);
+					if (bspent) {
+						if (bs->activatestack && !bs->activatestack->inuse)
+							bs->activatestack = NULL;
+						if (!BotIsGoingToActivateEntity(bs, activategoal.goal.entitynum)) {
+							BotGoForActivateGoal(bs, &activategoal);
+							return qtrue;
+						}
+						else {
+							BotEnableActivateGoalAreas(&activategoal, qtrue);
+						}
+					}
+				}
+			}
 		}
 	}
 	return qfalse;
