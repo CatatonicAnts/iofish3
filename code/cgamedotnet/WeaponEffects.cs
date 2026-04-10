@@ -474,7 +474,7 @@ public static unsafe class WeaponEffects
             ring.PosDeltaZ = rz * 6;
             ring.CustomShader = _railRingsShader;
             ring.Radius = 1.1f;
-            ring.ShaderTime = time / 1000.0f;
+            ring.ShaderTime = time;
             ring.ColorR = 1; ring.ColorG = 0.6f; ring.ColorB = 0; ring.ColorA = 1;
 
             mx += dx * SPACING;
@@ -700,7 +700,7 @@ public static unsafe class WeaponEffects
         le.PosTime = time;
 
         le.CustomShader = _bloodExplosionShader;
-        le.ShaderTime = time / 1000.0f;
+        le.ShaderTime = time;
         le.Rotation = Random.Shared.Next(360);
         le.Radius = 24;
     }
@@ -968,7 +968,7 @@ public static unsafe class WeaponEffects
         le.ReType = Q3RefEntity.RT_MODEL;
         le.HModel = _teleportEffectModel;
         le.CustomShader = _teleportEffectShader;
-        le.ShaderTime = time / 1000.0f;
+        le.ShaderTime = time;
 
         le.PosType = TrajectoryType.TR_STATIONARY;
         le.PosTime = time;

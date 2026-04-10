@@ -136,7 +136,7 @@ public sealed unsafe class SceneManager
     /// 112: int customShader
     /// 116: byte[4] shaderRGBA
     /// 120: float[2] shaderTexCoord
-    /// 128: float shaderTime
+    /// 128: int shaderTime (milliseconds)
     /// 132: float radius
     /// 136: float rotation
     /// </summary>

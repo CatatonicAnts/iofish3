@@ -66,7 +66,7 @@ public static unsafe class LocalEntities
         public float OldOriginX, OldOriginY, OldOriginZ;
         public float Radius;
         public float Rotation;
-        public float ShaderTime;
+        public int ShaderTime;
         public byte ShaderR, ShaderG, ShaderB, ShaderA;
 
         // Dynamic light
@@ -510,7 +510,7 @@ public static unsafe class LocalEntities
         le.PosTime = time;
 
         le.CustomShader = shader;
-        le.ShaderTime = le.StartTime / 1000.0f;
+        le.ShaderTime = le.StartTime;
         le.Rotation = Random.Shared.Next(360);
 
         le.Light = light;

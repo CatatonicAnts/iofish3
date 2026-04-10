@@ -744,6 +744,8 @@ typedef struct {
 
 	char		*entityString;
 	char		*entityParsePoint;
+
+	qboolean	hasSkyShaders;		// set during BSP load if any surface uses a sky shader
 } world_t;
 
 //======================================================================

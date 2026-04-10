@@ -267,7 +267,7 @@ public unsafe struct Q3RefEntity
     public byte ShaderRGBA_R, ShaderRGBA_G, ShaderRGBA_B, ShaderRGBA_A;
 
     public float ShaderTexCoordX, ShaderTexCoordY;
-    public float ShaderTime;
+    public int ShaderTime;
 
     public float Radius;
     public float Rotation;

@@ -178,8 +178,8 @@ The cgame DLL interface is:
 - [ ] **Add static analysis to CI** - Add `cppcheck` or `clang-tidy` to the GitHub Actions workflow. `CPX 2`
 - [ ] **Add sanitizer CI runs** - Run ASAN/MSAN builds to catch memory bugs. `CPX 2`
 - [ ] **GL2 VBO upload optimization** - Use faster search and avoid vertex re-upload (`code/renderergl2/tr_vbo.c`). `CPX 2`
-- [ ] **Fix floating point precision in shaderTime** - Must be passed as int to avoid fp-precision loss in both renderers (`tr_backend.c`). `CPX 1`
-- [ ] **Sky clearing optimization** - Only clear if sky shaders are used instead of unconditionally (both GL1 and GL2 `tr_backend.c`). `CPX 1`
+- [x] **Fix floating point precision in shaderTime** - Changed `refEntity_t.shaderTime` from `float` (seconds) to `int` (milliseconds) to avoid fp-precision loss. Updated both renderers and both cgame implementations. `CPX 1`
+- [x] **Sky clearing optimization** - Added `hasSkyShaders` flag to `world_t`, set during BSP load. `r_fastsky` color clear only runs when sky surfaces exist (both GL1 and GL2). `CPX 1`
 - [ ] **Consolidate renderer code** - GL1 and GL2 have significant duplication that could be shared. `CPX 5`
 
 ---
@@ -199,7 +199,7 @@ The cgame DLL interface is:
 
 - [ ] **Refactor global botlib state** - Remove global structure in `code/botlib/be_interface.h`, refactor to instance-based. `CPX 3`
 - [ ] **UI subsystem architecture** - Consolidate common data into unified structures, separate text vs window rendering concerns (`code/ui/ui_shared.h`). `CPX 4`
-- [ ] **Initialize botgoalstates** - Global array not properly initialized in `code/botlib/be_ai_goal.c:179`. `CPX 1`
+- [x] **Initialize botgoalstates** - Fixed uninitialized global pointer array in `code/botlib/be_ai_goal.c:179` with `= {NULL}`. `CPX 1`
 - [ ] **Fix shader parser fragility** - Shader parser requires spaces after parens (`code/renderergl1/tr_shader.c`, GL2). `CPX 2`
 
 ---
@@ -215,7 +215,7 @@ The cgame DLL interface is:
 - [ ] **Client disconnect message loss** - Client never parses disconnect message from server (`code/server/sv_client.c`). `CPX 2`
 - [ ] **Single lightmap fullbright (GL1)** - Maps with only one lightmap render as fullbright in GL1 (`code/renderergl1/tr_bsp.c`). Fixed in dotnet renderer. `CPX 2`
 - [ ] **Cgame event loop race** - Server restart during cgame event processing causes undefined behavior (`code/client/cl_cgame.c`). `CPX 3`
-- [ ] **screenShadowImage null crash** - Potential crash when framebuffers unavailable in GL2 (`code/renderergl2/tr_shade.c`). `CPX 1`
+- [x] **screenShadowImage null crash** - Added `tr.whiteImage` fallback when `screenShadowImage` is NULL (no framebuffers) in GL2 `tr_shade.c`. `CPX 1`
 
 ### Uncategorized (Analyze and create TODO entries in above appropriate sections with priority. Do not fix or implement them just yet. Assign complexity points where applicable. Do not delete this section when you are done, just empty it)
 

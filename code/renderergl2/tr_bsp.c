@@ -2998,6 +2998,15 @@ void RE_LoadWorldMap( const char *name ) {
 
 	s_worldData.dataSize = (byte *)ri.Hunk_Alloc(0, h_low) - startMarker;
 
+	// Detect if any loaded surface uses a sky shader
+	s_worldData.hasSkyShaders = qfalse;
+	for (i = 0; i < s_worldData.numsurfaces; i++) {
+		if (s_worldData.surfaces[i].shader && s_worldData.surfaces[i].shader->isSky) {
+			s_worldData.hasSkyShaders = qtrue;
+			break;
+		}
+	}
+
 	// only set tr.world now that we know the entire level has loaded properly
 	tr.world = &s_worldData;
 
