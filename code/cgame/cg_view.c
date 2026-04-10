@@ -521,6 +521,24 @@ static int CG_CalcFov( void ) {
 	fov_y = atan2( cg.refdef.height, x );
 	fov_y = fov_y * 360 / M_PI;
 
+	// Hor+ widescreen FOV: treat cg_fov as horizontal FOV on a 4:3 reference
+	// display, keep vertical FOV constant, and expand horizontal FOV for wider
+	// aspect ratios. This prevents the "zoomed in" feeling on widescreen.
+	{
+		float aspect = (float)cg.refdef.width / (float)cg.refdef.height;
+		float refAspect = 4.0f / 3.0f;
+		if ( aspect > refAspect ) {
+			float halfFov = fov_x / 360.0f * M_PI;
+			// vertical FOV from 4:3 reference
+			fov_y = atan( tan( halfFov ) / refAspect ) * 2.0f * 180.0f / M_PI;
+			// horizontal FOV for current aspect ratio
+			fov_x = atan( tan( fov_y * M_PI / 360.0f ) * aspect ) * 360.0f / M_PI;
+			if ( fov_x > 160.0f ) {
+				fov_x = 160.0f;
+			}
+		}
+	}
+
 	// warp if underwater
 	contents = CG_PointContents( cg.refdef.vieworg, -1 );
 	if ( contents & ( CONTENTS_WATER | CONTENTS_SLIME | CONTENTS_LAVA ) ){

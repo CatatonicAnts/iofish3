@@ -122,6 +122,7 @@ vmCvar_t	cg_hudOffsetY;
 vmCvar_t	cg_hudStatusOffsetY;
 vmCvar_t	cg_hudWeaponOffsetY;
 vmCvar_t	cg_hudAmmoWarningOffsetY;
+vmCvar_t	cg_fovViewmodel;
 vmCvar_t	cg_draw2D;
 vmCvar_t	cg_drawStatus;
 vmCvar_t	cg_animSpeed;
@@ -248,6 +249,7 @@ static cvarTable_t cvarTable[] = {
 	{ &cg_hudStatusOffsetY, "cg_hudStatusOffsetY", "0", CVAR_ARCHIVE },
 	{ &cg_hudWeaponOffsetY, "cg_hudWeaponOffsetY", "0", CVAR_ARCHIVE },
 	{ &cg_hudAmmoWarningOffsetY, "cg_hudAmmoWarningOffsetY", "0", CVAR_ARCHIVE },
+	{ &cg_fovViewmodel, "cg_fovViewmodel", "0", CVAR_ARCHIVE },
 	{ &cg_crosshairSize, "cg_crosshairSize", "24", CVAR_ARCHIVE },
 	{ &cg_crosshairHealth, "cg_crosshairHealth", "1", CVAR_ARCHIVE },
 	{ &cg_crosshairX, "cg_crosshairX", "0", CVAR_ARCHIVE },

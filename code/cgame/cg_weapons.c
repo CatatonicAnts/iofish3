@@ -1394,11 +1394,19 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		return;
 	}
 
-	// drop gun lower at higher fov
-	if ( cg_fov.integer > 90 ) {
-		fovOffset = -0.2 * ( cg_fov.integer - 90 );
-	} else {
-		fovOffset = 0;
+	// drop gun lower at higher fov — use actual rendered FOV (may be wider
+	// than cg_fov due to Hor+ widescreen adjustment). cg_fovViewmodel
+	// overrides the FOV used for this pull-back calculation.
+	{
+		float weapFov = cg_fovViewmodel.value;
+		if ( weapFov <= 0 ) {
+			weapFov = cg.refdef.fov_x;
+		}
+		if ( weapFov > 90 ) {
+			fovOffset = -0.2 * ( weapFov - 90 );
+		} else {
+			fovOffset = 0;
+		}
 	}
 
 	cent = &cg.predictedPlayerEntity;	// &cg_entities[cg.snap->ps.clientNum];

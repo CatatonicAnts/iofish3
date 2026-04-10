@@ -1114,6 +1114,7 @@ extern	vmCvar_t		cg_hudOffsetY;
 extern	vmCvar_t		cg_hudStatusOffsetY;
 extern	vmCvar_t		cg_hudWeaponOffsetY;
 extern	vmCvar_t		cg_hudAmmoWarningOffsetY;
+extern	vmCvar_t		cg_fovViewmodel;
 extern	vmCvar_t		cg_teamOverlayUserinfo;
 extern	vmCvar_t		cg_crosshairX;
 extern	vmCvar_t		cg_crosshairY;
