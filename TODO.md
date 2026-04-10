@@ -154,3 +154,4 @@ A list of planned features, improvements, and tasks for this project.
 - [x] AAS axial plane orientation, client disconnect message loss, screenShadowImage null crash
 - [x] Cgame event loop race (VM_IsRunning guard), shader parser fragility (COM_ParseExt `{}`/`}` delimiters)
 - [x] Initialize botgoalstates, animMap tokenizer fix, rgbGen/alphaGen wave/const parsing
+- [x] Bot debug polygon rendering (bot_debug AAS visualization, r_debugSurface collision debug)
