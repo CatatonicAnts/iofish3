@@ -25,127 +25,25 @@ A list of planned features, improvements, and tasks for this project.
 > Comprehensive comparison of `code/rendererdotnet/` against `code/renderergl2/`.
 > Items are grouped by visual impact and ordered by priority within each tier.
 
-### Tier 1 — Core Q3 Rendering (Required for visual correctness)
-
-- [x] **Multi-stage shader rendering** - Q3 shaders have up to 8 stages (e.g. lightmap pass + texture pass + glow pass). Each stage rendered as a separate draw call with its own blend mode, producing correct multi-pass effects (lightmap×texture, glow overlays, detail textures). `CPX 5`
-- [x] **Dynamic lighting (AddLightToScene)** - Per-frame point lights from rockets, plasma, railgun, etc. GL2 transforms dlights to surface-local coordinates and accumulates light contribution. Currently stubbed (AddLightToScene/AddAdditiveLightToScene are empty). `CPX 4`
-- [x] **Fog rendering** - Q3 fog volumes defined via `fogParms` (color, depthForOpaque). Surfaces inside fog fade toward the fog color based on depth. GL2 has per-surface fog adjustment, fog culling, and fog-in-water handling. `CPX 4`
-
-### Tier 2 — Important Visual Quality
-
-- [x] **Light grid for entity lighting** - BSP stores a 3D grid of ambient+directed light samples. Trilinear interpolation samples the grid at entity position. Ambient + directed lighting with per-entity light direction replaces hardcoded uniform light. Supports RF_LIGHTING_ORIGIN for multi-part models. `CPX 3`
-- [x] **Flare rendering** - Light flares (RT_FLARE, MST_FLARE) with depth-based visibility testing and intensity fading. GL2 uses depth reads to check occlusion. We skip MST_FLARE surfaces entirely. `CPX 3`
-- [x] **Portal / mirror rendering** - FBO-based recursive scene rendering through portal surfaces. Detects portal sort, renders scene from mirrored viewpoint into FBO with screen-space UV projection, composites portal texture. Includes mirror face culling reversal, RT_PORTALSURFACE entity matching, and fallback to environment mapping. `CPX 5`
-
-### Tier 3 — GL2-Specific Advanced Features
-
-- [x] **HDR rendering** - RGBA16F scene FBO, filmic tonemapping (Uncharted 2 curve), auto-exposure via luminance pyramid with temporal smoothing. Controlled by `r_hdr`, `r_autoExposure`, `r_cameraExposure`. `CPX 4`
-- [x] **Bloom / post-processing** - FBO-based bloom pipeline: bright-pass extraction, multi-pass Gaussian blur, additive composite. Controlled by `r_bloom` cvar. `CPX 3`
-- [x] **Normal mapping** - `normalMap`/`bumpMap` stage type for per-pixel lighting. Tangent vectors computed from BSP triangle UV deltas (MikkTSpace-style), TBN matrix constructed in vertex shader, normal map sampled and transformed in fragment shader. `CPX 3`
-- [x] **Specular mapping** - `specularMap` stage type with Blinn-Phong specular highlights. Specular map sampled in fragment shader, combined with view-dependent half-vector lighting. `CPX 3`
-- [x] **PBR (Physically Based Rendering)** - Metallic/roughness workflow controlled by `r_pbr` cvar. Specular map reinterpreted: .r=gloss, .g=metallic. GGX microfacet BRDF replaces Blinn-Phong. sRGB↔linear conversions for correct lighting. `CPX 4`
-- [x] **Parallax mapping** - Steep parallax mapping with 16-step linear search and interpolation. Height data from normal map alpha channel. Controlled by `r_parallaxMapping` cvar (default off). `CPX 3`
-- [x] **Shadow mapping** - Projection shadows (512×512 maps), sun shadow framework. Partially implemented in GL2 itself. `CPX 5`
-- [x] **Cubemap reflections** - GL2 loads/renders cubemaps for environment reflections with parallax correction. Ported to .NET renderer: DDS cubemap loading, probe assignment per surface (nearest probe), parallax-corrected sampling with roughness-based mip selection and EnvironmentBRDF. Controlled by `r_cubeMapping` cvar. `CPX 4`
-- [x] **Deluxe mapping** - World deluxe maps store per-pixel light direction. Detected automatically from interleaved BSP lightmaps (even=lightmap, odd=deluxe). Enhances normal-mapped surfaces with per-texel lighting and specular direction. Controlled by `r_deluxeMapping` cvar (default on). `CPX 3`
-- [x] **SSAO** - Screen-space ambient occlusion with Poisson disc sampling (9-tap), bilateral blur, and multiplicative compositing. Depth texture from scene FBO sampled at half resolution. Controlled by `r_ssao` cvar (default off). `CPX 3`
-- [x] **IQM model format** - Inter-Quake Model format with CPU bone skinning. Loader, ModelManager integration, Renderer3D rendering, and LerpTag support. `CPX 4`
-- [x] **VBO caching / batching** - Shader-sorted deferred opaque rendering. Visible surfaces collected during BSP walk, sorted by shader+lightmap, drawn with minimal state changes. Same-state surfaces share a single bind, reducing GL state transitions. Static geometry uploaded once at load time. `CPX 3`
-- [x] **DDS texture format** - DDS file loading with S3TC (DXT1/3/5), RGTC (BC4/5), BPTC (BC6H/7), and uncompressed RGBA support. DX10 extended header support. DDS tried first for all texture loads (preferred for GPU memory/performance). `CPX 2`
-- [x] **FBO pipeline** - Framebuffer objects for render-to-texture, multi-pass effects, post-processing. Foundation for HDR/bloom/portals. `CPX 3`
+*Tiers 1–3 complete (core rendering, visual quality, GL2 advanced features). See Completed section.*
 
 ### ON HOLD
 
 - [ ] **MDR model format** - Advanced skeletal model format with bone matrices. `CPX 3`
 - [ ] **GPU vertex skinning** - Bone matrix uniforms for hardware-accelerated skeletal animation. `CPX 3`
 
-### Tier 4 — Minor / Polish
-
-- [x] **videoMap** - Cinematic playback on surfaces (video textures on in-game screens). Shader parser calls CIN_PlayCinematic, stores handle per stage. Each frame: CIN_RunCinematic + CIN_UploadCinematic binds scratch texture. `CPX 2`
-- [x] **nopicmip / nomipmaps** - Parse and honor mipmap control directives per shader. Mipmaps generated by default with trilinear filtering; `nomipmaps` disables mipmap generation. `CPX 1`
-- [x] **Anisotropic filtering** - Hardware anisotropic filtering (up to 16x) auto-detected and applied to mipmapped textures. `CPX 1`
-- [x] **Greyscale mode** - `r_greyscale` cvar for desaturated rendering. Luma-based desaturation in fragment shader. `CPX 1`
-- [x] **Screenshot support** - `/screenshot` command captures framebuffer to TGA via ReadPixels + FS_WriteFile. `CPX 2`
-- [x] **TakeVideoFrame** - Video frame capture for demo recording. Reads framebuffer as RGBA, converts to BGR with AVI line padding, calls CL_WriteAVIVideoFrame. `CPX 2`
-- [x] **surfaceparm parsing** - Parse `trans`, `nolightmap`, `nodlight`, `nomarks`/`noimpact` surfaceparms. Flags propagated to shader entries for use by dlight pass and mark system. `CPX 2`
-- [x] **entityMergable** - Parse `entityMergable` shader directive. Surfaces from different entities sharing this shader can be batched together (smoke, blood sprites). Flag propagated through ShaderDef → ShaderEntry with public accessor. `CPX 2`
+*Tier 4 complete (videoMap, nopicmip, anisotropic, greyscale, screenshots, surfaceparm, entityMergable). See Completed section.*
 
 ---
 
 ## .NET Client Game (cgame_dotnet)
 
-> Reimplement `code/cgame/` (baseq3 cgame) in C# as a NativeAOT DLL, following the same architecture as `code/rendererdotnet/`.
-> The engine loads cgame via `VM_Create("cgame", ...)` → `Sys_LoadGameDll()` which looks for `dllEntry` and `vmMain` exports.
-> Set `vm_cgame 0` to force native DLL loading. To load `cgame_dotnet` by default for debugging, set `vm_cgame 0` and place the compiled DLL as the first cgame DLL found by `FS_FindVM`.
-
-### Architecture
-
-The cgame DLL interface is:
-- **`dllEntry(syscall)`** — Called once at load. Receives a pointer to the engine syscall dispatcher (`intptr_t (*)(intptr_t, ...)`) for ~90 import functions (CG_PRINT, CG_R_REGISTERMODEL, CG_GETSNAPSHOT, etc. — see `cg_public.h`)
-- **`vmMain(command, arg0..arg11)`** — Called by the engine for ~8 export functions: CG_INIT, CG_SHUTDOWN, CG_DRAW_ACTIVE_FRAME, CG_CONSOLE_COMMAND, CG_CROSSHAIR_PLAYER, CG_LAST_ATTACKER, CG_KEY_EVENT, CG_MOUSE_EVENT, CG_EVENT_HANDLING
-- **Shared code** - Serverside part is also planned to be rewritten in C#, but it shares code with the cgame (e.g. pmove physics, bg_*), so that shared code should be implemented in a way that can be used by both the cgame and server DLLs (e.g. separate `code/shared/` library).
-
-### Implementation Plan
-
-- [x] **Project scaffolding** — Create `code/cgamedotnet/` with .csproj targeting net9.0 NativeAOT (same pattern as rendererdotnet). Export `dllEntry` and `vmMain` via `[UnmanagedCallersOnly]`. Publish to game directory as `cgamex86_64.dll`. `CPX 3`
-- [x] **Engine syscall interop** — Marshal all ~90 `cgameImport_t` syscalls (CG_PRINT through CG_R_INPVS). Wrap engine calls (cvars, filesystem, renderer, sound, collision, input, snapshots) in type-safe C# classes. `CPX 4`
-- [x] **Core game state** — Port `cg_t`, `cgs_t`, `centity_t`, `cg_weapons_t` structs and CG_Init/CG_Shutdown lifecycle. Handle gamestate parsing, server info, map loading, media registration. `CPX 4`
-- [x] **Snapshot processing** — Port CG_ProcessSnapshots: snapshot interpolation, entity state transitions (enter/leave PVS), player state prediction, event processing. `CPX 4`
-- [x] **Entity rendering** — Port CG_AddCEntity: per-entity-type rendering (players, items, missiles, movers, portals), model attachment via tags, animation state machines, shell/powerup effects. `CPX 5`
-- [x] **Player rendering** — Port CG_Player: multi-part player model (head/torso/legs), team skins, animation blending, weapon attachment, first-person weapon rendering. `CPX 5`
-- [x] **Weapon effects** — Port CG_AddPlayerWeapon, CG_RegisterWeapon, weapon fire effects (muzzle flash, trails, projectiles, impacts, explosions). All weapon-specific rendering (railgun beam, lightning, BFG, etc.). `CPX 4`
-- [x] **HUD / 2D drawing** — Port CG_Draw2D: health/armor/ammo bars, crosshair, pickup notifications, timer, scores, obituaries, chat overlay, lagometer, speed display. `CPX 4`
-- [x] **Scoreboard** — Port CG_DrawScoreboard: player list with scores, ping, time, spectator info, team scores. `CPX 3`
-- [x] **Local movement prediction** — Port CG_PredictPlayerState: client-side physics prediction using pmove, command replay for lag compensation. Critical for responsive movement. `CPX 5`
-- [x] **Event system** — Port CG_EntityEvent: sound triggers, visual effects, item pickups, deaths, jumppads, teleporters, footsteps, pain sounds, weapon switching. `CPX 4`
-- [x] **Console commands** — Port cgame console commands: say, tell, +scores, weapon selection, zoom, team overlay toggles, etc. `CPX 2`
-- [x] **Marks / decals** — Port CG_ImpactMark: bullet holes, explosion scorch marks, blood splatters via MarkFragments API with fade-out timing. `CPX 3`
-- [x] **Particle / local entity system** — Port CG_AddLocalEntities: brass casings, debris, blood trails, smoke puffs, sparks with physics simulation. `CPX 3`
-- [x] **Sound integration** — Port CG_AddLoopingSound, entity sound triggers, positional audio, ambient sounds, announcer voice. `CPX 3`
-- [x] **Default loading** — Modify engine to prefer `cgame_dotnet` DLL over QVM when `vm_cgame 0` is set. Add a cvar (e.g. `cl_cgame`) to select cgame implementation by name, similar to `cl_renderer` for renderers. `CPX 3`
-
-### Polish Features
-
-- [x] **View effects** — Port CG_OffsetFirstPersonView: view bobbing (head bob from bobCycle/xySpeed), step offset smoothing (stair climbing), duck height smoothing (crouch transition), landing deflection (fall impact), damage kick (pitch/roll punch when hit), velocity-based run pitch/roll, dead view angles. `CPX 3`
-- [x] **FOV and zoom** — Port CG_CalcFov: read cg_fov cvar (1-160), zoom support (+zoom/-zoom commands with cg_zoomFov interpolation over 150ms). `CPX 2`
-- [x] **Damage blend blob** — Port CG_DamageBlendBlob: directional blood vignette sprite rendered in front of view on damage with fade-out. `CPX 2`
-- [x] **Center print** — Port CG_CenterPrint: handle "cp" server command, display centered text messages (objectives, notifications) with 3-second fade-out. `CPX 2`
-- [x] **Chat display** — Handle "chat"/"tchat" server commands, display recent chat messages with ring buffer and 6-second fade-out. `CPX 2`
-- [x] **Item pickup notifications** — Show item name on pickup (e.g. "Rocket Launcher", "Mega Health") with 3-second centered display and fade-out. `CPX 2`
-- [x] **Crosshair target names** — Port CG_DrawCrosshairNames: trace from view to find player under crosshair, display name with 1-second fade-out. `CPX 2`
-- [x] **Powerup timers** — Port CG_DrawPowerups: display active powerup icons with remaining time countdown, blinking effect when expiring. `CPX 3`
-- [x] **Warmup countdown** — Port CG_DrawWarmup: pre-match countdown display showing game type and "Starts in: N" timer. `CPX 2`
-- [x] **Attacker display** — Port CG_DrawAttacker: show last attacker's name in upper-right when damaged by a player, with 10-second fade. `CPX 2`
-- [x] **Muzzle flash model** — Render flash model at tag_flash on first-person weapon during fire events, with dynamic light. `CPX 2`
-- [x] **Reward medals** — Port CG_DrawReward: display excellence/impressive/gauntlet medals with sound on multi-kills and skill achievements. `CPX 3`
-- [x] **Lagometer** — Port CG_DrawLagometer: network latency graph showing snapshot timing and command round-trip, with disconnect indicator. `CPX 3`
-- [x] **Third-person camera** — Port CG_OffsetThirdPersonView: third-person camera with collision tracing, controlled by cg_thirdPerson cvar. `CPX 3`
-- [x] **Hit feedback sounds** — Play hit/hit_teammate sounds when PERS_HITS changes. `CPX 1`
-- [x] **Denied/gauntlet reward events** — Play denied/humiliation announcer sounds on player events. `CPX 1`
-- [x] **Spectator/follow mode display** — Show "SPECTATOR" text with gametype instructions, "following <name>" display in follow mode, skip full HUD for spectators. `CPX 2`
-- [x] **Surface-aware footstep sounds** — 7 footstep types (normal/boot/flesh/mech/energy/metal/splash) × 4 variants, parsed from animation.cfg footsteps directive. `CPX 3`
-- [x] **Pain/death sounds** — Per-model pain sounds with health-based selection (pain25/50/75/100) and 500ms throttle, per-model death sounds (death1-3). `CPX 3`
-- [x] **Announcer voice** — Frag limit warnings (1/2/3 frags remaining), prepare/fight/countdown sounds, sudden death, time warnings. `CPX 3`
-- [x] **Water/fall sounds** — Gurp sounds on underwater, gasp on surfacing, per-model fall/falling sounds on medium/far falls. `CPX 2`
-- [x] **Kill/obituary messages** — EV_OBITUARY handler with means-of-death messages, self-kills, world kills, and center-print "You fragged X" for frags. Full MOD_ constant set. `CPX 3`
-- [x] **Powerup pickup sounds** — EV_POWERUP_QUAD/BATTLESUIT/REGEN play appropriate item sounds (damage3/protect3/regen). `CPX 1`
-- [x] **Gib sound** — EV_GIB_PLAYER plays gibsplt1 body channel sound. `CPX 1`
-- [x] **CTF/team announcements** — EV_GLOBAL_TEAM_SOUND handler for captures, returns, flag taken, team scoring, lead changes. Team-relative sound selection. `CPX 3`
-- [x] **Use item events** — EV_USE_ITEM0-15 for holdable items (medkit, teleporter) with appropriate sounds. `CPX 1`
-- [x] **Ammo warning** — Flash "LOW AMMO" / "OUT OF AMMO" text when current weapon's ammo ≤ 5 or empty (gauntlet excluded). `CPX 1`
-- [x] **Vote display** — Show active vote string with yes/no counts and countdown timer (30s), updated via CS_VOTE_* configstrings. `CPX 2`
-- [x] **Holdable item display** — Show holdable item icon (teleporter/medkit) on HUD when player has one. `CPX 1`
-- [x] **Player shadow** — Projected blob shadow under players using downward trace and markShadow shader poly, with height-based alpha fade. `CPX 2`
-- [x] **Powerup visual effects** — Dynamic lights for active powerups: quad (blue), regen (green), battlesuit (yellow), flag carriers (red/blue). `CPX 2`
-- [x] **Taunt event** — EV_TAUNT plays per-model *taunt.wav custom sound. `CPX 1`
-- [x] **Stop looping sound** — EV_STOPLOOPINGSOUND event handler. `CPX 1`
-- [x] **Corrected event constants** — Fixed EV_TAUNT/EV_STOPLOOPINGSOUND/EV_DEBUG_LINE numbering to match actual bg_public.h enum (accounting for mission pack events). `CPX 1`
+*Fully implemented — 15 core subsystems + 35 polish features. See Completed section for details.*
 
 ### Notes
 
 - The cgame communicates with the engine entirely through numbered syscalls (not function pointers like the renderer). The NativeAOT DLL must store the syscall pointer from `dllEntry` and dispatch through it.
 - Unlike the renderer (which has its own OpenGL context), the cgame only calls renderer APIs indirectly via engine syscalls (CG_R_REGISTERMODEL, CG_R_ADDREFENTITYTOSCENE, etc.). It never touches GPU directly.
-- The original cgame source is ~15,000 lines across ~30 files. Full port is a large effort but each subsystem can be implemented incrementally (start with init + basic HUD, add entity rendering, then prediction).
 - `code/cgame/cg_public.h` defines the complete import/export interface — this is the contract between engine and cgame.
 - Player prediction (`pmove`) shares code with server-side physics (`code/game/bg_pmove.c`, `bg_slidemove.c`). This shared code must also be ported to C#.
 - We are using VisualStudio for development, make sure the .sln is kept up to date
@@ -154,20 +52,7 @@ The cgame DLL interface is:
 
 ## Other Features
 
-### High Priority
-
-- [x] **HUD customization cvars** - Global HUD scaling (`cg_hudScale`), per-element enable/disable (`cg_drawPowerups`, `cg_drawPickupItem`, `cg_drawHoldableItem`, `cg_drawScores`). Centered-scaling approach with crosshair viewport centering. `CPX 4`
-- [x] **Enable Freetype font rendering by default** - `USE_FREETYPE` is OFF by default. Evaluate and enable for improved font quality. `CPX 2`
-- [x] **Complete shadow mapping in .NET renderer** - Take the GL2 one as a base. Multiple unimplemented shadow features in `code/renderergl2/tr_shadows.c`. Sun shadows also render incorrectly in cubemaps (`tr_main.c`, `tr_bsp.c`). `CPX 4`
-
-### Medium Priority
-
-- [x] **Local gravity support** - Implement per-entity gravity via `trigger_gravity` brush entity (`code/game/bg_pmove.c`). `CPX 2`
-- [x] **Bot AI improvements** - Fix flag carrier defense logic, bridge traversal, and radial damage teammate checking (`code/game/ai_dmq3.c`). `CPX 3`
-
-### Lower Priority
-
-- [x] **DDS cubemap loading** - Complete DDS cubemap support in `code/renderergl2/tr_image_dds.c`. `CPX 2`
+*All completed (HUD cvars, FreeType, shadow mapping, local gravity, bot AI, DDS cubemaps). See Completed section.*
 
 ---
 
@@ -177,9 +62,6 @@ The cgame DLL interface is:
 
 - [ ] **Add static analysis to CI** - Add `cppcheck` or `clang-tidy` to the GitHub Actions workflow. `CPX 2`
 - [ ] **Add sanitizer CI runs** - Run ASAN/MSAN builds to catch memory bugs. `CPX 2`
-- [x] **GL2 VBO upload optimization** - Added hash-based batch search in `VaoCache_Commit` to skip non-matching batches during linear scan. `CPX 2`
-- [x] **Fix floating point precision in shaderTime** - Changed `refEntity_t.shaderTime` from `float` (seconds) to `int` (milliseconds) to avoid fp-precision loss. Updated both renderers and both cgame implementations. `CPX 1`
-- [x] **Sky clearing optimization** - Added `hasSkyShaders` flag to `world_t`, set during BSP load. `r_fastsky` color clear only runs when sky surfaces exist (both GL1 and GL2). `CPX 1`
 - [ ] **Consolidate renderer code** - GL1 and GL2 have significant duplication that could be shared. `CPX 5`
 
 ---
@@ -199,8 +81,6 @@ The cgame DLL interface is:
 
 - [ ] **Refactor global botlib state** - Remove global structure in `code/botlib/be_interface.h`, refactor to instance-based. 530+ refs across 28 files. `CPX 5`
 - [ ] **UI subsystem architecture** - Consolidate common data into unified structures, separate text vs window rendering concerns (`code/ui/ui_shared.h`). `CPX 4`
-- [x] **Initialize botgoalstates** - Fixed uninitialized global pointer array in `code/botlib/be_ai_goal.c:179` with `= {NULL}`. `CPX 1`
-- [x] **Fix shader parser fragility** - `COM_ParseExt` now treats `{`/`}` as single-char delimiters; `ParseWaveForm` skips `(`/`)` tokens in both GL1 and GL2. `CPX 2`
 
 ---
 
@@ -212,10 +92,7 @@ The cgame DLL interface is:
 
 ### ON HOLD
 
-- [x] **Client disconnect message loss** - Added `SV_SendServerCommand` with disconnect reason before `SV_DropClient` in broken download handler. `CPX 2`
-- [x] **Single lightmap fullbright (GL1)** - Rewrote `R_LoadLightmaps` to only create images from actual data and duplicate lightmap[0] for remaining slots. `CPX 2`
-- [x] **Cgame event loop race** - Added `VM_IsRunning()` guard to skip re-entrant `CG_SHUTDOWN` during forced unload; added `cls.cgameStarted` check in `CL_GetServerCommand()`. `CPX 3`
-- [x] **screenShadowImage null crash** - Added `tr.whiteImage` fallback when `screenShadowImage` is NULL (no framebuffers) in GL2 `tr_shade.c`. `CPX 1`
+*(none — all resolved)*
 
 ### Uncategorized (Analyze and create TODO entries in above appropriate sections with priority. Do not fix or implement them just yet. Assign complexity points where applicable. Do not delete this section when you are done, just empty it)
 
@@ -237,87 +114,39 @@ The cgame DLL interface is:
 
 ## Completed
 
-### Features
+### .NET Renderer (all tiers)
 
-- [x] .NET cgame (cgame_dotnet) — full C# client game module with 15 core subsystems: project scaffolding, syscalls, core game state, snapshot processing, entity/player rendering, weapon effects, HUD, scoreboard, movement prediction, events, console commands, marks/decals, particles, sound integration, engine default loading
-- [x] HUD scaling — AdjustFrom640 coordinate scaling from virtual 640×480 to actual screen resolution
-- [x] Weapon switching — NextWeapon/PrevWeapon/SelectWeapon with STAT_WEAPONS bitmask and ammo checks
-- [x] Missile rendering — projectile models loaded via WeaponEffects with configstring refresh on dynamic model registration
-- [x] Weapon animation — proper MapTorsoToWeaponFrame mapping torso attack/drop/idle to weapon hand frames
-- [x] Mirror rendering — portal surfaces rendered with environment mapping approximation
-- [x] Muzzle flash model — flash model rendered at tag_flash on first-person weapon during fire events
-- [x] Third-person weapon model — weapon/barrel/flash attached to other players via tag_weapon on torso, with muzzle flash for continuous and impulse weapons
-- [x] Weapon impact effects — per-weapon MissileHitWall/MissileHitPlayer with explosion sprite/model, decals, sounds, dynamic lights for all 9 weapons
-- [x] Bullet/shotgun effects — CG_Bullet for wall sparks+marks, CG_ShotgunFire with Q3-compatible deterministic pellet spread, flesh hit blood spray
-- [x] Gib system — 10 gib models with LE_FRAGMENT physics, tumbling, bounce sounds, blood trail marks
-- [x] Score plum — floating +N score text with per-digit number sprites, color-coded by score range, rising+oscillating animation
-- [x] Rail trail with rings — RT_RAIL_CORE beam as fading local entity with spiral ring sprites along path
-- [x] Entity effects — looping sounds, constant lights, bmodel sound positioning for all entities
-- [x] Player sprites — floating connection/talk/medal/friend icons above players based on eFlags
-- [x] Pain twitch — torso roll animation on damage with direction alternation
-- [x] Haste trail — smoke puffs behind running players with haste powerup
-- [x] CTF flags — red/blue flag models trailing behind flag carriers
-- [x] Portal entity — RT_PORTALSURFACE rendering for mirror/portal surfaces
-- [x] Grapple hook — RT_LIGHTNING cable beam from owner to grapple projectile
-- [x] Mover adjustment — AdjustPositionForMover for entities riding moving platforms
-- [x] Spawn/teleport effects — visual teleport model effect for player spawn-in/out
-- [x] Brass ejection — machinegun and shotgun shell casings with physics
-- [x] Bubble trail — underwater bullet bubble puffs
-- [x] Event handler wiring — 11 event types fully implemented: EV_CHANGE_WEAPON, EV_MISSILE_HIT/MISS/MISS_METAL, EV_BULLET_HIT_WALL/FLESH, EV_SHOTGUN, EV_RAILTRAIL, EV_GIB_PLAYER, EV_PLAYER_TELEPORT_IN/OUT, EV_JUMP_PAD, EV_SCOREPLUM
-- [x] Player angles — CG_PlayerAngles/CG_SwingAngles with swing damping for smooth head/torso/legs rotation and velocity-based lean
-- [x] HUD customization cvars — global HUD scaling (cg_hudScale) with centered-scaling, per-element toggles (cg_drawPowerups, cg_drawPickupItem, cg_drawHoldableItem, cg_drawScores), crosshair bypasses bias for viewport centering
-- [x] Shadow mapping — projected shadows (pshadows) with 16×512px depth FBOs, screen-space application with 3×3 PCF, light grid sampling, entity merging, distance fade
-- [x] FreeType font rendering — bundled FreeType 2.13.3, enabled by default in both GL1/GL2 renderers (BUILD_FREETYPE), static library linked into renderer DLLs
-- [x] Local gravity support — trigger_gravity brush entity sets per-player gravity override, gclient_t.localGravity field, respawn resets to global
-- [x] Bot AI improvements — flag carrier/cube carrier targeting, bridge traversal activation, radial damage teammate proximity check in ai_dmq3.c
-- [x] DDS cubemap loading — validate cubemap DDS files (square faces, all 6 faces required) in GL2 renderer tr_image_dds.c
+- [x] Multi-stage shaders, dynamic lighting, fog, light grid, flares, portal/mirror rendering
+- [x] HDR/bloom/tonemapping, normal/specular/PBR/parallax/deluxe mapping, SSAO, cubemap reflections
+- [x] Shadow mapping (pshadows with PCF), IQM model format, VBO caching/batching, DDS textures, FBO pipeline
+- [x] videoMap, nopicmip/nomipmaps, anisotropic filtering, greyscale mode, screenshots, TakeVideoFrame, surfaceparm/entityMergable parsing
+
+### .NET Client Game (cgame_dotnet)
+
+- [x] Full C# cgame — 15 core subsystems (scaffolding, syscalls, game state, snapshots, entity/player rendering, weapons, HUD, scoreboard, prediction, events, commands, marks, particles, sound, default loading)
+- [x] 35 polish features: view effects, FOV/zoom, damage blob, center print, chat, pickups, crosshair names, powerup timers, warmup, attacker display, muzzle flash, rewards, lagometer, third-person, spectator mode, footsteps, pain/death/announcer/water sounds, kill messages, powerup sounds/effects, gibs, CTF, use items, ammo warning, vote display, holdable items, player shadow, taunt, stop looping sound, corrected event constants
+
+### Other Features
+
+- [x] HUD customization cvars (cg_hudScale, per-element toggles), FreeType font rendering, shadow mapping, local gravity, bot AI improvements, DDS cubemaps
 
 ### Improvements
 
-- [x] Set up CMake build with Visual Studio 2022
-- [x] Add .NET 9 NativeAOT renderer DLL with full refexport/refimport interop and 30 exports
-- [x] 2D rendering pipeline — batched quad renderer with GLSL 450, orthographic projection, texture batching, SetColor/DrawStretchPic/DrawStretchRaw, RegisterShader/RegisterFont
-- [x] Q3 shader script parser — parses `scripts/*.shader` files, resolves shader names to image paths, supports `map`/`clampMap`/`animMap`/`blendFunc`/`alphaFunc`/`skyparms`/`surfaceparm trans`/`tcGen environment`
-- [x] Texture loading from pk3 — TGA/JPEG/PNG/BMP via StbImageSharp, lazy loading with shader script fallback chain (direct→script image→editorimage→envmap stage→shader name)
-- [x] MD3 model loading — binary parser, frame interpolation (backlerp), GLSL 450 shaders, per-entity transforms, directional lighting, skin loading, tag interpolation (LerpTag)
-- [x] Scene management — ClearScene/AddRefEntityToScene/AddPolyToScene/RenderScene pipeline with viewport/scissor, Q3→OpenGL coordinate conversion
-- [x] BSP world rendering — v46 binary parser, static GPU upload, BSP tree walk with PVS culling, dual-texture lightmap rendering, opaque/transparent two-pass pipeline
-- [x] Skybox rendering — 6-face cube from skyparms, rendered before world at far plane
-- [x] Shader blending — per-shader blend modes (11 GL factors), alpha testing (GT0/LT128/GE128), BlendMode struct with actual GL factors
-- [x] Entity types — RT_MODEL, RT_SPRITE (billboarded), RT_BEAM, RT_LIGHTNING, RT_RAIL_CORE, RT_RAIL_RINGS, RT_POLY
-- [x] MarkFragments — BSP traversal with Sutherland-Hodgman polygon clipping across faces/patches/triangle soups
-- [x] Depth ordering fix — surfaces only deferred to transparent pass when CONTENTS_TRANSLUCENT or surfaceparm trans
-- [x] Blend state leak fix — explicit GL_BLEND disable at BSP opaque pass start
-- [x] GetEntityToken, InPVS, ModelBounds — engine interop functions
-- [x] Remove intro video and CD key prompt
-- [x] BSP vertex colors — wired `vColor` into fragment shader for `rgbGen vertex` and vertex-colored surfaces
-- [x] Cull directive — parse `cull none/twosided/back/disable` from shader scripts, apply per-surface GL cull mode
-- [x] tcGen environment — reflection UV generation from view-space normals in both BSP and MD3 vertex shaders
-- [x] Frustum culling — 6-plane frustum extraction from MVP matrix, AABB test on BSP nodes and leaves
-- [x] Animated textures (animMap) — parse all frames and frequency, lazy-load each frame, time-based cycling
-- [x] tcMod support — scroll, scale, rotate, turb parsed and applied via vertex shader uniforms (up to 4 ops per surface)
-- [x] rgbGen / alphaGen — parse identity/vertex/entity/wave/identityLighting, apply vertex color path in BSP fragment shader
-- [x] polygonOffset — parse directive, apply `glPolygonOffset(-1,-1)` per-surface for decals
-- [x] depthFunc / depthWrite — parse `depthFunc equal` and `depthWrite`, apply per-surface depth state
-- [x] HDR rendering — RGBA16F scene FBO, filmic tonemapping (Uncharted 2 curve), auto-exposure via luminance pyramid (256→1x1) with temporal smoothing (3% blend), r_hdr/r_autoExposure/r_cameraExposure cvars
-- [x] FBO pipeline and bloom post-processing — scene FBO with bright-pass extraction, multi-pass Gaussian blur at quarter resolution, additive bloom composite. Controlled by `r_bloom` cvar (default on)
-- [x] RemapShader — runtime shader handle remapping via dictionary, resolve in GetTextureId
-- [x] Sort order — parse `sort` directive (portal/sky/opaque/decal/seeThrough/banner/additive/nearest + numeric), sort transparent surfaces by key before drawing
-- [x] Entity alpha / shaderRGBA — all-zero detection (uninitialized→white), alpha<1 enables blending on models
-- [x] deformVertexes — parse wave/move/bulge/normal/autosprite/autosprite2 from shader scripts, GPU-based wave and move displacement in BSP vertex shader
-- [x] Overbright scale — configurable lightmap overbright multiplier uniform (replaces hardcoded 2.0)
-- [x] R_ColorShiftLightingBytes — apply Q3's overbright color shift to lightmap texels, vertex colors, and light grid data during BSP loading (shift=r_mapOverBrightBits), replacing shader-time ×2.0 which washed out texture detail
-- [x] Inline BSP models — doors, platforms, and other brush models (*N) registered by ModelManager, rendered via BspRenderer.RenderSubmodel with entity transforms
-- [x] Model shader blend modes — Renderer3D uses shader-defined blend factors (additive, alpha, filter) instead of only entity alpha; fullbright for non-opaque effects
-- [x] BSP transparent surface detection — surfaces with non-opaque blend modes deferred to transparent pass regardless of surfaceparm trans (fixes water, force fields)
-- [x] animMap tokenizer fix — ShaderTokenizer pushback prevents directive loss after frame list parsing
-- [x] rgbGen/alphaGen wave/const — parser now properly consumes all wave/const parameters
+- [x] CMake build with Visual Studio 2022, .NET 9 NativeAOT renderer DLL with full refexport/refimport interop
+- [x] 2D rendering pipeline, Q3 shader script parser, texture loading from pk3 (TGA/JPEG/PNG/BMP/DDS)
+- [x] MD3 model loading with frame interpolation, scene management, BSP world rendering with PVS culling
+- [x] Skybox, shader blending (11 GL factors), entity types (MODEL/SPRITE/BEAM/LIGHTNING/RAIL/POLY)
+- [x] MarkFragments, depth ordering, blend state leak fix, BSP vertex colors, cull directive
+- [x] tcGen environment, frustum culling, animMap, tcMod (scroll/scale/rotate/turb), rgbGen/alphaGen
+- [x] polygonOffset, depthFunc/depthWrite, HDR rendering, FBO pipeline, bloom
+- [x] RemapShader, sort order, entity alpha/shaderRGBA, deformVertexes, overbright scale
+- [x] R_ColorShiftLightingBytes, inline BSP models, model shader blend modes, BSP transparent surface detection
+- [x] GL2 VBO hash optimization, shaderTime float→int fix, sky clearing optimization
 
 ### Fixed Bugs
 
-- [x] **Missing S_Respatialize in cgame_dotnet** — No sound spatialization: DrawActiveFrame never called S_Respatialize, so the sound engine had no listener position. Added call after CalcViewValues with view origin, axis, and underwater check. `CPX 1`
-- [x] **Continuous rocket smoke trail** — MissileTrail used distance-based spawning (every frame) instead of 50ms time-based intervals like the original CG_RocketTrail. Rewrote to use time-bucket stepping. `CPX 2`
-- [x] **Single lightmap fullbright (dotnet renderer)** — DetectAndSplitDeluxeMaps returned early for maps with 1 lightmap. Added GL1's workaround: duplicate the single lightmap entry so the array has 2 entries. `CPX 1`
-- [x] **Transparent surfaces with surfaceparm trans rendered opaque** — BSP surfaces marked `surfaceparm trans` but without explicit blendFunc fell through to the opaque pass. Now defaults to alpha blending for such surfaces. `CPX 2`
-- [x] **Items not visible in cgame_dotnet** — AddItem used _gameModels[modelIndex] but item entities have modelIndex = bg_itemlist index, not CS_MODELS index. Added item model cache with bg_itemlist world_model paths and lazy registration. `CPX 3`
-- [x] **AAS axial plane orientation** — Axial plane optimization was disabled (commented out) because AAS planes can have negative-facing normals unlike BSP. Fixed by multiplying by `plane->normal[axis]` to handle both signs. `CPX 2`
+- [x] Missing S_Respatialize in cgame_dotnet, continuous rocket smoke trail, single lightmap fullbright (dotnet + GL1)
+- [x] Transparent surfaces with surfaceparm trans rendered opaque, items not visible in cgame_dotnet
+- [x] AAS axial plane orientation, client disconnect message loss, screenShadowImage null crash
+- [x] Cgame event loop race (VM_IsRunning guard), shader parser fragility (COM_ParseExt `{}`/`}` delimiters)
+- [x] Initialize botgoalstates, animMap tokenizer fix, rgbGen/alphaGen wave/const parsing

@@ -3,13 +3,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerCommand>E:\Games\Quake3\ioquake3.exe</LocalDebuggerCommand>
     <LocalDebuggerWorkingDirectory>E:\Games\Quake3</LocalDebuggerWorkingDirectory>
-    <LocalDebuggerCommandArguments>+set cl_renderer dotnet +set vm_cgame 0 +set sv_pure 0 +set logfile 2</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>+set cl_renderer dotnet +set vm_cgame 0 +set sv_pure 0 +set logfile 2 +set r_hdr 0 +set r_autoExposure 0</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerCommand>E:\Games\Quake3\ioquake3.exe</LocalDebuggerCommand>
     <LocalDebuggerWorkingDirectory>E:\Games\Quake3</LocalDebuggerWorkingDirectory>
-    <LocalDebuggerCommandArguments>+set cl_renderer dotnet +set vm_cgame 0 +set sv_pure 0 +set logfile 2</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>+set cl_renderer dotnet +set vm_cgame 0 +set sv_pure 0 +set logfile 2 +set r_hdr 0 +set r_autoExposure 0</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <LocalDebuggerDebuggerType>NativeWithManagedCore</LocalDebuggerDebuggerType>
   </PropertyGroup>
