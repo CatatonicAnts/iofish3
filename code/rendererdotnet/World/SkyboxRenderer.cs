@@ -22,6 +22,10 @@ public sealed unsafe class SkyboxRenderer : IDisposable
 
     private static readonly string[] Suffixes = ["_rt", "_bk", "_lf", "_ft", "_up", "_dn"];
 
+    // Q3 swaps back(1) and left(2) face textures when rendering.
+    // Geometry face i uses texture sky_texorder[i].
+    private static readonly int[] SkyTexOrder = [0, 2, 1, 3, 4, 5];
+
     private const string VertSrc = """
         #version 450 core
         layout(location = 0) in vec3 aPos;
@@ -164,10 +168,12 @@ public sealed unsafe class SkyboxRenderer : IDisposable
         _gl.ActiveTexture(TextureUnit.Texture0);
 
         // Draw each face (6 vertices per face = 2 triangles)
+        // Use sky_texorder to match Q3's back/left texture swap
         for (int i = 0; i < 6; i++)
         {
-            if (_faceTextures[i] == 0) continue;
-            _gl.BindTexture(TextureTarget.Texture2D, _faceTextures[i]);
+            int texIdx = SkyTexOrder[i];
+            if (_faceTextures[texIdx] == 0) continue;
+            _gl.BindTexture(TextureTarget.Texture2D, _faceTextures[texIdx]);
             _gl.DrawArrays(PrimitiveType.Triangles, i * 6, 6);
         }
 
