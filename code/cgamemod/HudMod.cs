@@ -22,8 +22,6 @@ public unsafe class HudMod : ICGameMod
     // Character/icon sizes
     private const float BIGCHAR_W = 16f;
     private const float BIGCHAR_H = 16f;
-    private const float GIANT_W = 32f;
-    private const float GIANT_H = 48f;
     private const float ICON_SIZE = 48f;
     private const float SMALLCHAR_W = 8f;
     private const float SMALLCHAR_H = 16f;
@@ -144,26 +142,18 @@ public unsafe class HudMod : ICGameMod
 
     #region Status Bar
 
+    // Q3 layout: CHAR_WIDTH=32, CHAR_HEIGHT=48, TEXT_ICON_SPACE=4
+    private const float NUM_W = 32f;
+    private const float NUM_H = 48f;
+    private const float TEXT_ICON_SPACE = 4f;
+
     private void DrawStatusBar(ref ModPlayerState ps, ref ModHudState hs)
     {
-        // Background bar
-        SetColor(0f, 0f, 0f, 0.5f);
-        FillRect(0, STATUS_Y, SCREEN_W, SCREEN_H - STATUS_Y);
-
         int health = ps.Health;
         int armor = ps.Armor;
         int ammo = ps.GetAmmo(ps.Weapon);
 
-        // Health (left side)
-        GetHealthColor(health, hs.Time, out float hr, out float hg, out float hb);
-        SetColor(hr, hg, hb, 1f);
-        DrawBigNumber(185, STATUS_Y + 8, health);
-
-        // Armor (center-right)
-        SetColor(1f, 1f, 1f, 1f);
-        DrawBigNumber(370, STATUS_Y + 8, armor);
-
-        // Ammo (left of health)
+        // Ammo (x=0, y=432) — matches Q3's CG_DrawField(0, 432, 3, value)
         if (ps.Weapon > ModPlayerState.WP_GAUNTLET)
         {
             if (hs.LowAmmoWarning == 2)
@@ -172,14 +162,26 @@ public unsafe class HudMod : ICGameMod
                 SetColor(1f, 1f, 0f, 1f);
             else
                 SetColor(1f, 0.7f, 0f, 1f);
-            DrawBigNumber(50, STATUS_Y + 8, ammo);
+            DrawField(0, STATUS_Y, 3, ammo);
+
+            // Ammo icon after digits
+            if (ps.Weapon > 0 && ps.Weapon < ModPlayerState.WP_NUM_WEAPONS && _weaponIcons[ps.Weapon] != 0)
+            {
+                SetColor(1f, 1f, 1f, 1f);
+                DrawPic(NUM_W * 3 + TEXT_ICON_SPACE, STATUS_Y, ICON_SIZE, ICON_SIZE, _weaponIcons[ps.Weapon]);
+            }
         }
 
-        // Weapon icon next to ammo
-        if (ps.Weapon > 0 && ps.Weapon < ModPlayerState.WP_NUM_WEAPONS && _weaponIcons[ps.Weapon] != 0)
+        // Health (x=185, y=432)
+        GetHealthColor(health, hs.Time, out float hr, out float hg, out float hb);
+        SetColor(hr, hg, hb, 1f);
+        DrawField(185, STATUS_Y, 3, health);
+
+        // Armor (x=370, y=432)
+        if (armor > 0)
         {
-            SetColor(1f, 1f, 1f, 1f);
-            DrawPic(2, STATUS_Y + 2, ICON_SIZE, ICON_SIZE, _weaponIcons[ps.Weapon]);
+            SetColor(0f, 1f, 0f, 1f);
+            DrawField(370, STATUS_Y, 3, armor);
         }
 
         ResetColor();
@@ -461,17 +463,27 @@ public unsafe class HudMod : ICGameMod
         }
     }
 
-    /// <summary>Draw a big number with gfx/2d/numbers/ shaders.</summary>
-    private void DrawBigNumber(float x, float y, int value)
+    /// <summary>Draw a number field, right-aligned within 'width' digit columns (matches Q3's CG_DrawField).</summary>
+    private void DrawField(float x, float y, int width, int value)
     {
-        string numStr = value.ToString();
-        float digitW = GIANT_W;
-        float digitH = GIANT_H;
+        // Clamp value to fit in width digits
+        if (width < 1) return;
+        if (width > 5) width = 5;
+        int maxVal = width switch { 1 => 9, 2 => 99, 3 => 999, 4 => 9999, _ => 99999 };
+        int minVal = width switch { 1 => 0, 2 => -9, 3 => -99, 4 => -999, _ => -9999 };
+        if (value > maxVal) value = maxVal;
+        if (value < minVal) value = minVal;
 
-        // Right-align: position from x to the left
-        float cx = x;
-        foreach (char c in numStr)
+        string numStr = value.ToString();
+        int l = numStr.Length;
+        if (l > width) l = width;
+
+        // Right-align: x += 2 + CHAR_WIDTH * (width - l)
+        float cx = x + 2 + NUM_W * (width - l);
+
+        for (int i = 0; i < l; i++)
         {
+            char c = numStr[i];
             int idx;
             if (c == '-')
                 idx = 10;
@@ -481,8 +493,8 @@ public unsafe class HudMod : ICGameMod
                 continue;
 
             if (_numberShaders[idx] != 0)
-                DrawPic(cx, y, digitW, digitH, _numberShaders[idx]);
-            cx += digitW;
+                DrawPic(cx, y, NUM_W, NUM_H, _numberShaders[idx]);
+            cx += NUM_W;
         }
     }
 
