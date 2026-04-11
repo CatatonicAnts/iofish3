@@ -172,24 +172,57 @@ public class EntityPickerMod : ICGameMod
         Syscalls.R_SetColor(0f, 1f, 1f, 1f);
         DrawString(textX, textY, toolText, charSize);
 
-        // If we have a highlighted entity, show info near crosshair
+        // If we have a highlighted entity, show multiline info panel near crosshair
         if (_lastHitEntity >= 0)
         {
             int entType = CGameApi.GetEntityType(_lastHitEntity);
             var (ex, ey, ez) = CGameApi.GetEntityOrigin(_lastHitEntity);
-            string info = $"Entity #{_lastHitEntity} type:{entType}";
+            string modelName = CGameApi.GetEntityModelName(_lastHitEntity);
+            var (entWeapon, eFlags, frame, eventNum) = CGameApi.GetEntityInfo(_lastHitEntity);
+
+            // Build info lines
+            string typeName = GetEntityTypeName(entType);
+            string line1 = $"Entity #{_lastHitEntity}  [{typeName}]";
+            string line2 = $"Origin: {ex:F0} {ey:F0} {ez:F0}";
+            string? line3 = !string.IsNullOrEmpty(modelName) ? $"Model: {GetShortName(modelName)}" : null;
+            string? line4 = entWeapon > 0 ? $"Weapon: {entWeapon}  Frame: {frame}" : (frame > 0 ? $"Frame: {frame}" : null);
+            string? line5 = eFlags != 0 ? $"Flags: 0x{eFlags:X}" : null;
+
+            var lines = new System.Collections.Generic.List<string> { line1, line2 };
+            if (line3 != null) lines.Add(line3);
+            if (line4 != null) lines.Add(line4);
+            if (line5 != null) lines.Add(line5);
 
             int infoCharSize = 16;
-            int infoWidth = info.Length * infoCharSize;
-            int infoX = (screenWidth - infoWidth) / 2;
-            int infoY = screenHeight / 2 + 32;
+            int lineHeight = infoCharSize + 4;
+            int maxWidth = 0;
+            foreach (var line in lines)
+                if (line.Length * infoCharSize > maxWidth)
+                    maxWidth = line.Length * infoCharSize;
 
-            Syscalls.R_SetColor(0f, 0f, 0f, 0.5f);
-            Syscalls.R_DrawStretchPic(infoX - 4, infoY - 2, infoWidth + 8, infoCharSize + 4,
+            int panelHeight = lines.Count * lineHeight + 8;
+            int panelX = (screenWidth - maxWidth) / 2 - 8;
+            int panelY = screenHeight / 2 + 32;
+
+            // Background panel
+            Syscalls.R_SetColor(0f, 0f, 0f, 0.65f);
+            Syscalls.R_DrawStretchPic(panelX, panelY, maxWidth + 16, panelHeight,
                 0, 0, 1, 1, _whiteShader);
 
-            Syscalls.R_SetColor(1f, 1f, 0.5f, 1f);
-            DrawString(infoX, infoY, info, infoCharSize);
+            // Draw lines
+            int lineY = panelY + 4;
+            for (int li = 0; li < lines.Count; li++)
+            {
+                // First line: yellow, rest: white
+                if (li == 0)
+                    Syscalls.R_SetColor(1f, 1f, 0.3f, 1f);
+                else
+                    Syscalls.R_SetColor(0.9f, 0.9f, 0.9f, 1f);
+
+                int lineX = panelX + 8;
+                DrawString(lineX, lineY, lines[li], infoCharSize);
+                lineY += lineHeight;
+            }
         }
 
         // Reset color
@@ -230,5 +263,31 @@ public class EntityPickerMod : ICGameMod
                 col, row, col + size, row + size, _charsetShader);
             x += charSize;
         }
+    }
+
+    private static string GetEntityTypeName(int entType) => entType switch
+    {
+        0 => "General",
+        1 => "Player",
+        2 => "Item",
+        3 => "Missile",
+        4 => "Mover",
+        5 => "Beam",
+        6 => "Portal",
+        7 => "Speaker",
+        8 => "PushTrigger",
+        9 => "TeleportTrigger",
+        10 => "Invisible",
+        11 => "Grapple",
+        12 => "Team",
+        _ when entType >= 13 => $"Event({entType - 13})",
+        _ => $"Unknown({entType})"
+    };
+
+    private static string GetShortName(string path)
+    {
+        // Strip leading path, e.g. "models/weapons2/shotgun/shotgun.md3" -> "shotgun.md3"
+        int lastSlash = path.LastIndexOf('/');
+        return lastSlash >= 0 ? path[(lastSlash + 1)..] : path;
     }
 }

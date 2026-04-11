@@ -24,6 +24,10 @@ typedef struct {
 	int		(*GetEntityType)( int entityNum );
 	int		(*GetSnapshotEntityCount)( void );
 	int		(*GetSnapshotEntityNum)( int index );
+	// Returns model name string for entity (from configstring). Writes to buf, returns length.
+	int		(*GetEntityModelName)( int entityNum, char *buf, int bufSize );
+	// Returns packed entity info: weapon, eFlags, frame, event
+	void	(*GetEntityInfo)( int entityNum, int *weapon, int *eFlags, int *frame, int *event );
 } cgameModApi_t;
 
 // Initialize the mod host (loads DLL, calls CgMod_Init)

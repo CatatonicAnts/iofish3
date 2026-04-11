@@ -115,6 +115,36 @@ static int ModApi_GetSnapshotEntityNum( int index ) {
 	return -1;
 }
 
+static int ModApi_GetEntityModelName( int entityNum, char *buf, int bufSize ) {
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES && bufSize > 0 ) {
+		int modelindex = cg_entities[entityNum].currentState.modelindex;
+		if ( modelindex > 0 ) {
+			const char *name = CG_ConfigString( CS_MODELS + modelindex );
+			if ( name && name[0] ) {
+				Q_strncpyz( buf, name, bufSize );
+				return (int)strlen( buf );
+			}
+		}
+	}
+	if ( bufSize > 0 ) buf[0] = '\0';
+	return 0;
+}
+
+static void ModApi_GetEntityInfo( int entityNum, int *weapon, int *eFlags, int *frame, int *event ) {
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES ) {
+		entityState_t *s = &cg_entities[entityNum].currentState;
+		*weapon = s->weapon;
+		*eFlags = s->eFlags;
+		*frame  = s->frame;
+		*event  = s->event;
+	} else {
+		*weapon = 0;
+		*eFlags = 0;
+		*frame  = 0;
+		*event  = 0;
+	}
+}
+
 
 /*
 ==================
@@ -198,6 +228,8 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	api.GetEntityType			= ModApi_GetEntityType;
 	api.GetSnapshotEntityCount	= ModApi_GetSnapshotEntityCount;
 	api.GetSnapshotEntityNum	= ModApi_GetSnapshotEntityNum;
+	api.GetEntityModelName		= ModApi_GetEntityModelName;
+	api.GetEntityInfo			= ModApi_GetEntityInfo;
 
 	CG_Printf( "Mod host loaded, initializing...\n" );
 	fn_Init( (intptr_t)syscall, screenWidth, screenHeight, &api );

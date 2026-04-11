@@ -16,6 +16,8 @@ public static unsafe class CGameApi
     private delegate void GetEntityOriginDelegate(int entityNum, float* outVec);
     private delegate int GetEntityIntDelegate(int entityNum);
     private delegate int GetSnapshotEntityNumDelegate(int index);
+    private delegate int GetEntityModelNameDelegate(int entityNum, byte* buf, int bufSize);
+    private delegate void GetEntityInfoDelegate(int entityNum, int* weapon, int* eFlags, int* frame, int* evnt);
 
     // Cached delegate instances (prevent GC of the thunks)
     private static DoTraceDelegate? _doTrace;
@@ -28,12 +30,14 @@ public static unsafe class CGameApi
     private static GetEntityIntDelegate? _getEntityType;
     private static GetIntDelegate? _getSnapshotEntityCount;
     private static GetSnapshotEntityNumDelegate? _getSnapshotEntityNum;
+    private static GetEntityModelNameDelegate? _getEntityModelName;
+    private static GetEntityInfoDelegate? _getEntityInfo;
 
     private static bool _initialized;
 
     /// <summary>
     /// Parse the cgameModApi_t struct from C and cache delegate wrappers.
-    /// The struct is 10 function pointers (nint each).
+    /// The struct is 12 function pointers (nint each).
     /// </summary>
     public static void Init(nint apiPtr)
     {
@@ -50,6 +54,8 @@ public static unsafe class CGameApi
         _getEntityType = Marshal.GetDelegateForFunctionPointer<GetEntityIntDelegate>(ptrs[7]);
         _getSnapshotEntityCount = Marshal.GetDelegateForFunctionPointer<GetIntDelegate>(ptrs[8]);
         _getSnapshotEntityNum = Marshal.GetDelegateForFunctionPointer<GetSnapshotEntityNumDelegate>(ptrs[9]);
+        _getEntityModelName = Marshal.GetDelegateForFunctionPointer<GetEntityModelNameDelegate>(ptrs[10]);
+        _getEntityInfo = Marshal.GetDelegateForFunctionPointer<GetEntityInfoDelegate>(ptrs[11]);
 
         _initialized = true;
     }
@@ -130,4 +136,23 @@ public static unsafe class CGameApi
     /// <summary>Get the entity number at a given index in the snapshot.</summary>
     public static int GetSnapshotEntityNum(int index) =>
         _initialized ? _getSnapshotEntityNum!(index) : -1;
+
+    /// <summary>Get the model name string for an entity (from configstrings).</summary>
+    public static string GetEntityModelName(int entityNum)
+    {
+        if (!_initialized) return "";
+        byte* buf = stackalloc byte[256];
+        int len = _getEntityModelName!(entityNum, buf, 256);
+        if (len <= 0) return "";
+        return System.Text.Encoding.ASCII.GetString(buf, len);
+    }
+
+    /// <summary>Get detailed entity info: weapon, eFlags, frame, event.</summary>
+    public static (int weapon, int eFlags, int frame, int eventNum) GetEntityInfo(int entityNum)
+    {
+        if (!_initialized) return (0, 0, 0, 0);
+        int weapon, eFlags, frame, evnt;
+        _getEntityInfo!(entityNum, &weapon, &eFlags, &frame, &evnt);
+        return (weapon, eFlags, frame, evnt);
+    }
 }
