@@ -492,6 +492,10 @@ public sealed unsafe class SceneManager
             if ((ent.Renderfx & RF_THIRD_PERSON) != 0)
                 continue;
 
+            // Skip RF_HIGHLIGHT entities - they are only drawn as AABB wireframes
+            if ((ent.Renderfx & RF_HIGHLIGHT) != 0)
+                continue;
+
             // RF_DEPTHHACK: draw weapon models in front using reduced depth range
             bool depthHack = (ent.Renderfx & RF_DEPTHHACK) != 0;
             if (depthHack)

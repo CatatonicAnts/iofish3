@@ -128,8 +128,8 @@ public class EntityPickerMod : ICGameMod
         int picked = -1;
         if (fraction < 1.0f && hitEnt >= 0 && hitEnt < 1023)
             picked = hitEnt;
-        if (bestEnt >= 0)
-            picked = bestEnt; // proximity pick is closer or behind walls filtered
+        else if (bestEnt >= 0)
+            picked = bestEnt;
 
         if (picked >= 0)
         {
