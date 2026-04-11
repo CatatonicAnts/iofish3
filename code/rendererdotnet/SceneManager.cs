@@ -71,7 +71,6 @@ public sealed unsafe class SceneManager
     private int _portalTexW;
     private int _portalTexH;
     private bool _isPortalPass;  // Prevent recursion
-    private int _portalDebugFrame; // For one-time debug logging
     // Per-surface color textures (surfIdx → GL texture)
     private readonly Dictionary<int, uint> _portalColorTextures = new();
     // Heap-allocated IQM pose buffer to avoid large stackalloc in portal rendering
@@ -1364,12 +1363,15 @@ public sealed unsafe class SceneManager
                     out float pcX, out float pcY, out float pcZ))
                 continue;
 
-            // Ensure surface normal faces the viewer (Q3 guarantees this via face culling)
+            // Check if BSP face normal points away from viewer.
+            // Q3 assumes the normal faces the viewer; when it doesn't, we compensate
+            // by negating c0 and c2 in the camera basis rather than flipping the normal,
+            // because flipping s0 also flips s2=cross(s0,s1), inverting the up axis.
+            bool flippedNormal = false;
             float toCamX = viewOrg[0] - pcX, toCamY = viewOrg[1] - pcY, toCamZ = viewOrg[2] - pcZ;
             if (pnX * toCamX + pnY * toCamY + pnZ * toCamZ < 0)
             {
-                pnX = -pnX; pnY = -pnY; pnZ = -pnZ;
-                pDist = -pDist;
+                flippedNormal = true;
             }
 
             // Find matching RT_PORTALSURFACE entity for THIS surface
@@ -1466,6 +1468,16 @@ public sealed unsafe class SceneManager
                 float c1x = -portalEntAxis[3], c1y = -portalEntAxis[4], c1z = -portalEntAxis[5];
                 float c2x = portalEntAxis[6],  c2y = portalEntAxis[7],  c2z = portalEntAxis[8];
 
+                // When BSP face normal points away from viewer, the decomposition
+                // coefficients d0 and d2 have inverted signs (because s0 and s2=cross(s0,s1)
+                // both change sign relative to Q3's expected normal direction).
+                // Compensate by negating c0 and c2 so the products d0*c0 and d2*c2 remain correct.
+                if (flippedNormal)
+                {
+                    c0x = -c0x; c0y = -c0y; c0z = -c0z;
+                    c2x = -c2x; c2y = -c2y; c2z = -c2z;
+                }
+
                 // R_MirrorPoint: transform view origin from surface space to camera space
                 float localX = viewOrg[0] - surfOrgX;
                 float localY = viewOrg[1] - surfOrgY;
@@ -1497,8 +1509,17 @@ public sealed unsafe class SceneManager
             float clipNX, clipNY, clipNZ, clipDist;
             if (isMirror)
             {
-                clipNX = pnX; clipNY = pnY; clipNZ = pnZ;
-                clipDist = pDist;
+                // Mirror clip: surface normal must face toward the viewer
+                if (flippedNormal)
+                {
+                    clipNX = -pnX; clipNY = -pnY; clipNZ = -pnZ;
+                    clipDist = -pDist;
+                }
+                else
+                {
+                    clipNX = pnX; clipNY = pnY; clipNZ = pnZ;
+                    clipDist = pDist;
+                }
             }
             else
             {
@@ -1592,17 +1613,6 @@ public sealed unsafe class SceneManager
             }
 
             _bspRenderer.SkipFrustumCulling = false;
-
-            // Debug: log portal pass info once
-            if (_portalDebugFrame == 0)
-            {
-                _portalDebugFrame = 1;
-                var glErr = _gl.GetError();
-                Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
-                    $"[.NET] Portal pass: surf={surfIdx} mirror={isMirror} org=({newViewOrg[0]:F0},{newViewOrg[1]:F0},{newViewOrg[2]:F0})" +
-                    $" opaque={_bspRenderer.LastDeferredOpaqueCount} trans={_bspRenderer.LastTransparentCount}" +
-                    $" glErr={glErr}\n");
-            }
 
             // Render entities
             RenderPortalEntities(pVp, newViewOrg, newViewAxis, timeSec, isMirror);
