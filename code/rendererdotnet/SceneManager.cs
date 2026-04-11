@@ -618,7 +618,7 @@ public sealed unsafe class SceneManager
                 _gl.DepthRange(0.0, 1.0);
         }
 
-        // Wireframe highlight pass for entities with RF_HIGHLIGHT
+        // AABB highlight pass for entities with RF_HIGHLIGHT
         {
             bool hasHighlight = false;
             foreach (var ent in _entities)
@@ -630,83 +630,66 @@ public sealed unsafe class SceneManager
                 }
             }
 
-            if (hasHighlight)
+            if (hasHighlight && _models != null)
             {
-                _gl.PolygonMode(TriangleFace.FrontAndBack, Silk.NET.OpenGL.PolygonMode.Line);
-                _gl.Enable(EnableCap.PolygonOffsetLine);
-                _gl.PolygonOffset(-1.0f, -1.0f);
+                _gl.UseProgram(_debugProgram);
+                _gl.BindVertexArray(_debugVao);
+                _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _debugVbo);
                 _gl.DepthMask(false);
                 _gl.LineWidth(2.0f);
+                _gl.Uniform4(_debugColorLoc, 0.0f, 1.0f, 0.3f, 1.0f); // green
+
+                Span<float> corners = stackalloc float[8 * 3];
+                Span<float> aabbLines = stackalloc float[24 * 3];
+                ReadOnlySpan<int> edges = stackalloc int[]
+                {
+                    0,1, 1,2, 2,3, 3,0, // bottom face
+                    4,5, 5,6, 6,7, 7,4, // top face
+                    0,4, 1,5, 2,6, 3,7  // vertical edges
+                };
 
                 foreach (var ent in _entities)
                 {
                     if ((ent.Renderfx & RF_HIGHLIGHT) == 0 || ent.ReType != RT_MODEL)
                         continue;
 
-                    if (_models.IsBspModel(ent.ModelHandle) && _bspRenderer != null)
-                    {
-                        int bspIdx = _models.GetBspModelIndex(ent.ModelHandle);
-                        BuildModelMatrix(ent, modelMat);
-                        MatMul(vp, modelMat, mvp);
-                        fixed (float* mvpPtr = mvp)
-                        {
-                            _bspRenderer.RenderSubmodel(bspIdx, mvpPtr, _shaders, time / 1000.0f);
-                        }
+                    if (!_models.GetBounds(ent.ModelHandle, out float minX, out float minY, out float minZ,
+                                           out float maxX, out float maxY, out float maxZ))
                         continue;
-                    }
-
-                    var hlModel = _models.GetModel(ent.ModelHandle);
-                    var hlIqmModel = hlModel == null ? _models.GetIqmModel(ent.ModelHandle) : null;
-                    if (hlModel == null && hlIqmModel == null) continue;
 
                     BuildModelMatrix(ent, modelMat);
                     MatMul(vp, modelMat, mvp);
 
-                    if (hlIqmModel != null)
-                    {
-                        int numJoints = hlIqmModel.NumJoints;
-                        var poseMats = iqmPoseMats[..(numJoints * 12)];
-                        IqmLoader.ComputePoseMatrices(hlIqmModel, ent.Frame, ent.OldFrame, ent.BackLerp, poseMats);
-                        foreach (var surface in hlIqmModel.Surfaces)
-                        {
-                            int shaderHandle = ResolveIqmSurfaceShader(ent, surface);
-                            uint texId = _shaders.GetTextureId(shaderHandle);
-                            fixed (float* mvpPtr = mvp)
-                            fixed (float* modelPtr = modelMat)
-                            fixed (float* posePtr = poseMats)
-                            {
-                                _renderer3D.DrawIqmSurface(surface, hlIqmModel, posePtr, numJoints,
-                                    mvpPtr, modelPtr, texId, 0f, 1f, 1f, 1f,
-                                    false, viewOrg[0], viewOrg[1], viewOrg[2],
-                                    BlendMode.Opaque, 0,
-                                    0.5f, 0.5f, 0.5f, 0f, 0f, 0f, 0f, 1f, 0f);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        foreach (var surface in hlModel!.Surfaces)
-                        {
-                            int shaderHandle = surface.ShaderHandle;
-                            uint texId = _shaders.GetTextureId(shaderHandle);
+                    // 8 corners of the AABB
+                    corners[0]  = minX; corners[1]  = minY; corners[2]  = minZ;
+                    corners[3]  = maxX; corners[4]  = minY; corners[5]  = minZ;
+                    corners[6]  = maxX; corners[7]  = maxY; corners[8]  = minZ;
+                    corners[9]  = minX; corners[10] = maxY; corners[11] = minZ;
+                    corners[12] = minX; corners[13] = minY; corners[14] = maxZ;
+                    corners[15] = maxX; corners[16] = minY; corners[17] = maxZ;
+                    corners[18] = maxX; corners[19] = maxY; corners[20] = maxZ;
+                    corners[21] = minX; corners[22] = maxY; corners[23] = maxZ;
 
-                            fixed (float* mvpPtr = mvp)
-                            fixed (float* modelPtr = modelMat)
-                            {
-                                _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
-                                    mvpPtr, modelPtr, texId, 0f, 1f, 1f, 1f,
-                                    false, viewOrg[0], viewOrg[1], viewOrg[2],
-                                    BlendMode.Opaque, 0,
-                                    0.5f, 0.5f, 0.5f, 0f, 0f, 0f, 0f, 1f, 0f);
-                            }
-                        }
+                    // 12 edges × 2 endpoints = 24 vertices
+                    for (int e = 0; e < 24; e++)
+                    {
+                        int ci = edges[e] * 3;
+                        aabbLines[e * 3 + 0] = corners[ci + 0];
+                        aabbLines[e * 3 + 1] = corners[ci + 1];
+                        aabbLines[e * 3 + 2] = corners[ci + 2];
                     }
+
+                    fixed (float* mvpPtr = mvp)
+                        _gl.UniformMatrix4(_debugMvpLoc, 1, false, mvpPtr);
+
+                    fixed (float* linePtr = aabbLines)
+                        _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(24 * 3 * sizeof(float)), linePtr, BufferUsageARB.StreamDraw);
+
+                    _gl.DrawArrays(PrimitiveType.Lines, 0, 24);
                 }
 
                 _gl.DepthMask(true);
-                _gl.Disable(EnableCap.PolygonOffsetLine);
-                _gl.PolygonOffset(0f, 0f);
-                _gl.PolygonMode(TriangleFace.FrontAndBack, Silk.NET.OpenGL.PolygonMode.Fill);
+                _gl.BindVertexArray(0);
             }
         }
 
@@ -1368,6 +1351,7 @@ public sealed unsafe class SceneManager
         // Pre-allocate outside the loop to avoid stackalloc accumulation (CA2014)
         Span<float> newViewOrg = stackalloc float[3];
         Span<float> newViewAxis = stackalloc float[9];
+        Span<float> portalEntAxis = stackalloc float[9];
         Span<float> pView = stackalloc float[16];
         Span<float> pProj = stackalloc float[16];
         Span<float> pVp = stackalloc float[16];
@@ -1383,6 +1367,7 @@ public sealed unsafe class SceneManager
             // Find matching RT_PORTALSURFACE entity for THIS surface
             bool isMirror = false;
             float camX = 0, camY = 0, camZ = 0;
+            float portalEntOrgX = 0, portalEntOrgY = 0, portalEntOrgZ = 0;
             bool foundEntity = false;
             foreach (var ent in _entities)
             {
@@ -1401,6 +1386,11 @@ public sealed unsafe class SceneManager
                     camX = ent.OldOriginX;
                     camY = ent.OldOriginY;
                     camZ = ent.OldOriginZ;
+                    portalEntOrgX = ent.OriginX;
+                    portalEntOrgY = ent.OriginY;
+                    portalEntOrgZ = ent.OriginZ;
+                    for (int i = 0; i < 9; i++)
+                        portalEntAxis[i] = ent.Axis[i];
                 }
                 break;
             }
@@ -1429,6 +1419,7 @@ public sealed unsafe class SceneManager
             }
             else
             {
+                // Build surface orientation (matches Q3's R_GetPortalOrientations)
                 float s0x = pnX, s0y = pnY, s0z = pnZ;
                 float s1x, s1y, s1z;
                 if (MathF.Abs(s0z) > 0.9f) { s1x = 1; s1y = 0; s1z = 0; }
@@ -1441,22 +1432,55 @@ public sealed unsafe class SceneManager
                 float s2y = s0z * s1x - s0x * s1z;
                 float s2z = s0x * s1y - s0y * s1x;
 
-                newViewOrg[0] = camX;
-                newViewOrg[1] = camY;
-                newViewOrg[2] = camZ;
+                // Surface origin: project entity origin onto the portal plane
+                float entDist = portalEntOrgX * pnX + portalEntOrgY * pnY + portalEntOrgZ * pnZ - pDist;
+                float surfOrgX = portalEntOrgX - entDist * s0x;
+                float surfOrgY = portalEntOrgY - entDist * s0y;
+                float surfOrgZ = portalEntOrgZ - entDist * s0z;
 
+                // Camera orientation: entity axis with axis[0] and axis[1] negated (Q3 convention)
+                float c0x = -portalEntAxis[0], c0y = -portalEntAxis[1], c0z = -portalEntAxis[2];
+                float c1x = -portalEntAxis[3], c1y = -portalEntAxis[4], c1z = -portalEntAxis[5];
+                float c2x = portalEntAxis[6],  c2y = portalEntAxis[7],  c2z = portalEntAxis[8];
+
+                // R_MirrorPoint: transform view origin from surface space to camera space
+                float localX = viewOrg[0] - surfOrgX;
+                float localY = viewOrg[1] - surfOrgY;
+                float localZ = viewOrg[2] - surfOrgZ;
+                float d0 = localX * s0x + localY * s0y + localZ * s0z;
+                float d1 = localX * s1x + localY * s1y + localZ * s1z;
+                float d2 = localX * s2x + localY * s2y + localZ * s2z;
+                newViewOrg[0] = camX + d0 * c0x + d1 * c1x + d2 * c2x;
+                newViewOrg[1] = camY + d0 * c0y + d1 * c1y + d2 * c2y;
+                newViewOrg[2] = camZ + d0 * c0z + d1 * c1z + d2 * c2z;
+
+                // R_MirrorVector: transform each view axis
                 for (int a = 0; a < 3; a++)
                 {
                     float ax = viewAxis[a * 3 + 0];
                     float ay = viewAxis[a * 3 + 1];
                     float az = viewAxis[a * 3 + 2];
-                    float d0 = ax * s0x + ay * s0y + az * s0z;
-                    float d1 = ax * s1x + ay * s1y + az * s1z;
-                    float d2 = ax * s2x + ay * s2y + az * s2z;
-                    newViewAxis[a * 3 + 0] = -d0 * s0x + d1 * s1x + d2 * s2x;
-                    newViewAxis[a * 3 + 1] = -d0 * s0y + d1 * s1y + d2 * s2y;
-                    newViewAxis[a * 3 + 2] = -d0 * s0z + d1 * s1z + d2 * s2z;
+                    float dd0 = ax * s0x + ay * s0y + az * s0z;
+                    float dd1 = ax * s1x + ay * s1y + az * s1z;
+                    float dd2 = ax * s2x + ay * s2y + az * s2z;
+                    newViewAxis[a * 3 + 0] = dd0 * c0x + dd1 * c1x + dd2 * c2x;
+                    newViewAxis[a * 3 + 1] = dd0 * c0y + dd1 * c1y + dd2 * c2y;
+                    newViewAxis[a * 3 + 2] = dd0 * c0z + dd1 * c1z + dd2 * c2z;
                 }
+            }
+
+            // Compute the oblique clip plane in world space.
+            // Mirror: surface plane. Portal: camera-side plane from entity axis.
+            float clipNX, clipNY, clipNZ, clipDist;
+            if (isMirror)
+            {
+                clipNX = pnX; clipNY = pnY; clipNZ = pnZ;
+                clipDist = pDist;
+            }
+            else
+            {
+                clipNX = portalEntAxis[0]; clipNY = portalEntAxis[1]; clipNZ = portalEntAxis[2];
+                clipDist = camX * clipNX + camY * clipNY + camZ * clipNZ;
             }
 
             // Get or create color texture for this portal surface
@@ -1497,11 +1521,11 @@ public sealed unsafe class SceneManager
                 float rlx = newViewAxis[3], rly = newViewAxis[4], rlz = newViewAxis[5];
                 float rux = newViewAxis[6], ruy = newViewAxis[7], ruz = newViewAxis[8];
 
-                // Transform mirror/portal plane into view space
-                float cpx = -(rlx * pnX + rly * pnY + rlz * pnZ);
-                float cpy = rux * pnX + ruy * pnY + ruz * pnZ;
-                float cpz = -(rfx * pnX + rfy * pnY + rfz * pnZ);
-                float cpw = (pnX * newViewOrg[0] + pnY * newViewOrg[1] + pnZ * newViewOrg[2]) - pDist;
+                // Transform portal clip plane into view space
+                float cpx = -(rlx * clipNX + rly * clipNY + rlz * clipNZ);
+                float cpy = rux * clipNX + ruy * clipNY + ruz * clipNZ;
+                float cpz = -(rfx * clipNX + rfy * clipNY + rfz * clipNZ);
+                float cpw = (clipNX * newViewOrg[0] + clipNY * newViewOrg[1] + clipNZ * newViewOrg[2]) - clipDist;
 
                 float qx = MathF.Sign(cpx) / pProj[0];
                 float qy = MathF.Sign(cpy) / pProj[5];
