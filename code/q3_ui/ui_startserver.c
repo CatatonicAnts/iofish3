@@ -441,17 +441,17 @@ static void StartServer_MenuInit( void ) {
 	s_startserver.gametype.generic.flags	= QMF_PULSEIFFOCUS|QMF_SMALLFONT;
 	s_startserver.gametype.generic.callback	= StartServer_GametypeEvent;
 	s_startserver.gametype.generic.id		= ID_GAMETYPE;
-	s_startserver.gametype.generic.x		= 320 - 24;
+	s_startserver.gametype.generic.x		= 210;
 	s_startserver.gametype.generic.y		= 368;
 	s_startserver.gametype.itemnames		= gametype_items;
 
 	s_startserver.customonly.generic.type		= MTYPE_RADIOBUTTON;
-	s_startserver.customonly.generic.name		= "Custom Only:";
+	s_startserver.customonly.generic.name		= "Custom:";
 	s_startserver.customonly.generic.flags		= QMF_PULSEIFFOCUS|QMF_SMALLFONT;
 	s_startserver.customonly.generic.callback	= StartServer_MenuEvent;
 	s_startserver.customonly.generic.id			= ID_CUSTOMONLY;
-	s_startserver.customonly.generic.x			= 320 - 24;
-	s_startserver.customonly.generic.y			= 384;
+	s_startserver.customonly.generic.x			= 500;
+	s_startserver.customonly.generic.y			= 368;
 
 	for (i=0; i<MAX_MAPSPERPAGE; i++)
 	{
