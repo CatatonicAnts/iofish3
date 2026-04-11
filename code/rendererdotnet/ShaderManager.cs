@@ -88,6 +88,29 @@ public unsafe class ShaderManager
         return handle;
     }
 
+    /// <summary>
+    /// Register a shader with a pre-uploaded GL texture (e.g., font atlas pages).
+    /// Marks the entry as already loaded so lazy-load is skipped.
+    /// </summary>
+    public int RegisterWithTextureId(string name, uint textureId)
+    {
+        if (_nameToHandle.TryGetValue(name, out int existing))
+            return existing;
+
+        int handle = _shaders.Count;
+        _shaders.Add(new ShaderEntry
+        {
+            Name = name,
+            TextureId = textureId,
+            Loaded = true,
+            Clamp = true,
+            Blend = BlendMode.Alpha
+        });
+        _nameToHandle[name] = handle;
+
+        return handle;
+    }
+
     public uint GetTextureId(int handle)
     {
         handle = ResolveRemap(handle);

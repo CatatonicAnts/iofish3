@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using RendererDotNet.Fonts;
 using RendererDotNet.Interop;
 using Silk.NET.OpenGL;
 using Silk.NET.SDL;
@@ -75,6 +76,9 @@ public static unsafe class RendererExports
     public static void Shutdown(int destroyWindow)
     {
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] Renderer shutdown\n");
+
+        // Shut down FreeType
+        FontRenderer.Shutdown();
 
         // Always clean up subsystems
         _scene?.DestroyPortalFbo();
@@ -274,6 +278,10 @@ public static unsafe class RendererExports
 
         EngineImports.Printf(EngineImports.PRINT_ALL,
             $"[.NET] Window created: {_currentWidth}x{_currentHeight}, OpenGL 4.5 Core\n");
+
+        // Initialize FreeType for TrueType font rendering
+        FontRenderer.Init();
+
         EngineImports.Printf(EngineImports.PRINT_ALL, "[.NET] ----- finished R_Init -----\n");
 
         // Register screenshot console command
@@ -989,38 +997,51 @@ public static unsafe class RendererExports
         if (fontName == null || font == 0 || _shaders == null) return;
         if (pointSize <= 0) pointSize = 12;
 
+        string fontNameStr = System.Runtime.InteropServices.Marshal
+            .PtrToStringUTF8((nint)fontName) ?? "";
+
         // Font data is stored as binary in fonts/fontImage_{pointSize}.dat
         string datFile = $"fonts/fontImage_{pointSize}.dat";
         const int FONT_INFO_SIZE = 20548; // sizeof(fontInfo_t)
 
         int len = EngineImports.FS_ReadFile(datFile, out byte* data);
-        if (len != FONT_INFO_SIZE || data == null)
+        if (len == FONT_INFO_SIZE && data != null)
         {
-            if (data != null) EngineImports.FS_FreeFile(data);
+            byte* dst = (byte*)font;
+
+            // Binary layout matches struct layout on little-endian (x64): direct copy
+            System.Buffer.MemoryCopy(data, dst, FONT_INFO_SIZE, FONT_INFO_SIZE);
+            EngineImports.FS_FreeFile(data);
+
+            // Fix up glyph shader handles — register each font atlas page
+            const int GLYPH_SIZE = 80;
+            const int GLYPH_HANDLE_OFF = 44;
+            const int GLYPH_SHADER_OFF = 48;
+            for (int i = 0; i < 256; i++)
+            {
+                int off = i * GLYPH_SIZE;
+                string shaderName = System.Runtime.InteropServices.Marshal
+                    .PtrToStringAnsi((nint)(dst + off + GLYPH_SHADER_OFF)) ?? "";
+                if (shaderName.Length > 0)
+                    *(int*)(dst + off + GLYPH_HANDLE_OFF) = _shaders.Register(shaderName);
+            }
+
+            // Overwrite name field with the dat filename
+            WriteString(dst + 20484, datFile, 64);
             return;
         }
 
-        byte* dst = (byte*)font;
+        if (data != null) EngineImports.FS_FreeFile(data);
 
-        // Binary layout matches struct layout on little-endian (x64): direct copy
-        System.Buffer.MemoryCopy(data, dst, FONT_INFO_SIZE, FONT_INFO_SIZE);
-        EngineImports.FS_FreeFile(data);
-
-        // Fix up glyph shader handles — register each font atlas page
-        const int GLYPH_SIZE = 80;
-        const int GLYPH_HANDLE_OFF = 44;
-        const int GLYPH_SHADER_OFF = 48;
-        for (int i = 0; i < 256; i++)
+        // No .dat file — try FreeType rendering from TrueType font
+        if (_renderer2D != null &&
+            FontRenderer.RenderFont(fontNameStr, pointSize, (byte*)font, _shaders, _renderer2D))
         {
-            int off = i * GLYPH_SIZE;
-            string shaderName = System.Runtime.InteropServices.Marshal
-                .PtrToStringAnsi((nint)(dst + off + GLYPH_SHADER_OFF)) ?? "";
-            if (shaderName.Length > 0)
-                *(int*)(dst + off + GLYPH_HANDLE_OFF) = _shaders.Register(shaderName);
+            return;
         }
 
-        // Overwrite name field with the dat filename
-        WriteString(dst + 20484, datFile, 64);
+        EngineImports.Printf(EngineImports.PRINT_WARNING,
+            $"[.NET] RegisterFont: No .dat file and FreeType failed for '{fontNameStr}' at {pointSize}pt\n");
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
