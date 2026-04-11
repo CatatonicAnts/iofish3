@@ -103,6 +103,9 @@
     <ClCompile Include="E:\Projects\iofish3\code\game\g_syscalls.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_mod.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="E:\Projects\iofish3\CMakeLists.txt" />
