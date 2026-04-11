@@ -1378,6 +1378,7 @@ public sealed unsafe class SceneManager
             bool isMirror = false;
             float camX = 0, camY = 0, camZ = 0;
             float portalEntOrgX = 0, portalEntOrgY = 0, portalEntOrgZ = 0;
+            int entOldFrame = 0, entFrame = 0, entSkinNum = 0;
             bool foundEntity = false;
             foreach (var ent in _entities)
             {
@@ -1399,6 +1400,9 @@ public sealed unsafe class SceneManager
                     portalEntOrgX = ent.OriginX;
                     portalEntOrgY = ent.OriginY;
                     portalEntOrgZ = ent.OriginZ;
+                    entOldFrame = ent.OldFrame;
+                    entFrame = ent.Frame;
+                    entSkinNum = ent.CustomSkin;
                     for (int i = 0; i < 9; i++)
                         portalEntAxis[i] = ent.Axis[i];
                 }
@@ -1467,6 +1471,54 @@ public sealed unsafe class SceneManager
                 float c0x = -portalEntAxis[0], c0y = -portalEntAxis[1], c0z = -portalEntAxis[2];
                 float c1x = -portalEntAxis[3], c1y = -portalEntAxis[4], c1z = -portalEntAxis[5];
                 float c2x = portalEntAxis[6],  c2y = portalEntAxis[7],  c2z = portalEntAxis[8];
+
+                // Apply optional camera rotation (Q3's R_GetPortalOrientations lines 1096-1119).
+                // Portal cameras can specify rotation via oldframe (powerups), frame (speed),
+                // and skinNum (roll offset). E.g. q3dm0's portal camera has roll=180.
+                {
+                    float rotAngle = 0;
+                    bool doRotate = false;
+                    if (entOldFrame != 0)
+                    {
+                        if (entFrame != 0)
+                        {
+                            // Continuous rotation
+                            rotAngle = (time / 1000.0f) * entFrame;
+                        }
+                        else
+                        {
+                            // Bobbing rotation with skinNum base offset
+                            rotAngle = entSkinNum + MathF.Sin(time * 0.003f) * 4.0f;
+                        }
+                        doRotate = true;
+                    }
+                    else if (entSkinNum != 0)
+                    {
+                        // Static rotation offset
+                        rotAngle = entSkinNum;
+                        doRotate = true;
+                    }
+
+                    if (doRotate)
+                    {
+                        // Rotate c1 around c0 using Rodrigues' rotation formula
+                        float rad = rotAngle * (MathF.PI / 180.0f);
+                        float cosA = MathF.Cos(rad);
+                        float sinA = MathF.Sin(rad);
+                        float dotKV = c0x * c1x + c0y * c1y + c0z * c1z;
+                        // k × v
+                        float kxvX = c0y * c1z - c0z * c1y;
+                        float kxvY = c0z * c1x - c0x * c1z;
+                        float kxvZ = c0x * c1y - c0y * c1x;
+                        c1x = c1x * cosA + kxvX * sinA + c0x * dotKV * (1 - cosA);
+                        c1y = c1y * cosA + kxvY * sinA + c0y * dotKV * (1 - cosA);
+                        c1z = c1z * cosA + kxvZ * sinA + c0z * dotKV * (1 - cosA);
+                        // Recompute c2 = cross(c0, c1)
+                        c2x = c0y * c1z - c0z * c1y;
+                        c2y = c0z * c1x - c0x * c1z;
+                        c2z = c0x * c1y - c0y * c1x;
+                    }
+                }
 
                 // When BSP face normal points away from viewer, the decomposition
                 // coefficients d0 and d2 have inverted signs (because s0 and s2=cross(s0,s1)
