@@ -163,11 +163,89 @@ to the appropriate place.
 A raw string should NEVER be passed as fmt, because of "%f" type crashers.
 =============
 */
+
+// Duplicate message collapsing state
+static char  com_lastPrintMsg[MAXPRINTMSG];
+static int   com_lastPrintCount = 0;
+static qboolean com_printFlushing = qfalse;
+
+// Raw output to all destinations (console, sysprint, logfile)
+static void Com_PrintRaw( const char *msg ) {
+	static qboolean opening_qconsole = qfalse;
+
+#ifndef DEDICATED
+	CL_ConsolePrint( (char *)msg );
+#endif
+
+	Sys_Print( msg );
+
+	if ( com_logfile && com_logfile->integer ) {
+		if ( !logfile && FS_Initialized() && !opening_qconsole) {
+			struct tm *newtime;
+			time_t aclock;
+
+			opening_qconsole = qtrue;
+
+			time( &aclock );
+			newtime = localtime( &aclock );
+
+			logfile = FS_FOpenFileWrite_HomeData( "qconsole.log" );
+
+			if(logfile)
+			{
+				Com_Printf( "logfile opened on %s\n", asctime( newtime ) );
+
+				if ( com_logfile->integer > 1 )
+				{
+					FS_ForceFlush(logfile);
+				}
+			}
+			else
+			{
+				Com_Printf("Opening qconsole.log failed!\n");
+				Cvar_SetValue("logfile", 0);
+			}
+
+			opening_qconsole = qfalse;
+		}
+		if ( logfile && FS_Initialized()) {
+			FS_Write(msg, strlen(msg), logfile);
+		}
+	}
+}
+
+/*
+=============
+Com_FlushPrintBuffer
+
+Flush any buffered duplicate message. Called once per frame
+and on shutdown to ensure messages don't hang in the buffer.
+=============
+*/
+void Com_FlushPrintBuffer( void ) {
+	if ( com_lastPrintCount <= 0 || com_printFlushing ) {
+		return;
+	}
+
+	com_printFlushing = qtrue;
+
+	if ( com_lastPrintCount == 1 ) {
+		Com_PrintRaw( com_lastPrintMsg );
+	} else {
+		char buf[MAXPRINTMSG + 32];
+		Com_sprintf( buf, sizeof(buf), "(%d) %s", com_lastPrintCount, com_lastPrintMsg );
+		Com_PrintRaw( buf );
+	}
+
+	com_lastPrintCount = 0;
+	com_lastPrintMsg[0] = '\0';
+
+	com_printFlushing = qfalse;
+}
+
 void QDECL Com_Printf( const char *fmt, ... ) {
 	va_list		argptr;
 	char		msg[MAXPRINTMSG];
-  static qboolean opening_qconsole = qfalse;
-
 
 	va_start (argptr,fmt);
 	Q_vsnprintf (msg, sizeof(msg), fmt, argptr);
@@ -185,51 +263,29 @@ void QDECL Com_Printf( const char *fmt, ... ) {
 		return;
 	}
 
-#ifndef DEDICATED
-	CL_ConsolePrint( msg );
-#endif
+	// Duplicate message collapsing (skip during flush to avoid recursion)
+	if ( !com_printFlushing ) {
+		int len = strlen( msg );
+		qboolean isCompleteLine = ( len > 0 && msg[len - 1] == '\n' );
 
-	// echo to dedicated console and early console
-	Sys_Print( msg );
-
-	// logfile
-	if ( com_logfile && com_logfile->integer ) {
-    // TTimo: only open the qconsole.log if the filesystem is in an initialized state
-    //   also, avoid recursing in the qconsole.log opening (i.e. if fs_debug is on)
-		if ( !logfile && FS_Initialized() && !opening_qconsole) {
-			struct tm *newtime;
-			time_t aclock;
-
-      opening_qconsole = qtrue;
-
-			time( &aclock );
-			newtime = localtime( &aclock );
-
-			logfile = FS_FOpenFileWrite_HomeData( "qconsole.log" );
-			
-			if(logfile)
-			{
-				Com_Printf( "logfile opened on %s\n", asctime( newtime ) );
-			
-				if ( com_logfile->integer > 1 )
-				{
-					// force it to not buffer so we get valid
-					// data even if we are crashing
-					FS_ForceFlush(logfile);
-				}
+		if ( isCompleteLine ) {
+			if ( com_lastPrintCount > 0 && !strcmp( msg, com_lastPrintMsg ) ) {
+				com_lastPrintCount++;
+				return;
 			}
-			else
-			{
-				Com_Printf("Opening qconsole.log failed!\n");
-				Cvar_SetValue("logfile", 0);
-			}
-
-      opening_qconsole = qfalse;
-		}
-		if ( logfile && FS_Initialized()) {
-			FS_Write(msg, strlen(msg), logfile);
+			// Different message — flush previous buffered message
+			Com_FlushPrintBuffer();
+			// Buffer this new message (don't output yet)
+			Q_strncpyz( com_lastPrintMsg, msg, sizeof(com_lastPrintMsg) );
+			com_lastPrintCount = 1;
+			return;
+		} else {
+			// Partial line — flush pending buffer, then pass through
+			Com_FlushPrintBuffer();
 		}
 	}
+
+	Com_PrintRaw( msg );
 }
 
 
@@ -3278,6 +3334,8 @@ void Com_Frame( void ) {
 
 	Com_ReadFromPipe( );
 
+	Com_FlushPrintBuffer();
+
 	com_frameNumber++;
 }
 
@@ -3287,6 +3345,8 @@ Com_Shutdown
 =================
 */
 void Com_Shutdown (void) {
+	Com_FlushPrintBuffer();
+
 	if (logfile) {
 		FS_FCloseFile (logfile);
 		logfile = 0;
