@@ -214,6 +214,10 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{5A2E3460-E185-388E-ABE4-294BD0FA971B}</Project>
       <Name>cgamex86_64_missionpack</Name>
     </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\msvc\freetype\freetype.vcxproj">
+      <Project>{F893B022-E5BE-31B0-89B2-AC961ED46CAE}</Project>
+      <Name>freetype</Name>
+    </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\ioq3ded.vcxproj">
       <Project>{683C3A82-1914-37F8-92E5-ECA21CFEF344}</Project>
       <Name>ioq3ded</Name>
