@@ -442,22 +442,85 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 
 /*
 ================
-G_MissileTouchTriggers
+G_MissileTeleportEntity
 
-Check if a missile overlaps any teleporter or jump pad triggers.
-If so, teleport or redirect the missile and return qtrue.
+Shared teleport logic for a missile hitting a teleporter trigger.
+Returns qtrue if the missile was teleported.
 ================
 */
-static qboolean G_MissileTouchTriggers( gentity_t *ent ) {
+static qboolean G_MissileTeleportEntity( gentity_t *ent, gentity_t *hit ) {
+	gentity_t	*dest;
+	vec3_t		velocity, forward;
+	float		speed;
+
+	dest = G_PickTarget( hit->target );
+	if ( !dest ) {
+		return qfalse;
+	}
+
+	BG_EvaluateTrajectoryDelta( &ent->s.pos, level.time, velocity );
+	speed = VectorNormalize( velocity );
+
+	AngleVectors( dest->s.angles, forward, NULL, NULL );
+	VectorScale( forward, speed, ent->s.pos.trDelta );
+	SnapVector( ent->s.pos.trDelta );
+
+	VectorCopy( dest->s.origin, ent->s.pos.trBase );
+	ent->s.pos.trTime = level.time;
+	VectorCopy( dest->s.origin, ent->r.currentOrigin );
+
+	trap_LinkEntity( ent );
+	return qtrue;
+}
+
+/*
+================
+G_MissilePushEntity
+
+Shared push logic for a missile hitting a jump pad.
+Returns qtrue if the missile was pushed.
+================
+*/
+static qboolean G_MissilePushEntity( gentity_t *ent, gentity_t *hit ) {
+	VectorCopy( hit->s.origin2, ent->s.pos.trDelta );
+	SnapVector( ent->s.pos.trDelta );
+	VectorCopy( ent->r.currentOrigin, ent->s.pos.trBase );
+	ent->s.pos.trTime = level.time;
+	ent->s.pos.trType = TR_GRAVITY;
+
+	trap_LinkEntity( ent );
+	return qtrue;
+}
+
+/*
+================
+G_MissileTouchTriggers
+
+Check if a missile overlaps any teleporter or jump pad triggers
+at its current position. Also sweep along the path from prevOrigin
+to currentOrigin to catch triggers the missile flew through (e.g.
+when a solid portal brush would stop the missile before it reaches
+the trigger behind it).
+================
+*/
+static qboolean G_MissileTouchTriggers( gentity_t *ent, vec3_t prevOrigin ) {
 	int			touch[MAX_GENTITIES];
 	int			num, i;
 	gentity_t	*hit;
-	vec3_t		mins, maxs;
+	vec3_t		sweepMins, sweepMaxs;
 
-	VectorAdd( ent->r.currentOrigin, ent->r.mins, mins );
-	VectorAdd( ent->r.currentOrigin, ent->r.maxs, maxs );
+	// Build a bounding box that covers the entire path from prev to current
+	for ( i = 0; i < 3; i++ ) {
+		if ( prevOrigin[i] < ent->r.currentOrigin[i] ) {
+			sweepMins[i] = prevOrigin[i] + ent->r.mins[i];
+			sweepMaxs[i] = ent->r.currentOrigin[i] + ent->r.maxs[i];
+		} else {
+			sweepMins[i] = ent->r.currentOrigin[i] + ent->r.mins[i];
+			sweepMaxs[i] = prevOrigin[i] + ent->r.maxs[i];
+		}
+	}
 
-	num = trap_EntitiesInBox( mins, maxs, touch, MAX_GENTITIES );
+	num = trap_EntitiesInBox( sweepMins, sweepMaxs, touch, MAX_GENTITIES );
 
 	for ( i = 0; i < num; i++ ) {
 		hit = &g_entities[touch[i]];
@@ -465,44 +528,19 @@ static qboolean G_MissileTouchTriggers( gentity_t *ent ) {
 		if ( !( hit->r.contents & CONTENTS_TRIGGER ) ) {
 			continue;
 		}
-		if ( !trap_EntityContact( mins, maxs, hit ) ) {
-			continue;
-		}
 
-		// Teleporter trigger — teleport missile to destination
+		// Teleporter trigger
 		if ( hit->s.eType == ET_TELEPORT_TRIGGER ) {
-			gentity_t *dest = G_PickTarget( hit->target );
-			if ( dest ) {
-				vec3_t	velocity, forward;
-				float	speed;
-
-				BG_EvaluateTrajectoryDelta( &ent->s.pos, level.time, velocity );
-				speed = VectorNormalize( velocity );
-
-				// Redirect missile along destination angles
-				AngleVectors( dest->s.angles, forward, NULL, NULL );
-				VectorScale( forward, speed, ent->s.pos.trDelta );
-				SnapVector( ent->s.pos.trDelta );
-
-				VectorCopy( dest->s.origin, ent->s.pos.trBase );
-				ent->s.pos.trTime = level.time;
-				VectorCopy( dest->s.origin, ent->r.currentOrigin );
-
-				trap_LinkEntity( ent );
+			if ( G_MissileTeleportEntity( ent, hit ) ) {
 				return qtrue;
 			}
 		}
 
-		// Push trigger (jump pad) — apply push velocity
+		// Push trigger (jump pad)
 		if ( hit->s.eType == ET_PUSH_TRIGGER ) {
-			VectorCopy( hit->s.origin2, ent->s.pos.trDelta );
-			SnapVector( ent->s.pos.trDelta );
-			VectorCopy( ent->r.currentOrigin, ent->s.pos.trBase );
-			ent->s.pos.trTime = level.time;
-			ent->s.pos.trType = TR_GRAVITY;
-
-			trap_LinkEntity( ent );
-			return qtrue;
+			if ( G_MissilePushEntity( ent, hit ) ) {
+				return qtrue;
+			}
 		}
 	}
 
@@ -515,9 +553,12 @@ G_RunMissile
 ================
 */
 void G_RunMissile( gentity_t *ent ) {
-	vec3_t		origin;
+	vec3_t		origin, prevOrigin;
 	trace_t		tr;
 	int			passent;
+
+	// save previous position for trigger sweep
+	VectorCopy( ent->r.currentOrigin, prevOrigin );
 
 	// get current position
 	BG_EvaluateTrajectory( &ent->s.pos, level.time, origin );
@@ -550,8 +591,10 @@ void G_RunMissile( gentity_t *ent ) {
 
 	trap_LinkEntity( ent );
 
-	// Check if missile entered a teleporter or jump pad
-	if ( G_MissileTouchTriggers( ent ) ) {
+	// Check if missile path crossed a teleporter or jump pad.
+	// Uses a sweep from prevOrigin to currentOrigin so triggers
+	// behind solid portal brushes are still detected.
+	if ( G_MissileTouchTriggers( ent, prevOrigin ) ) {
 		G_RunThink( ent );
 		return;
 	}
