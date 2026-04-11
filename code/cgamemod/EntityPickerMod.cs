@@ -85,13 +85,58 @@ public class EntityPickerMod : ICGameMod
         var (fraction, hitX, hitY, hitZ, hitEnt) = CGameApi.DoTrace(
             ox, oy, oz, endX, endY, endZ, -1, MASK_SHOT);
 
-        // Only highlight actual game entities (not world = 1023)
-        if (fraction < 1.0f && hitEnt >= 0 && hitEnt < 1023)
+        // Trace hit distance (for comparing with proximity picks)
+        float traceDist = fraction < 1.0f ? fraction * TRACE_RANGE : TRACE_RANGE;
+
+        // Also check snapshot entities by proximity to view ray.
+        // Items (weapons, ammo, health) don't have clip models and won't be hit by traces.
+        int bestEnt = -1;
+        float bestDist = traceDist; // don't pick entities behind solid walls
+
+        int snapCount = CGameApi.GetSnapshotEntityCount();
+        for (int i = 0; i < snapCount; i++)
         {
-            if (hitEnt != _lastHitEntity)
+            int entNum = CGameApi.GetSnapshotEntityNum(i);
+            if (entNum < 0 || entNum >= 1023) continue;
+
+            var (ex, ey, ez) = CGameApi.GetEntityOrigin(entNum);
+
+            // Vector from origin to entity
+            float dx = ex - ox;
+            float dy = ey - oy;
+            float dz = ez - oz;
+
+            // Project onto view direction (dot product)
+            float along = dx * fwdX + dy * fwdY + dz * fwdZ;
+            if (along < 0 || along > bestDist) continue;
+
+            // Perpendicular distance to ray
+            float px = dx - along * fwdX;
+            float py = dy - along * fwdY;
+            float pz = dz - along * fwdZ;
+            float perpDistSq = px * px + py * py + pz * pz;
+
+            // Pick radius — generous for items (32 units)
+            if (perpDistSq < 32f * 32f && along < bestDist)
             {
-                CGameApi.SetHighlightEntity(hitEnt);
-                _lastHitEntity = hitEnt;
+                bestDist = along;
+                bestEnt = entNum;
+            }
+        }
+
+        // Prefer trace hit entity if it's a real entity, otherwise use proximity pick
+        int picked = -1;
+        if (fraction < 1.0f && hitEnt >= 0 && hitEnt < 1023)
+            picked = hitEnt;
+        if (bestEnt >= 0)
+            picked = bestEnt; // proximity pick is closer or behind walls filtered
+
+        if (picked >= 0)
+        {
+            if (picked != _lastHitEntity)
+            {
+                CGameApi.SetHighlightEntity(picked);
+                _lastHitEntity = picked;
             }
         }
         else
@@ -113,14 +158,14 @@ public class EntityPickerMod : ICGameMod
 
         // Draw "Active tool: Entity picker" text at top center
         string toolText = "Active tool: Entity picker";
-        int charSize = 12;
+        int charSize = 24;
         int textWidth = toolText.Length * charSize;
         int textX = (screenWidth - textWidth) / 2;
         int textY = 32;
 
         // Background bar
         Syscalls.R_SetColor(0f, 0f, 0f, 0.6f);
-        Syscalls.R_DrawStretchPic(textX - 4, textY - 2, textWidth + 8, charSize + 4,
+        Syscalls.R_DrawStretchPic(textX - 6, textY - 4, textWidth + 12, charSize + 8,
             0, 0, 1, 1, _whiteShader);
 
         // Tool name in cyan
@@ -134,16 +179,17 @@ public class EntityPickerMod : ICGameMod
             var (ex, ey, ez) = CGameApi.GetEntityOrigin(_lastHitEntity);
             string info = $"Entity #{_lastHitEntity} type:{entType}";
 
-            int infoWidth = info.Length * 8;
+            int infoCharSize = 16;
+            int infoWidth = info.Length * infoCharSize;
             int infoX = (screenWidth - infoWidth) / 2;
-            int infoY = screenHeight / 2 + 24;
+            int infoY = screenHeight / 2 + 32;
 
             Syscalls.R_SetColor(0f, 0f, 0f, 0.5f);
-            Syscalls.R_DrawStretchPic(infoX - 2, infoY - 1, infoWidth + 4, 10,
+            Syscalls.R_DrawStretchPic(infoX - 4, infoY - 2, infoWidth + 8, infoCharSize + 4,
                 0, 0, 1, 1, _whiteShader);
 
             Syscalls.R_SetColor(1f, 1f, 0.5f, 1f);
-            DrawString(infoX, infoY, info, 8);
+            DrawString(infoX, infoY, info, infoCharSize);
         }
 
         // Reset color
