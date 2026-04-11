@@ -74,6 +74,8 @@ public sealed unsafe class SceneManager
     private int _portalDebugFrame; // For one-time debug logging
     // Per-surface color textures (surfIdx → GL texture)
     private readonly Dictionary<int, uint> _portalColorTextures = new();
+    // Heap-allocated IQM pose buffer to avoid large stackalloc in portal rendering
+    private readonly float[] _portalIqmPoseMats = new float[128 * 12];
 
     public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
                      Renderer3D renderer3D, World.BspRenderer bspRenderer,
@@ -1349,14 +1351,30 @@ public sealed unsafe class SceneManager
         var portalSurfIndices = _bspRenderer.GetPortalSurfaceIndices();
         if (portalSurfIndices.Count == 0) return result;
 
+        // Snapshot the indices — Render() inside the loop will clear/repopulate the live list
+        Span<int> surfSnapshot = portalSurfIndices.Count <= 8
+            ? stackalloc int[8]
+            : new int[portalSurfIndices.Count];
+        int numPortals = portalSurfIndices.Count;
+        for (int i = 0; i < numPortals; i++)
+            surfSnapshot[i] = portalSurfIndices[i];
+
         // Ensure FBO infrastructure exists
         EnsurePortalFbo(width, height);
         if (_portalFbo == 0) return result;
 
         _isPortalPass = true;
 
-        foreach (int surfIdx in portalSurfIndices)
+        // Pre-allocate outside the loop to avoid stackalloc accumulation (CA2014)
+        Span<float> newViewOrg = stackalloc float[3];
+        Span<float> newViewAxis = stackalloc float[9];
+        Span<float> pView = stackalloc float[16];
+        Span<float> pProj = stackalloc float[16];
+        Span<float> pVp = stackalloc float[16];
+
+        for (int pi = 0; pi < numPortals; pi++)
         {
+            int surfIdx = surfSnapshot[pi];
             if (!_bspRenderer.GetPortalSurfacePlane(surfIdx,
                     out float pnX, out float pnY, out float pnZ, out float pDist,
                     out float pcX, out float pcY, out float pcZ))
@@ -1391,8 +1409,6 @@ public sealed unsafe class SceneManager
                 isMirror = true;
 
             // Compute mirrored/portal view
-            Span<float> newViewOrg = stackalloc float[3];
-            Span<float> newViewAxis = stackalloc float[9];
 
             if (isMirror)
             {
@@ -1466,9 +1482,6 @@ public sealed unsafe class SceneManager
             _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
             // Build portal view+projection matrices
-            Span<float> pView = stackalloc float[16];
-            Span<float> pProj = stackalloc float[16];
-            Span<float> pVp = stackalloc float[16];
 
             fixed (float* newOrgPtr = newViewOrg)
             fixed (float* newAxisPtr = newViewAxis)
@@ -1536,7 +1549,7 @@ public sealed unsafe class SceneManager
     {
         Span<float> modelMat = stackalloc float[16];
         Span<float> mvp = stackalloc float[16];
-        Span<float> iqmPoseMats2 = stackalloc float[128 * 12];
+        Span<float> iqmPoseMats2 = _portalIqmPoseMats;
 
         foreach (var ent in _entities)
         {
