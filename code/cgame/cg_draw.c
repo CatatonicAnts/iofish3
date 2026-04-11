@@ -2570,6 +2570,15 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 	cgs.screenXBias += cg_hudOffsetX.value * cgs.screenXScale;
 	cgs.screenYBias += cg_hudOffsetY.value * cgs.screenYScale;
 
+	// Check if the .NET mod has taken over HUD drawing
+#ifndef Q3_VM
+	{
+	qboolean modHud = ( CG_Mod_GetHudFlags() & HUD_FLAG_DISABLED ) ? qtrue : qfalse;
+#else
+	{
+	qboolean modHud = qfalse;
+#endif
+
 	if ( cg.snap->ps.pm_type == PM_INTERMISSION ) {
 		CG_DrawIntermission();
 		goto restore;
@@ -2581,79 +2590,92 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 	}
 */
 	if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
-		CG_DrawSpectator();
+		if ( !modHud ) {
+			CG_DrawSpectator();
+		}
 
 		if(stereoFrame == STEREO_CENTER)
 			CG_DrawCrosshair();
 
-		CG_DrawCrosshairNames();
+		if ( !modHud ) {
+			CG_DrawCrosshairNames();
+		}
 	} else {
 		// don't draw any status if dead or the scoreboard is being explicitly shown
 		if ( !cg.showScores && cg.snap->ps.stats[STAT_HEALTH] > 0 ) {
 
+			if ( !modHud ) {
 #ifdef MISSIONPACK
-			if ( cg_drawStatus.integer ) {
-				Menu_PaintAll();
-				CG_DrawTimedMenus();
-			}
+				if ( cg_drawStatus.integer ) {
+					Menu_PaintAll();
+					CG_DrawTimedMenus();
+				}
 #else
-			// per-element Y offset for status bar
-			cgs.screenYBias += cg_hudStatusOffsetY.value * cgs.screenYScale;
-			CG_DrawStatusBar();
-			cgs.screenYBias -= cg_hudStatusOffsetY.value * cgs.screenYScale;
+				// per-element Y offset for status bar
+				cgs.screenYBias += cg_hudStatusOffsetY.value * cgs.screenYScale;
+				CG_DrawStatusBar();
+				cgs.screenYBias -= cg_hudStatusOffsetY.value * cgs.screenYScale;
 #endif
       
-			// per-element Y offset for ammo warning
-			cgs.screenYBias += cg_hudAmmoWarningOffsetY.value * cgs.screenYScale;
-			CG_DrawAmmoWarning();
-			cgs.screenYBias -= cg_hudAmmoWarningOffsetY.value * cgs.screenYScale;
+				// per-element Y offset for ammo warning
+				cgs.screenYBias += cg_hudAmmoWarningOffsetY.value * cgs.screenYScale;
+				CG_DrawAmmoWarning();
+				cgs.screenYBias -= cg_hudAmmoWarningOffsetY.value * cgs.screenYScale;
+			}
 
 #ifdef MISSIONPACK
 			CG_DrawProxWarning();
 #endif      
 			if(stereoFrame == STEREO_CENTER)
 				CG_DrawCrosshair();
-			CG_DrawCrosshairNames();
 
-			// per-element Y offset for weapon select
-			cgs.screenYBias += cg_hudWeaponOffsetY.value * cgs.screenYScale;
-			CG_DrawWeaponSelect();
-			cgs.screenYBias -= cg_hudWeaponOffsetY.value * cgs.screenYScale;
+			if ( !modHud ) {
+				CG_DrawCrosshairNames();
+
+				// per-element Y offset for weapon select
+				cgs.screenYBias += cg_hudWeaponOffsetY.value * cgs.screenYScale;
+				CG_DrawWeaponSelect();
+				cgs.screenYBias -= cg_hudWeaponOffsetY.value * cgs.screenYScale;
 
 #ifndef MISSIONPACK
-			if ( cg_drawHoldableItem.integer ) {
-				CG_DrawHoldableItem();
-			}
+				if ( cg_drawHoldableItem.integer ) {
+					CG_DrawHoldableItem();
+				}
 #else
-			//CG_DrawPersistantPowerup();
+				//CG_DrawPersistantPowerup();
 #endif
-			CG_DrawReward();
+				CG_DrawReward();
+			}
 		}
 	}
 
-	if ( cgs.gametype >= GT_TEAM ) {
+	if ( !modHud ) {
+		if ( cgs.gametype >= GT_TEAM ) {
 #ifndef MISSIONPACK
-		CG_DrawTeamInfo();
+			CG_DrawTeamInfo();
 #endif
-	}
+		}
 
-	CG_DrawVote();
-	CG_DrawTeamVote();
+		CG_DrawVote();
+		CG_DrawTeamVote();
+	}
 
 	CG_DrawLagometer();
 
+	if ( !modHud ) {
 #ifdef MISSIONPACK
-	if (!cg_paused.integer) {
-		CG_DrawUpperRight(stereoFrame);
-	}
+		if (!cg_paused.integer) {
+			CG_DrawUpperRight(stereoFrame);
+		}
 #else
-	CG_DrawUpperRight(stereoFrame);
+		CG_DrawUpperRight(stereoFrame);
 #endif
 
 #ifndef MISSIONPACK
-	CG_DrawLowerRight();
-	CG_DrawLowerLeft();
+		CG_DrawLowerRight();
+		CG_DrawLowerLeft();
 #endif
+	}
 
 	if ( !CG_DrawFollow() ) {
 		CG_DrawWarmup();
@@ -2661,7 +2683,7 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 
 	// don't draw center string if scoreboard is up
 	cg.scoreBoardShowing = CG_DrawScoreboard();
-	if ( !cg.scoreBoardShowing) {
+	if ( !cg.scoreBoardShowing && !modHud ) {
 		CG_DrawCenterString();
 	}
 
@@ -2669,6 +2691,7 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 #ifndef Q3_VM
 	CG_Mod_Draw2D();
 #endif
+	}
 
 restore:
 	// restore original screen scale/bias

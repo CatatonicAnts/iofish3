@@ -54,6 +54,9 @@ static vec3_t	highlightMins, highlightMaxs;
 static float	trajectoryPoints[MAX_TRAJECTORY_POINTS * 3];
 static int		trajectoryNumPoints = 0;
 
+// HUD flags set by the mod
+static int		hudFlags = 0;
+
 
 /*
 ==================
@@ -182,6 +185,115 @@ static void ModApi_SetHighlightTrajectory( float *points, int numPoints ) {
 
 /*
 ==================
+HUD data API callbacks
+==================
+*/
+static void ModApi_GetPlayerState( modPlayerState_t *out ) {
+	playerState_t *ps = &cg.predictedPlayerState;
+	int i;
+
+	out->health = ps->stats[STAT_HEALTH];
+	out->armor = ps->stats[STAT_ARMOR];
+	out->weapon = ps->weapon;
+	out->weaponstate = ps->weaponstate;
+	for ( i = 0; i < MOD_MAX_WEAPONS; i++ ) {
+		out->ammo[i] = ps->ammo[i];
+	}
+	for ( i = 0; i < MOD_MAX_STATS; i++ ) {
+		out->stats[i] = ps->stats[i];
+	}
+	for ( i = 0; i < MOD_MAX_PERSISTANT; i++ ) {
+		out->persistant[i] = ps->persistant[i];
+	}
+	for ( i = 0; i < MOD_MAX_POWERUPS; i++ ) {
+		out->powerups[i] = ps->powerups[i];
+	}
+	out->pm_type = ps->pm_type;
+	out->pm_flags = ps->pm_flags;
+	out->clientNum = ps->clientNum;
+	out->eFlags = ps->eFlags;
+}
+
+static void ModApi_GetHudState( modHudState_t *out ) {
+	memset( out, 0, sizeof(*out) );
+
+	out->gametype = cgs.gametype;
+	out->fraglimit = cgs.fraglimit;
+	out->timelimit = cgs.timelimit;
+	out->capturelimit = cgs.capturelimit;
+	out->scores1 = cgs.scores1;
+	out->scores2 = cgs.scores2;
+	out->redflag = cgs.redflag;
+	out->blueflag = cgs.blueflag;
+	out->levelStartTime = cgs.levelStartTime;
+	out->warmup = cg.warmup;
+	out->time = cg.time;
+	out->realTime = trap_Milliseconds();
+	out->lowAmmoWarning = cg.lowAmmoWarning;
+	out->weaponSelect = cg.weaponSelect;
+	out->weaponSelectTime = cg.weaponSelectTime;
+	out->showScores = cg.showScores;
+	out->itemPickup = cg.itemPickup;
+	out->itemPickupTime = cg.itemPickupTime;
+	out->itemPickupBlendTime = cg.itemPickupBlendTime;
+	out->crosshairClientNum = cg.crosshairClientNum;
+	out->crosshairClientTime = cg.crosshairClientTime;
+	out->centerPrintTime = cg.centerPrintTime;
+	out->centerPrintCharWidth = cg.centerPrintCharWidth;
+	out->voteTime = cgs.voteTime;
+	out->voteYes = cgs.voteYes;
+	out->voteNo = cgs.voteNo;
+	out->attackerTime = cg.attackerTime;
+	out->attackerClientNum = cg.predictedPlayerState.persistant[PERS_ATTACKER];
+
+	out->localServer = cgs.localServer;
+
+	// Count connected clients
+	{
+		int i, count = 0;
+		for ( i = 0; i < MAX_CLIENTS; i++ ) {
+			if ( cgs.clientinfo[i].infoValid ) count++;
+		}
+		out->numClients = count;
+	}
+
+	Q_strncpyz( out->centerPrint, cg.centerPrint, sizeof(out->centerPrint) );
+	Q_strncpyz( out->voteString, cgs.voteString, sizeof(out->voteString) );
+
+	// Crosshair client name
+	if ( cg.crosshairClientNum >= 0 && cg.crosshairClientNum < MAX_CLIENTS ) {
+		Q_strncpyz( out->crosshairClientName,
+			cgs.clientinfo[cg.crosshairClientNum].name,
+			sizeof(out->crosshairClientName) );
+	}
+
+	// Pickup item name
+	if ( cg.itemPickup > 0 ) {
+		Q_strncpyz( out->itemPickupName,
+			bg_itemlist[cg.itemPickup].pickup_name,
+			sizeof(out->itemPickupName) );
+	}
+}
+
+static void ModApi_SetHudFlags( int flags ) {
+	hudFlags = flags;
+}
+
+static int ModApi_GetConfigString( int index, char *buf, int bufSize ) {
+	const char *cs;
+	if ( bufSize <= 0 ) return 0;
+	cs = CG_ConfigString( index );
+	if ( cs && cs[0] ) {
+		Q_strncpyz( buf, cs, bufSize );
+		return (int)strlen( buf );
+	}
+	buf[0] = '\0';
+	return 0;
+}
+
+
+/*
+==================
 CG_Mod_TryLoad
 
 Attempt to load cgamemod.dll from the given directory.
@@ -216,6 +328,7 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	highlightEntity = -1;
 	highlightAABBSet = qfalse;
 	trajectoryNumPoints = 0;
+	hudFlags = 0;
 
 	// Get fs_basepathand fs_game via trap calls
 	trap_Cvar_VariableStringBuffer( "fs_basepath", basePath, sizeof(basePath) );
@@ -270,6 +383,10 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	api.SetHighlightAABB		= ModApi_SetHighlightAABB;
 	api.SetHighlightTrajectory	= ModApi_SetHighlightTrajectory;
 	api.GetClientNum			= ModApi_GetClientNum;
+	api.GetPlayerState			= ModApi_GetPlayerState;
+	api.GetHudState				= ModApi_GetHudState;
+	api.SetHudFlags				= ModApi_SetHudFlags;
+	api.GetConfigString			= ModApi_GetConfigString;
 
 	CG_Printf( "Mod host loaded, initializing...\n" );
 	fn_Init( (intptr_t)syscall, screenWidth, screenHeight, &api );
@@ -408,4 +525,16 @@ qboolean CG_Mod_ServerCommand( const char *cmd ) {
 		return qtrue;
 	}
 	return qfalse;
+}
+
+
+/*
+==================
+CG_Mod_GetHudFlags
+
+Returns the HUD flags set by the mod (0 if no mod loaded).
+==================
+*/
+int CG_Mod_GetHudFlags( void ) {
+	return hudFlags;
 }
