@@ -319,6 +319,15 @@ public static unsafe class BspLoader
                 result[i].FlareNormalY = f[22]; // lightmapVecs[2][1]
                 result[i].FlareNormalZ = f[23]; // lightmapVecs[2][2]
             }
+
+            // For MST_PLANAR: extract face normal from lightmapVecs[2] (BSP compiler-stored)
+            if (result[i].SurfaceType == SurfaceTypes.MST_PLANAR)
+            {
+                float* f = (float*)(p + i * DSURFACE_SIZE);
+                result[i].FaceNormalX = f[21]; // lightmapVecs[2][0]
+                result[i].FaceNormalY = f[22]; // lightmapVecs[2][1]
+                result[i].FaceNormalZ = f[23]; // lightmapVecs[2][2]
+            }
         }
         return result;
     }

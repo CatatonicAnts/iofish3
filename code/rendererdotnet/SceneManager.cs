@@ -1554,7 +1554,9 @@ public sealed unsafe class SceneManager
         foreach (var ent in _entities)
         {
             if (ent.ReType == RT_PORTALSURFACE) continue;
-            if ((ent.Renderfx & RF_THIRD_PERSON) != 0) continue;
+            // In portal/mirror views: render third-person model (player body),
+            // but skip first-person viewmodel weapon
+            if ((ent.Renderfx & RF_FIRST_PERSON) != 0) continue;
 
             bool depthHack = (ent.Renderfx & RF_DEPTHHACK) != 0;
             if (depthHack)

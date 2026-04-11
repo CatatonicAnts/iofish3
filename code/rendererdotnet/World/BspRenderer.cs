@@ -1124,20 +1124,35 @@ public sealed unsafe class BspRenderer : IDisposable
         ref var surf = ref _world.Surfaces[surfIdx];
         if (surf.NumVertices < 3) return false;
 
-        // Compute plane from first 3 vertices
-        ref var v0 = ref _world.Vertices[surf.FirstVertex];
-        ref var v1 = ref _world.Vertices[surf.FirstVertex + 1];
-        ref var v2 = ref _world.Vertices[surf.FirstVertex + 2];
+        // Use BSP-stored face normal for MST_PLANAR (matches Q3's cullPlane)
+        if (surf.SurfaceType == SurfaceTypes.MST_PLANAR &&
+            (surf.FaceNormalX != 0 || surf.FaceNormalY != 0 || surf.FaceNormalZ != 0))
+        {
+            normalX = surf.FaceNormalX;
+            normalY = surf.FaceNormalY;
+            normalZ = surf.FaceNormalZ;
+            float len = MathF.Sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+            if (len > 0.001f) { normalX /= len; normalY /= len; normalZ /= len; }
+            ref var v0n = ref _world.Vertices[surf.FirstVertex];
+            dist = normalX * v0n.X + normalY * v0n.Y + normalZ * v0n.Z;
+        }
+        else
+        {
+            // Fallback: compute plane from first 3 vertices
+            ref var v0 = ref _world.Vertices[surf.FirstVertex];
+            ref var v1 = ref _world.Vertices[surf.FirstVertex + 1];
+            ref var v2 = ref _world.Vertices[surf.FirstVertex + 2];
 
-        float e1x = v1.X - v0.X, e1y = v1.Y - v0.Y, e1z = v1.Z - v0.Z;
-        float e2x = v2.X - v0.X, e2y = v2.Y - v0.Y, e2z = v2.Z - v0.Z;
-        normalX = e1y * e2z - e1z * e2y;
-        normalY = e1z * e2x - e1x * e2z;
-        normalZ = e1x * e2y - e1y * e2x;
-        float len = MathF.Sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
-        if (len < 0.001f) return false;
-        normalX /= len; normalY /= len; normalZ /= len;
-        dist = normalX * v0.X + normalY * v0.Y + normalZ * v0.Z;
+            float e1x = v1.X - v0.X, e1y = v1.Y - v0.Y, e1z = v1.Z - v0.Z;
+            float e2x = v2.X - v0.X, e2y = v2.Y - v0.Y, e2z = v2.Z - v0.Z;
+            normalX = e1y * e2z - e1z * e2y;
+            normalY = e1z * e2x - e1x * e2z;
+            normalZ = e1x * e2y - e1y * e2x;
+            float len = MathF.Sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+            if (len < 0.001f) return false;
+            normalX /= len; normalY /= len; normalZ /= len;
+            dist = normalX * v0.X + normalY * v0.Y + normalZ * v0.Z;
+        }
 
         // Center = average of all vertices
         float cx = 0, cy = 0, cz = 0;

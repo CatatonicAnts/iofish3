@@ -256,6 +256,9 @@ public struct BspSurface
     public float FlareOriginX, FlareOriginY, FlareOriginZ;
     public float FlareColorR, FlareColorG, FlareColorB;
     public float FlareNormalX, FlareNormalY, FlareNormalZ;
+
+    // For MST_PLANAR: face normal from BSP lightmapVecs[2]
+    public float FaceNormalX, FaceNormalY, FaceNormalZ;
 }
 
 public struct BspShaderEntry
