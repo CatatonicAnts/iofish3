@@ -47,6 +47,10 @@ public static unsafe class RendererExports
     private static World.SkyboxRenderer? _skyboxRenderer;
     private static PostProcess? _postProcess;
 
+    // Window position tracking for saving in EndFrame
+    private static int _lastWindowX = -1;
+    private static int _lastWindowY = -1;
+
     // Scratch textures for cinematic playback (up to 16 simultaneous)
     private const int MAX_SCRATCH_IMAGES = 16;
     private static readonly uint[] _scratchTextures = new uint[MAX_SCRATCH_IMAGES];
@@ -115,14 +119,6 @@ public static unsafe class RendererExports
 
         if (destroyWindow != 0)
         {
-            // Save window position before destroying
-            if (_sdl != null && _window != null)
-            {
-                int wx = 0, wy = 0;
-                _sdl.GetWindowPosition(_window, ref wx, ref wy);
-                EngineImports.Cvar_Set("r_windowX", wx.ToString());
-                EngineImports.Cvar_Set("r_windowY", wy.ToString());
-            }
 
             _gl?.Dispose();
             _gl = null;
@@ -587,6 +583,21 @@ public static unsafe class RendererExports
         {
             _screenshotPending = false;
             TakeScreenshot();
+        }
+
+        // Save window position when it changes (must happen during game loop
+        // so Com_WriteConfiguration picks up the modified cvar)
+        if (_sdl != null && _window != null)
+        {
+            int wx = 0, wy = 0;
+            _sdl.GetWindowPosition(_window, ref wx, ref wy);
+            if (wx != _lastWindowX || wy != _lastWindowY)
+            {
+                _lastWindowX = wx;
+                _lastWindowY = wy;
+                EngineImports.Cvar_Set("r_windowX", wx.ToString());
+                EngineImports.Cvar_Set("r_windowY", wy.ToString());
+            }
         }
 
         if (_sdl != null && _window != null)

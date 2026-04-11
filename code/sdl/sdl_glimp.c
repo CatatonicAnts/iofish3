@@ -90,15 +90,6 @@ GLimp_Shutdown
 */
 void GLimp_Shutdown( void )
 {
-	// Save window position before shutdown
-	if( SDL_window != NULL )
-	{
-		int x, y;
-		SDL_GetWindowPosition( SDL_window, &x, &y );
-		ri.Cvar_Set( "r_windowX", va( "%d", x ) );
-		ri.Cvar_Set( "r_windowY", va( "%d", y ) );
-	}
-
 	ri.IN_Shutdown();
 
 	SDL_QuitSubSystem( SDL_INIT_VIDEO );
@@ -1208,6 +1199,22 @@ void GLimp_EndFrame( void )
 	if ( Q_stricmp( r_drawBuffer->string, "GL_FRONT" ) != 0 )
 	{
 		SDL_GL_SwapWindow( SDL_window );
+	}
+
+	// Save window position when it changes (must happen during game loop
+	// so Com_WriteConfiguration picks up the modified cvar)
+	if ( SDL_window != NULL && !r_fullscreen->integer )
+	{
+		static int lastWinX = -1, lastWinY = -1;
+		int wx, wy;
+		SDL_GetWindowPosition( SDL_window, &wx, &wy );
+		if ( wx != lastWinX || wy != lastWinY )
+		{
+			lastWinX = wx;
+			lastWinY = wy;
+			ri.Cvar_Set( "r_windowX", va( "%d", wx ) );
+			ri.Cvar_Set( "r_windowY", va( "%d", wy ) );
+		}
 	}
 
 	if( r_fullscreen->modified )
