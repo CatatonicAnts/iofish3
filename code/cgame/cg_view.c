@@ -833,6 +833,11 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 		CG_DamageBlendBlob();
 	}
 
+	// .NET mod frame update (before entity rendering so highlight is current)
+#ifndef Q3_VM
+	CG_Mod_Frame( serverTime );
+#endif
+
 	// build the render lists
 	if ( !cg.hyperspace ) {
 		CG_AddPacketEntities();			// adter calcViewValues, so predicted player state is correct
@@ -887,11 +892,6 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 			trap_Cvar_Set("timescale", va("%f", cg_timescale.value));
 		}
 	}
-
-	// .NET mod frame update
-#ifndef Q3_VM
-	CG_Mod_Frame( serverTime );
-#endif
 
 	// actually issue the rendering calls
 	CG_DrawActive( stereoView );
