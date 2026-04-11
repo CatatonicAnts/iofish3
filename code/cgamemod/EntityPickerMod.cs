@@ -58,6 +58,7 @@ public class EntityPickerMod : ICGameMod
         public int TakeDamage;
         public float PhysicsBounce;
         public int EntityType;
+        public int Gravity;
     }
 
     public void Init()
@@ -364,6 +365,7 @@ public class EntityPickerMod : ICGameMod
             TakeDamage   = Int(p, 40),
             PhysicsBounce = Float(p, 41),
             EntityType   = Int(p, 42),
+            Gravity      = Int(p, 43),
         };
 
         // Set the AABB highlight from server data
@@ -386,9 +388,9 @@ public class EntityPickerMod : ICGameMod
 
     private unsafe void ComputeAndSetTrajectory()
     {
-        const float GRAVITY = 800f;
+        float gravity = _info.Gravity > 0 ? _info.Gravity : 800f;
         const int MAX_POINTS = 64;
-        const float TIME_STEP = 0.02f; // 20ms per step
+        const float TIME_STEP = 0.02f;// 20ms per step
 
         // Start from center of AABB (top surface)
         float startX = (_info.AbsMinX + _info.AbsMaxX) * 0.5f;
@@ -414,7 +416,7 @@ public class EntityPickerMod : ICGameMod
             float t = (i + 1) * TIME_STEP;
             float newX = startX + vx * t;
             float newY = startY + vy * t;
-            float newZ = startZ + vz * t - 0.5f * GRAVITY * t * t;
+            float newZ = startZ + vz * t - 0.5f * gravity * t * t;
 
             // Stop if falling back below start height and past apex
             if (i > 5 && newZ < startZ)
