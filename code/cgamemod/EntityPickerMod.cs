@@ -47,6 +47,17 @@ public class EntityPickerMod : ICGameMod
         public int SvFlags;
         public string Message;
         public string Team;
+        // Extended fields
+        public float Wait;
+        public float Random;
+        public int NextThink;
+        public float AngleX, AngleY, AngleZ;
+        public float Origin2X, Origin2Y, Origin2Z;
+        public int MoverState;
+        public int Flags;
+        public int TakeDamage;
+        public float PhysicsBounce;
+        public int EntityType;
     }
 
     public void Init()
@@ -60,6 +71,7 @@ public class EntityPickerMod : ICGameMod
     {
         CGameApi.SetHighlightEntity(-1);
         CGameApi.ClearHighlightAABB();
+        CGameApi.ClearHighlightTrajectory();
         Syscalls.RemoveCommand("tool");
     }
 
@@ -80,6 +92,7 @@ public class EntityPickerMod : ICGameMod
             {
                 CGameApi.SetHighlightEntity(-1);
                 CGameApi.ClearHighlightAABB();
+                CGameApi.ClearHighlightTrajectory();
                 _lastHitEntity = -1;
             }
             return;
@@ -99,6 +112,7 @@ public class EntityPickerMod : ICGameMod
         {
             CGameApi.SetHighlightEntity(-1);
             CGameApi.ClearHighlightAABB();
+            CGameApi.ClearHighlightTrajectory();
             _lastHitEntity = -1;
         }
 
@@ -199,12 +213,36 @@ public class EntityPickerMod : ICGameMod
             // Flags
             if (info.Spawnflags != 0)
                 lines.Add(($"Spawnflags: 0x{info.Spawnflags:X}", 0x999999));
+            if (info.Flags != 0)
+                lines.Add(($"Flags: 0x{info.Flags:X}", 0x999999));
             if (info.Contents != 0)
                 lines.Add(($"Contents: 0x{info.Contents:X}", 0x999999));
             if (info.Clipmask != 0)
                 lines.Add(($"Clipmask: 0x{info.Clipmask:X}", 0x999999));
             if (info.SvFlags != 0)
                 lines.Add(($"SvFlags: 0x{info.SvFlags:X}", 0x999999));
+
+            // State
+            if (info.TakeDamage != 0)
+                lines.Add(($"TakeDamage: {(info.TakeDamage == 1 ? "yes" : "no_knockback")}", 0xFF9999));
+            if (info.MoverState != 0)
+                lines.Add(($"MoverState: {GetMoverStateName(info.MoverState)}", 0xFFCC66));
+            if (info.Wait != 0)
+                lines.Add(($"Wait: {info.Wait:F1}s", 0xCCCCCC));
+            if (info.Random != 0)
+                lines.Add(($"Random: {info.Random:F1}s", 0xCCCCCC));
+            if (info.NextThink >= 0)
+                lines.Add(($"NextThink: {info.NextThink}ms", 0xCCCCCC));
+            if (info.PhysicsBounce != 0)
+                lines.Add(($"Bounce: {info.PhysicsBounce:F2}", 0xCCCCCC));
+
+            // Angles
+            if (info.AngleX != 0 || info.AngleY != 0 || info.AngleZ != 0)
+                lines.Add(($"Angles: {info.AngleX:F1} {info.AngleY:F1} {info.AngleZ:F1}", 0xE6E6E6));
+
+            // Push velocity (jump pads)
+            if (info.Origin2X != 0 || info.Origin2Y != 0 || info.Origin2Z != 0)
+                lines.Add(($"PushVel: {info.Origin2X:F0} {info.Origin2Y:F0} {info.Origin2Z:F0}", 0xFF66FF));
 
             // Render panel
             int infoCharSize = 14;
@@ -263,10 +301,12 @@ public class EntityPickerMod : ICGameMod
         //         count damage splashDamage splashRadius
         //         ox oy oz  mnx mny mnz  mxx mxy mxz  mdx mdy mdz
         //         contents clipmask svFlags message team
+        //         wait random nextthink angles(3) origin2(3) moverState flags takedamage physicsBounce eType
         if (string.IsNullOrEmpty(args))
         {
             _serverHitEntity = -1;
             CGameApi.ClearHighlightAABB();
+            CGameApi.ClearHighlightTrajectory();
             return;
         }
 
@@ -275,6 +315,7 @@ public class EntityPickerMod : ICGameMod
         {
             _serverHitEntity = -1;
             CGameApi.ClearHighlightAABB();
+            CGameApi.ClearHighlightTrajectory();
             return;
         }
 
@@ -309,12 +350,91 @@ public class EntityPickerMod : ICGameMod
             SvFlags      = Int(p, 26),
             Message      = Str(p, 27),
             Team         = Str(p, 28),
+            Wait         = Float(p, 29),
+            Random       = Float(p, 30),
+            NextThink    = Int(p, 31),
+            AngleX       = Float(p, 32),
+            AngleY       = Float(p, 33),
+            AngleZ       = Float(p, 34),
+            Origin2X     = Float(p, 35),
+            Origin2Y     = Float(p, 36),
+            Origin2Z     = Float(p, 37),
+            MoverState   = Int(p, 38),
+            Flags        = Int(p, 39),
+            TakeDamage   = Int(p, 40),
+            PhysicsBounce = Float(p, 41),
+            EntityType   = Int(p, 42),
         };
 
         // Set the AABB highlight from server data
         float* mins = stackalloc float[3] { _info.AbsMinX, _info.AbsMinY, _info.AbsMinZ };
         float* maxs = stackalloc float[3] { _info.AbsMaxX, _info.AbsMaxY, _info.AbsMaxZ };
         CGameApi.SetHighlightAABB(mins, maxs);
+
+        // For push triggers (jump pads), compute and set trajectory
+        const int ET_PUSH_TRIGGER = 8;
+        if (_info.EntityType == ET_PUSH_TRIGGER &&
+            (_info.Origin2X != 0 || _info.Origin2Y != 0 || _info.Origin2Z != 0))
+        {
+            ComputeAndSetTrajectory();
+        }
+        else
+        {
+            CGameApi.ClearHighlightTrajectory();
+        }
+    }
+
+    private unsafe void ComputeAndSetTrajectory()
+    {
+        const float GRAVITY = 800f;
+        const int MAX_POINTS = 64;
+        const float TIME_STEP = 0.02f; // 20ms per step
+
+        // Start from center of AABB (top surface)
+        float startX = (_info.AbsMinX + _info.AbsMaxX) * 0.5f;
+        float startY = (_info.AbsMinY + _info.AbsMaxY) * 0.5f;
+        float startZ = _info.AbsMaxZ; // top of trigger
+
+        float vx = _info.Origin2X;
+        float vy = _info.Origin2Y;
+        float vz = _info.Origin2Z;
+
+        float* points = stackalloc float[MAX_POINTS * 3];
+        int numPoints = 0;
+
+        float x = startX, y = startY, z = startZ;
+
+        for (int i = 0; i < MAX_POINTS; i++)
+        {
+            points[numPoints * 3 + 0] = x;
+            points[numPoints * 3 + 1] = y;
+            points[numPoints * 3 + 2] = z;
+            numPoints++;
+
+            float t = (i + 1) * TIME_STEP;
+            float newX = startX + vx * t;
+            float newY = startY + vy * t;
+            float newZ = startZ + vz * t - 0.5f * GRAVITY * t * t;
+
+            // Stop if falling back below start height and past apex
+            if (i > 5 && newZ < startZ)
+                break;
+
+            x = newX;
+            y = newY;
+            z = newZ;
+        }
+
+        // Add final point
+        if (numPoints < MAX_POINTS)
+        {
+            points[numPoints * 3 + 0] = x;
+            points[numPoints * 3 + 1] = y;
+            points[numPoints * 3 + 2] = z;
+            numPoints++;
+        }
+
+        CGameApi.SetHighlightTrajectory(points, numPoints);
     }
 
     private static string Str(string[] p, int i) =>
@@ -358,6 +478,15 @@ public class EntityPickerMod : ICGameMod
         12 => "Team",
         _ when entType >= 13 => $"Event({entType - 13})",
         _ => $"Unknown({entType})"
+    };
+
+    private static string GetMoverStateName(int state) => state switch
+    {
+        0 => "POS1",
+        1 => "POS2",
+        2 => "1TO2",
+        3 => "2TO1",
+        _ => $"Unknown({state})"
     };
 
     private static string GetShortName(string path)

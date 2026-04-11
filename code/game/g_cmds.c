@@ -1726,10 +1726,12 @@ static void ToolTrace_SendHit( int clientNum, int entNum ) {
 	//         count damage splashDamage splashRadius
 	//         ox oy oz  mnx mny mnz  mxx mxy mxz  mdx mdy mdz
 	//         contents clipmask svFlags message team
+	//         wait random nextthink angles(3) origin2(3) moverState flags takedamage physicsBounce eType
 	trap_SendServerCommand( clientNum,
 		va( "toolHit %d %s %s %s %s %d %d %.0f %d %d %d %d "
 			"%.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f "
-			"%d %d %d %s %s",
+			"%d %d %d %s %s "
+			"%.1f %.1f %d %.1f %.1f %.1f %.0f %.0f %.0f %d %d %d %.2f %d",
 			entNum, cn, tn, tg, mdl,
 			hit->spawnflags, hit->health, hit->speed,
 			hit->count, hit->damage, hit->splashDamage, hit->splashRadius,
@@ -1738,7 +1740,13 @@ static void ToolTrace_SendHit( int clientNum, int entNum ) {
 			hit->r.absmax[0], hit->r.absmax[1], hit->r.absmax[2],
 			hit->movedir[0], hit->movedir[1], hit->movedir[2],
 			hit->r.contents, hit->clipmask, hit->r.svFlags,
-			msg, tm ) );
+			msg, tm,
+			hit->wait, hit->random,
+			hit->nextthink > 0 ? hit->nextthink - level.time : -1,
+			hit->s.angles[0], hit->s.angles[1], hit->s.angles[2],
+			hit->s.origin2[0], hit->s.origin2[1], hit->s.origin2[2],
+			hit->moverState, hit->flags, hit->takedamage,
+			hit->physicsBounce, hit->s.eType ) );
 }
 
 static void Cmd_ToolTrace_f( gentity_t *ent ) {

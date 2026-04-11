@@ -1138,6 +1138,28 @@ void CG_AddPacketEntities( void ) {
 
 					trap_R_AddRefEntityToScene( &aabbRef );
 				}
+
+				// Submit trajectory polyline segments
+				{
+					float	*trajPts;
+					int		trajCount = CG_Mod_GetHighlightTrajectory( &trajPts );
+					int		i;
+
+					for ( i = 0; i < trajCount - 1; i++ ) {
+						refEntity_t lineRef;
+
+						memset( &lineRef, 0, sizeof(lineRef) );
+						lineRef.reType = RT_MODEL;
+						lineRef.hModel = 0;
+						VectorCopy( &trajPts[i * 3], lineRef.origin );
+						VectorCopy( &trajPts[(i + 1) * 3], lineRef.oldorigin );
+						lineRef.renderfx = RF_HIGHLIGHT;
+						lineRef.frame = 1;	// signal: line segment, not AABB
+						AxisClear( lineRef.axis );
+
+						trap_R_AddRefEntityToScene( &lineRef );
+					}
+				}
 			}
 		}
 	}

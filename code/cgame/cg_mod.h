@@ -30,6 +30,8 @@ typedef struct {
 	void	(*GetEntityInfo)( int entityNum, int *weapon, int *eFlags, int *frame, int *event );
 	// Set world-space AABB for highlight wireframe. Pass NULL to clear.
 	void	(*SetHighlightAABB)( float *mins, float *maxs );
+	// Set a trajectory polyline for highlight drawing. points is float[numPoints*3]. Pass NULL/0 to clear.
+	void	(*SetHighlightTrajectory)( float *points, int numPoints );
 } cgameModApi_t;
 
 // Initialize the mod host (loads DLL, calls CgMod_Init)
@@ -55,6 +57,9 @@ int CG_Mod_GetHighlightEntity( void );
 
 // Get the world-space AABB set by the mod. Returns qtrue if set.
 qboolean CG_Mod_GetHighlightAABB( float *mins, float *maxs );
+
+// Get the trajectory polyline. Returns number of points (0 if none).
+int CG_Mod_GetHighlightTrajectory( float **points );
 
 // Route a server command to the mod host (returns qtrue if handled)
 qboolean CG_Mod_ServerCommand( const char *cmd );

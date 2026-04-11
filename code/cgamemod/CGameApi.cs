@@ -19,6 +19,7 @@ public static unsafe class CGameApi
     private delegate int GetEntityModelNameDelegate(int entityNum, byte* buf, int bufSize);
     private delegate void GetEntityInfoDelegate(int entityNum, int* weapon, int* eFlags, int* frame, int* evnt);
     private delegate void SetHighlightAABBDelegate(float* mins, float* maxs);
+    private delegate void SetHighlightTrajectoryDelegate(float* points, int numPoints);
 
     // Cached delegate instances (prevent GC of the thunks)
     private static DoTraceDelegate? _doTrace;
@@ -34,12 +35,13 @@ public static unsafe class CGameApi
     private static GetEntityModelNameDelegate? _getEntityModelName;
     private static GetEntityInfoDelegate? _getEntityInfo;
     private static SetHighlightAABBDelegate? _setHighlightAABB;
+    private static SetHighlightTrajectoryDelegate? _setHighlightTrajectory;
 
     private static bool _initialized;
 
     /// <summary>
     /// Parse the cgameModApi_t struct from C and cache delegate wrappers.
-    /// The struct is 12 function pointers (nint each).
+    /// The struct is 14 function pointers (nint each).
     /// </summary>
     public static void Init(nint apiPtr)
     {
@@ -59,6 +61,7 @@ public static unsafe class CGameApi
         _getEntityModelName = Marshal.GetDelegateForFunctionPointer<GetEntityModelNameDelegate>(ptrs[10]);
         _getEntityInfo = Marshal.GetDelegateForFunctionPointer<GetEntityInfoDelegate>(ptrs[11]);
         _setHighlightAABB = Marshal.GetDelegateForFunctionPointer<SetHighlightAABBDelegate>(ptrs[12]);
+        _setHighlightTrajectory = Marshal.GetDelegateForFunctionPointer<SetHighlightTrajectoryDelegate>(ptrs[13]);
 
         _initialized = true;
     }
@@ -169,5 +172,17 @@ public static unsafe class CGameApi
     public static void ClearHighlightAABB()
     {
         if (_initialized) _setHighlightAABB!(null, null);
+    }
+
+    /// <summary>Set a trajectory polyline for highlight drawing. Points is float[numPoints*3].</summary>
+    public static void SetHighlightTrajectory(float* points, int numPoints)
+    {
+        if (_initialized) _setHighlightTrajectory!(points, numPoints);
+    }
+
+    /// <summary>Clear the trajectory highlight.</summary>
+    public static void ClearHighlightTrajectory()
+    {
+        if (_initialized) _setHighlightTrajectory!(null, 0);
     }
 }

@@ -49,6 +49,11 @@ static int		highlightEntity = -1;
 static qboolean	highlightAABBSet = qfalse;
 static vec3_t	highlightMins, highlightMaxs;
 
+// Trajectory polyline for highlight drawing (set by mod)
+#define MAX_TRAJECTORY_POINTS 128
+static float	trajectoryPoints[MAX_TRAJECTORY_POINTS * 3];
+static int		trajectoryNumPoints = 0;
+
 
 /*
 ==================
@@ -161,6 +166,15 @@ static void ModApi_SetHighlightAABB( float *mins, float *maxs ) {
 	}
 }
 
+static void ModApi_SetHighlightTrajectory( float *points, int numPoints ) {
+	if ( points && numPoints > 1 && numPoints <= MAX_TRAJECTORY_POINTS ) {
+		memcpy( trajectoryPoints, points, numPoints * 3 * sizeof(float) );
+		trajectoryNumPoints = numPoints;
+	} else {
+		trajectoryNumPoints = 0;
+	}
+}
+
 
 /*
 ==================
@@ -197,6 +211,7 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 
 	highlightEntity = -1;
 	highlightAABBSet = qfalse;
+	trajectoryNumPoints = 0;
 
 	// Get fs_basepathand fs_game via trap calls
 	trap_Cvar_VariableStringBuffer( "fs_basepath", basePath, sizeof(basePath) );
@@ -249,6 +264,7 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	api.GetEntityModelName		= ModApi_GetEntityModelName;
 	api.GetEntityInfo			= ModApi_GetEntityInfo;
 	api.SetHighlightAABB		= ModApi_SetHighlightAABB;
+	api.SetHighlightTrajectory	= ModApi_SetHighlightTrajectory;
 
 	CG_Printf( "Mod host loaded, initializing...\n" );
 	fn_Init( (intptr_t)syscall, screenWidth, screenHeight, &api );
@@ -354,6 +370,22 @@ qboolean CG_Mod_GetHighlightAABB( float *mins, float *maxs ) {
 	VectorCopy( highlightMins, mins );
 	VectorCopy( highlightMaxs, maxs );
 	return qtrue;
+}
+
+/*
+==================
+CG_Mod_GetHighlightTrajectory
+
+Returns number of trajectory points (0 if none). Sets *points to the array.
+==================
+*/
+int CG_Mod_GetHighlightTrajectory( float **points ) {
+	if ( trajectoryNumPoints > 0 ) {
+		*points = trajectoryPoints;
+		return trajectoryNumPoints;
+	}
+	*points = NULL;
+	return 0;
 }
 
 

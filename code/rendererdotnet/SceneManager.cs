@@ -646,6 +646,11 @@ public sealed unsafe class SceneManager
                 _gl.DepthMask(false);
                 _gl.LineWidth(2.0f);
 
+                // Identity MVP for world-space drawing
+                Span<float> identMat = stackalloc float[16];
+                identMat.Clear();
+                identMat[0] = 1; identMat[5] = 1; identMat[10] = 1; identMat[15] = 1;
+
                 Span<float> corners = stackalloc float[8 * 3];
                 Span<float> aabbLines = stackalloc float[24 * 3];
                 ReadOnlySpan<int> edges = stackalloc int[]
@@ -655,10 +660,29 @@ public sealed unsafe class SceneManager
                     0,4, 1,5, 2,6, 3,7  // vertical edges
                 };
 
+                // Collect trajectory line segments for batch drawing
+                Span<float> trajVerts = stackalloc float[256 * 3]; // up to 128 segments × 2 verts
+                int trajVertCount = 0;
+
                 foreach (var ent in _entities)
                 {
                     if ((ent.Renderfx & RF_HIGHLIGHT) == 0 || ent.ReType != RT_MODEL)
                         continue;
+
+                    if (ent.ModelHandle == 0 && ent.Frame == 1)
+                    {
+                        // Trajectory line segment: origin → oldOrigin
+                        if (trajVertCount + 6 <= trajVerts.Length)
+                        {
+                            trajVerts[trajVertCount++] = ent.OriginX;
+                            trajVerts[trajVertCount++] = ent.OriginY;
+                            trajVerts[trajVertCount++] = ent.OriginZ;
+                            trajVerts[trajVertCount++] = ent.OldOriginX;
+                            trajVerts[trajVertCount++] = ent.OldOriginY;
+                            trajVerts[trajVertCount++] = ent.OldOriginZ;
+                        }
+                        continue;
+                    }
 
                     float minX, minY, minZ, maxX, maxY, maxZ;
 
@@ -673,9 +697,6 @@ public sealed unsafe class SceneManager
                             continue;
 
                         // World-space: use view-projection only (identity model matrix)
-                        Span<float> identMat = stackalloc float[16];
-                        identMat.Clear();
-                        identMat[0] = 1; identMat[5] = 1; identMat[10] = 1; identMat[15] = 1;
                         MatMul(vp, identMat, mvp);
 
                         _gl.Uniform4(_debugColorLoc, 0.0f, 1.0f, 1.0f, 1.0f); // cyan for server AABB
@@ -719,6 +740,23 @@ public sealed unsafe class SceneManager
                         _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(24 * 3 * sizeof(float)), linePtr, BufferUsageARB.StreamDraw);
 
                     _gl.DrawArrays(PrimitiveType.Lines, 0, 24);
+                }
+
+                // Draw trajectory lines in a single batch (yellow/orange)
+                if (trajVertCount > 0)
+                {
+                    MatMul(vp, identMat, mvp);
+                    fixed (float* mvpPtr = mvp)
+                        _gl.UniformMatrix4(_debugMvpLoc, 1, false, mvpPtr);
+
+                    _gl.Uniform4(_debugColorLoc, 1.0f, 0.8f, 0.0f, 1.0f); // yellow-orange
+                    _gl.LineWidth(3.0f);
+
+                    fixed (float* trajPtr = trajVerts)
+                        _gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(trajVertCount * sizeof(float)), trajPtr, BufferUsageARB.StreamDraw);
+
+                    _gl.DrawArrays(PrimitiveType.Lines, 0, (uint)(trajVertCount / 3));
+                    _gl.LineWidth(2.0f);
                 }
 
                 _gl.DepthMask(true);
