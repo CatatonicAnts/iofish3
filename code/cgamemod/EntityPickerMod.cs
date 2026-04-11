@@ -41,6 +41,14 @@ public class EntityPickerMod : ICGameMod
     {
         if (!CGameApi.IsAvailable) return;
 
+        // After giving the tool, wait until STAT_WEAPONS has the bit, then switch
+        if (_pendingWeaponSwitch)
+        {
+            // Send weapon switch command — cgame's CG_Weapon_f checks STAT_WEAPONS
+            Syscalls.SendConsoleCommand($"weapon {WP_TOOL}\n");
+            _pendingWeaponSwitch = false;
+        }
+
         int weapon = CGameApi.GetPlayerWeapon();
         if (weapon != WP_TOOL)
         {
@@ -144,12 +152,15 @@ public class EntityPickerMod : ICGameMod
         Syscalls.R_SetColor(reset);
     }
 
+    private bool _pendingWeaponSwitch;
+
     public bool ConsoleCommand(string cmd)
     {
         if (cmd == "tool")
         {
-            // Give the player the tool weapon and switch to it
-            Syscalls.SendConsoleCommand($"give weapon_tool\n");
+            // Give the player the tool weapon — BG_FindItem searches by pickup_name
+            Syscalls.SendConsoleCommand("give Tool\n");
+            _pendingWeaponSwitch = true;
             Syscalls.Print("[MOD] ^5Tool weapon equipped\n");
             return true;
         }

@@ -264,6 +264,10 @@ int Pickup_Weapon (gentity_t *ent, gentity_t *other) {
 	if (ent->item->giTag == WP_GRAPPLING_HOOK)
 		other->client->ps.ammo[ent->item->giTag] = -1; // unlimited ammo
 
+	// Tool weapon doesn't use ammo
+	if (ent->item->giTag == WP_TOOL)
+		other->client->ps.ammo[ent->item->giTag] = -1;
+
 	// team deathmatch has slow weapon respawns
 	if ( g_gametype.integer == GT_TEAM ) {
 		return g_weaponTeamRespawn.integer;

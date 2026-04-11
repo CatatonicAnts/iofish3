@@ -1612,6 +1612,11 @@ static void PM_Weapon( void ) {
 		return;
 	}
 
+	// Tool weapon never fires
+	if ( pm->ps->weapon == WP_TOOL ) {
+		return;
+	}
+
 	// start the animation even if out of ammo
 	if ( pm->ps->weapon == WP_GAUNTLET ) {
 		// the guantlet only "fires" when it actually hits something
