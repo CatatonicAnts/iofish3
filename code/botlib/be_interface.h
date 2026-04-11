@@ -39,12 +39,10 @@ typedef struct botlib_globals_s
 	int maxentities;						//maximum number of entities
 	int maxclients;							//maximum number of clients
 	float time;								//the global time
-#ifdef DEBUG
 	qboolean debug;							//true if debug is on
 	int goalareanum;
 	vec3_t goalorigin;
 	int runai;
-#endif
 } botlib_globals_t;
 
 // Accessor functions — botlibglobals is file-scope static in be_interface.c.

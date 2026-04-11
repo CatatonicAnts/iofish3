@@ -327,7 +327,6 @@ int BotExportTest(int parm0, char *parm1, vec3_t parm2, vec3_t parm3)
 
 //	return AAS_PointLight(parm2, NULL, NULL, NULL);
 
-#ifdef DEBUG
 	static int area = -1;
 	static int line[2];
 	int newarea, i, highlightarea, flood;
@@ -648,7 +647,6 @@ int BotExportTest(int parm0, char *parm1, vec3_t parm2, vec3_t parm3)
 			AAS_ShowBoundingBox(ent->origin, ent->mins, ent->maxs);
 		} //end if
 	} //end if
-#endif
 #endif
 	return 0;
 } //end of the function BotExportTest
