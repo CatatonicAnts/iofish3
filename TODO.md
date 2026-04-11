@@ -43,11 +43,23 @@ A list of planned features, improvements, and tasks for this project.
 
 ### Notes
 
-- The cgame communicates with the engine entirely through numbered syscalls (not function pointers like the renderer). The NativeAOT DLL must store the syscall pointer from `dllEntry` and dispatch through it.
-- Unlike the renderer (which has its own OpenGL context), the cgame only calls renderer APIs indirectly via engine syscalls (CG_R_REGISTERMODEL, CG_R_ADDREFENTITYTOSCENE, etc.). It never touches GPU directly.
-- `code/cgame/cg_public.h` defines the complete import/export interface — this is the contract between engine and cgame.
-- Player prediction (`pmove`) shares code with server-side physics (`code/game/bg_pmove.c`, `bg_slidemove.c`). This shared code must also be ported to C#.
+- Alternative to the C cgame, can replace it by renaming to `cgamex86_64.dll`
+- Uses the same numbered syscall interface as the C cgame (stored from `dllEntry`, dispatched via function pointer)
 - We are using VisualStudio for development, make sure the .sln is kept up to date
+
+---
+
+## .NET Mod Host (cgamemod)
+
+*Implemented — C cgame loads NativeAOT host DLL with 6 hook points. See Completed section.*
+
+### Notes
+
+- The C cgame (`cgamex86_64.dll`) loads `cgamemod.dll` via `LoadLibrary` at `CG_Init`
+- The mod host receives the engine syscall pointer and wraps it for .NET mods
+- Mods implement `ICGameMod` interface (Init, Shutdown, Frame, Draw2D, ConsoleCommand, EntityEvent)
+- NativeAOT cannot dynamically load managed assemblies — mods must be compiled into the host or be separate NativeAOT DLLs
+- Future: scan a `baseq3/mods/` directory for additional mod DLLs
 
 ---
 
@@ -55,11 +67,12 @@ A list of planned features, improvements, and tasks for this project.
 
 ### High Priority
 
-- [ ] **Runtime AAS generation** - BSPC integrated as a build target (git submodule at `code/bspc/`). Console commands: `aas_generate [mapname]` spawns BSPC as a background process to convert BSP→AAS, `aas_status` checks progress. Auto-reloads AAS into botlib on completion. Remaining: test with maps that lack AAS files, verify pk3-embedded BSP path handling. `CPX 5 (partially done)`
+*No items*
 
 ### Normal Priority
 
-- [ ] **HUD offset cvars** - Global offsets (cg_hudOffsetX, cg_hudOffsetY) and per-element Y offsets (cg_hudStatusOffsetY, cg_hudWeaponOffsetY, cg_hudAmmoWarningOffsetY) implemented. Remaining: test in-game at various HUD scales. `CPX 2 (mostly done)`
+- [ ] **Runtime AAS generation** - BSPC integrated as a build target (git submodule at `code/bspc/`). Console commands: `aas_generate [mapname]` spawns BSPC as a background process to convert BSP→AAS, `aas_status` checks progress. Auto-reloads AAS into botlib on completion. Remaining: test more maps, verify edge cases with unusual BSP layouts. `CPX 5 (mostly done)`
+- [ ] **HUD offset cvars** - Global offsets (cg_hudOffsetX, cg_hudOffsetY) and per-element Y offsets implemented. Remaining: test in-game at various HUD scales. `CPX 2 (mostly done)`
 
 ### Low Priority
 
@@ -111,14 +124,13 @@ A list of planned features, improvements, and tasks for this project.
 
 - Game installation: `E:\Games\Quake3`
 - **QVM builds are not maintained** — the game defaults to native DLL loading (`vm_cgame 0`, `vm_game 0`, `vm_ui 0`). QVM targets exist in the solution but may not compile with newer code changes.
-- **Primary build environment: Visual Studio 2022** — open `msvc\ioq3.sln`, all projects output directly to the game directory. CMake is considered deprecated; only use it to regenerate the solution if needed (`cmake -B msvc -G "Visual Studio 17 2022" -DGAME_DIR="E:/Games/Quake3"`).
+- **Primary build environment: Visual Studio 2022** — open `msvc\ioq3.sln`, all projects output directly to the game directory. CMake is only used to regenerate the solution if needed (`cmake -B msvc -G "Visual Studio 17 2022" -DGAME_DIR="E:/Games/Quake3"`).
 - .NET renderer: `cd code\rendererdotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
 - .NET cgame: `cd code\cgamedotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
 - .NET mod host: `cd code\cgamemod && dotnet publish -c Release` (publishes NativeAOT DLL to baseq3)
 - Test .NET renderer: launch with `+set cl_renderer dotnet`
-- Test .NET cgame: launch with `+set vm_cgame 0` (loads cgamex86_64.dll from baseq3)
+- Test .NET cgame: rename output to `cgamex86_64.dll` and launch with `+set vm_cgame 0`
 - Project uses internal/bundled libraries by default (`USE_INTERNAL_LIBS=ON`)
-- Most FIXME comments are concentrated in GL2 renderer (~77) and bot AI (~44)
 
 ---
 
@@ -172,8 +184,9 @@ A list of planned features, improvements, and tasks for this project.
 - [x] Architecture overview (`docs/architecture.md`), renderer comparison (`docs/renderer-comparison.md`), build guide (`docs/building.md`), AAS magic number constants documented in source
 
 - [x] Missing S_Respatialize in cgame_dotnet, continuous rocket smoke trail, single lightmap fullbright (dotnet + GL1)
-- [x] Transparent surfaces with surfaceparm trans rendered opaque, items not visible in cgame_dotnet
-- [x] AAS axial plane orientation, client disconnect message loss, screenShadowImage null crash
-- [x] Cgame event loop race (VM_IsRunning guard), shader parser fragility (COM_ParseExt `{}`/`}` delimiters)
+- [x] Transparent surfaces with surfaceparm trans, items not visible, AAS axial plane orientation, client disconnect message loss, screenShadowImage null crash
+- [x] Cgame event loop race (VM_IsRunning guard), shader parser fragility (COM_ParseExt delimiters)
 - [x] Initialize botgoalstates, animMap tokenizer fix, rgbGen/alphaGen wave/const parsing
 - [x] Bot debug polygon rendering (bot_debug AAS visualization, r_debugSurface collision debug)
+- [x] AAS generation from pk3-embedded BSPs (wildcard search, .aas/.bsp in FS whitelist)
+- [x] Console duplicate message collapsing

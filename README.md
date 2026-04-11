@@ -1,5 +1,110 @@
 ![Build](https://github.com/ioquake/ioq3/workflows/Build/badge.svg)
 
+# iofish3
+
+A fork of [ioquake3](https://github.com/ioquake/ioq3) with a .NET rendering pipeline, mod system, and gameplay enhancements.
+
+## What's Different
+
+### .NET Renderer (`renderer_dotnet`)
+A complete renderer written in C# using NativeAOT and Silk.NET (OpenGL 4.5 Core). Loads as a drop-in replacement DLL — the engine selects it via `cl_renderer dotnet`.
+
+Features beyond the stock GL2 renderer:
+- HDR rendering with bloom and tonemapping
+- Shadow mapping (16-cascade PCF)
+- SSAO (screen-space ambient occlusion)
+- Normal, specular, PBR, parallax, and deluxe mapping
+- Cubemap reflections, DDS texture support
+- Full Q3 shader script compatibility
+
+### .NET Mod Host (`cgamemod`)
+The C cgame DLL loads a NativeAOT mod host (`cgamemod.dll`) that provides hook points for .NET mods. Mods implement the `ICGameMod` interface and receive callbacks for:
+- **Init / Shutdown** — map load/unload lifecycle
+- **Frame** — per-frame update with server time
+- **Draw2D** — HUD overlay drawing after the standard HUD
+- **ConsoleCommand** — intercept console commands
+- **EntityEvent** — game entity events (kills, pickups, etc.)
+
+Mods access engine functions (print, cvars, draw, sound, commands) through the `Syscalls` class, which wraps the engine's syscall interface.
+
+### .NET Client Game (`cgame_dotnet`)
+An alternative complete cgame written in C# — 15 core subsystems and 35 polish features. Can be used instead of the C cgame by renaming it to `cgamex86_64.dll`.
+
+### Gameplay Enhancements
+- **Hor+ widescreen FOV** — proper horizontal expansion on widescreen (4:3 reference), `cg_fovViewmodel` cvar
+- **HUD customization** — global scale (`cg_hudScale`), per-element toggles, offset cvars (`cg_hudOffsetX/Y`)
+- **FreeType font rendering** — built from source via git submodule
+- **`find` command** — case-insensitive search across commands and cvars
+- **`aas_generate`** — runtime bot navigation generation using integrated BSPC tool, with `aas_status` to check progress
+- **Skirmish map filter** — "Custom Only" toggle, "Dev Map" launch option
+- **Console deduplication** — repeated messages collapsed with count
+
+---
+
+## Building
+
+### Requirements
+- Visual Studio 2022 (C++ and .NET 9 workloads)
+- CMake 3.20+
+
+### Quick Start
+
+```bash
+# Generate Visual Studio solution (one-time)
+cmake -B msvc -G "Visual Studio 17 2022" -DGAME_DIR="E:/Games/Quake3"
+
+# Build engine + game DLLs (from VS or command line)
+cmake --build msvc --config Release
+
+# Build .NET renderer
+cd code/rendererdotnet && dotnet publish -c Release
+
+# Build .NET mod host
+cd code/cgamemod && dotnet publish -c Release
+
+# (Optional) Build .NET cgame
+cd code/cgamedotnet && dotnet publish -c Release
+```
+
+The primary build environment is **Visual Studio 2022** — open `msvc\ioq3.sln`. All projects output directly to the game directory. The solution includes the .NET projects (RendererDotNet, CGameDotNet, CGameMod) for convenience, though they build via `dotnet publish` (NativeAOT).
+
+### Running
+```bash
+# .NET renderer (default in VS debug config)
+ioquake3.exe +set cl_renderer dotnet
+
+# Runtime AAS generation (in-game console)
+aas_generate [mapname]
+aas_status
+```
+
+QVM builds are not maintained — the game defaults to native DLL loading.
+
+---
+
+## Project Structure
+
+```
+code/
+├── rendererdotnet/   # .NET renderer (NativeAOT, Silk.NET/OpenGL 4.5)
+├── cgamedotnet/      # .NET client game (alternative to C cgame)
+├── cgamemod/         # .NET mod host (loaded by C cgame)
+├── cgame/            # C client game (with mod host integration)
+├── game/             # Server-side game logic
+├── ui/               # UI code
+├── renderergl1/      # Stock OpenGL 1 renderer
+├── renderergl2/      # Stock OpenGL 2 renderer
+├── client/           # Engine client
+├── server/           # Engine server
+├── qcommon/          # Shared engine code
+├── bspc/             # BSPC tool (git submodule)
+└── libs/freetype/    # FreeType (git submodule)
+```
+
+---
+
+## Original ioquake3 README
+
                    ,---------------------------------------.
                    |   _                     _       ____  |
                    |  (_)___  __ _ _  _ __ _| |_____|__ /  |
