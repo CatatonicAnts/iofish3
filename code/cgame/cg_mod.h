@@ -12,6 +12,20 @@ at key points in the cgame lifecycle.
 
 #include "../qcommon/q_shared.h"
 
+// API struct passed to the .NET mod host at init
+typedef struct {
+	void	(*DoTrace)( float *results, float *start, float *end, int skipNum, int mask );
+	void	(*GetViewOrigin)( float *out );
+	void	(*GetViewAngles)( float *out );
+	void	(*SetHighlightEntity)( int entityNum );
+	int		(*GetPlayerWeapon)( void );
+	void	(*GetEntityOrigin)( int entityNum, float *out );
+	int		(*GetEntityModelHandle)( int entityNum );
+	int		(*GetEntityType)( int entityNum );
+	int		(*GetSnapshotEntityCount)( void );
+	int		(*GetSnapshotEntityNum)( int index );
+} cgameModApi_t;
+
 // Initialize the mod host (loads DLL, calls CgMod_Init)
 void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, int screenHeight );
 
@@ -29,5 +43,8 @@ qboolean CG_Mod_ConsoleCommand( void );
 
 // Entity event notification
 void CG_Mod_EntityEvent( int entityNum, int eventType, int eventParm );
+
+// Get the currently highlighted entity (-1 if none)
+int CG_Mod_GetHighlightEntity( void );
 
 #endif // CG_MOD_H

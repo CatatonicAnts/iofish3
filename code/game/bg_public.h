@@ -325,6 +325,8 @@ typedef enum {
 	WP_CHAINGUN,
 #endif
 
+	WP_TOOL,
+
 	WP_NUM_WEAPONS
 } weapon_t;
 

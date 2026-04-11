@@ -53,6 +53,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define	RF_SHADOW_PLANE		0x0100		// use refEntity->shadowPlane
 #define	RF_WRAP_FRAMES		0x0200		// mod the model frames by the maxframes to allow continuous
+
+#define	RF_HIGHLIGHT		0x0400		// draw entity with wireframe highlight overlay
 										// animation without needing to know the frame count
 
 // refdef flags

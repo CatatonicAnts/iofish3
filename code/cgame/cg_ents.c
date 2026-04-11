@@ -24,6 +24,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "cg_local.h"
 
+#ifndef Q3_VM
+#include "cg_mod.h"
+#endif
+
 
 /*
 ======================
@@ -1092,5 +1096,32 @@ void CG_AddPacketEntities( void ) {
 		cent = &cg_entities[ cg.snap->entities[ num ].number ];
 		CG_AddCEntity( cent );
 	}
+
+#ifndef Q3_VM
+	// Add wireframe highlight for the entity the mod is targeting
+	{
+		int hlEnt = CG_Mod_GetHighlightEntity();
+		if ( hlEnt >= 0 && hlEnt < MAX_GENTITIES ) {
+			centity_t		*hlCent = &cg_entities[hlEnt];
+			entityState_t	*s1 = &hlCent->currentState;
+
+			if ( s1->modelindex > 0 ) {
+				refEntity_t		hlRef;
+
+				memset( &hlRef, 0, sizeof(hlRef) );
+				VectorCopy( hlCent->lerpOrigin, hlRef.origin );
+				VectorCopy( hlCent->lerpOrigin, hlRef.oldorigin );
+				AnglesToAxis( hlCent->lerpAngles, hlRef.axis );
+				hlRef.hModel = cgs.gameModels[s1->modelindex];
+				hlRef.frame = s1->frame;
+				hlRef.oldframe = hlRef.frame;
+				hlRef.backlerp = 0;
+				hlRef.renderfx = RF_HIGHLIGHT;
+
+				trap_R_AddRefEntityToScene( &hlRef );
+			}
+		}
+	}
+#endif
 }
 

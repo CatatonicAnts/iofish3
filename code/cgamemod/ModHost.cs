@@ -13,15 +13,19 @@ public static unsafe class ModHost
     private static int _screenWidth;
     private static int _screenHeight;
 
-    /// <summary>Called by the C cgame at CG_Init. Receives the engine syscall pointer.</summary>
+    /// <summary>Called by the C cgame at CG_Init. Receives the engine syscall pointer and mod API.</summary>
     [UnmanagedCallersOnly(EntryPoint = "CgMod_Init")]
-    public static void Init(nint syscallPtr, int screenWidth, int screenHeight)
+    public static void Init(nint syscallPtr, int screenWidth, int screenHeight, nint cgameModApiPtr)
     {
         try
         {
             Syscalls.Init(syscallPtr);
             _screenWidth = screenWidth;
             _screenHeight = screenHeight;
+
+            // Parse the cgame mod API (trace, view, highlight, entity queries)
+            if (cgameModApiPtr != 0)
+                CGameApi.Init(cgameModApiPtr);
 
             Syscalls.Print("[MOD] .NET mod host initializing...\n");
 
@@ -128,10 +132,10 @@ public static unsafe class ModHost
 
     private static void LoadMods()
     {
-        // Built-in example mod for testing
+        // Built-in mods
         _mods.Add(new ExampleMod());
+        _mods.Add(new EntityPickerMod());
 
         // Future: scan baseq3/mods/ for additional NativeAOT mod DLLs
-        // Each mod DLL would export a factory function returning ICGameMod
     }
 }

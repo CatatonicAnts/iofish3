@@ -703,6 +703,12 @@ void CG_RegisterWeapon( int weaponNum ) {
 		cgs.media.lightningShader = trap_R_RegisterShader( "lightningBoltNew");
 		break;
 
+	case WP_TOOL:
+		// Tool uses machinegun model but has no effects or sounds
+		weaponInfo->flashModel = 0;
+		weaponInfo->barrelModel = 0;
+		break;
+
 #ifdef MISSIONPACK
 	case WP_CHAINGUN:
 		weaponInfo->firingSound = trap_S_RegisterSound( "sound/weapons/vulcan/wvulfire.wav", qfalse );
@@ -1429,6 +1435,10 @@ void CG_AddViewWeapon( playerState_t *ps ) {
 		// development tool
 		hand.frame = hand.oldframe = cg_gun_frame.integer;
 		hand.backlerp = 0;
+	} else if ( ps->weapon == WP_TOOL ) {
+		// Tool weapon: static, no animation
+		hand.frame = hand.oldframe = 0;
+		hand.backlerp = 0;
 	} else {
 		// get clientinfo for animation map
 		ci = &cgs.clientinfo[ cent->currentState.clientNum ];
@@ -1690,6 +1700,9 @@ void CG_FireWeapon( centity_t *cent ) {
 
 	ent = &cent->currentState;
 	if ( ent->weapon == WP_NONE ) {
+		return;
+	}
+	if ( ent->weapon == WP_TOOL ) {
 		return;
 	}
 	if ( ent->weapon >= WP_NUM_WEAPONS ) {

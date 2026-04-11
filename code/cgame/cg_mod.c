@@ -24,7 +24,7 @@ cgame events to the .NET mod host via exported C functions.
 #endif
 
 // Function pointer types for mod host exports
-typedef void	(*CgMod_InitFunc)( intptr_t syscallPtr, int screenWidth, int screenHeight );
+typedef void	(*CgMod_InitFunc)( intptr_t syscallPtr, int screenWidth, int screenHeight, cgameModApi_t *api );
 typedef void	(*CgMod_ShutdownFunc)( void );
 typedef void	(*CgMod_FrameFunc)( int serverTime );
 typedef void	(*CgMod_Draw2DFunc)( void );
@@ -39,6 +39,81 @@ static CgMod_FrameFunc			fn_Frame;
 static CgMod_Draw2DFunc		fn_Draw2D;
 static CgMod_ConsoleCommandFunc	fn_ConsoleCommand;
 static CgMod_EntityEventFunc	fn_EntityEvent;
+
+// Highlight entity set by the mod
+static int		highlightEntity = -1;
+
+
+/*
+==================
+Mod API callback implementations
+==================
+*/
+static void ModApi_DoTrace( float *results, float *start, float *end, int skipNum, int mask ) {
+	trace_t tr;
+	vec3_t	mins = {0,0,0}, maxs = {0,0,0};
+
+	CG_Trace( &tr, start, mins, maxs, end, skipNum, mask );
+
+	// Pack trace results: fraction, endpos[3], entityNum
+	results[0] = tr.fraction;
+	results[1] = tr.endpos[0];
+	results[2] = tr.endpos[1];
+	results[3] = tr.endpos[2];
+	results[4] = *(float *)&tr.entityNum;
+}
+
+static void ModApi_GetViewOrigin( float *out ) {
+	VectorCopy( cg.refdef.vieworg, out );
+}
+
+static void ModApi_GetViewAngles( float *out ) {
+	VectorCopy( cg.refdefViewAngles, out );
+}
+
+static void ModApi_SetHighlightEntity( int entityNum ) {
+	highlightEntity = entityNum;
+}
+
+static int ModApi_GetPlayerWeapon( void ) {
+	return cg.predictedPlayerState.weapon;
+}
+
+static void ModApi_GetEntityOrigin( int entityNum, float *out ) {
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES ) {
+		VectorCopy( cg_entities[entityNum].lerpOrigin, out );
+	} else {
+		VectorClear( out );
+	}
+}
+
+static int ModApi_GetEntityModelHandle( int entityNum ) {
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES ) {
+		return cgs.gameModels[ cg_entities[entityNum].currentState.modelindex ];
+	}
+	return 0;
+}
+
+static int ModApi_GetEntityType( int entityNum ) {
+	if ( entityNum >= 0 && entityNum < MAX_GENTITIES ) {
+		return cg_entities[entityNum].currentState.eType;
+	}
+	return -1;
+}
+
+static int ModApi_GetSnapshotEntityCount( void ) {
+	if ( cg.snap ) {
+		return cg.snap->numEntities;
+	}
+	return 0;
+}
+
+static int ModApi_GetSnapshotEntityNum( int index ) {
+	if ( cg.snap && index >= 0 && index < cg.snap->numEntities ) {
+		return cg.snap->entities[index].number;
+	}
+	return -1;
+}
 
 
 /*
@@ -69,9 +144,12 @@ Called from CG_Init after basic setup is complete.
 ==================
 */
 void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, int screenHeight ) {
-	char	basePath[MAX_OSPATH];
-	char	gameDir[MAX_OSPATH];
-	char	searchDir[MAX_OSPATH];
+	char			basePath[MAX_OSPATH];
+	char			gameDir[MAX_OSPATH];
+	char			searchDir[MAX_OSPATH];
+	cgameModApi_t	api;
+
+	highlightEntity = -1;
 
 	// Get fs_basepath and fs_game via trap calls
 	trap_Cvar_VariableStringBuffer( "fs_basepath", basePath, sizeof(basePath) );
@@ -109,8 +187,20 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 		return;
 	}
 
+	// Populate the mod API struct
+	api.DoTrace					= ModApi_DoTrace;
+	api.GetViewOrigin			= ModApi_GetViewOrigin;
+	api.GetViewAngles			= ModApi_GetViewAngles;
+	api.SetHighlightEntity		= ModApi_SetHighlightEntity;
+	api.GetPlayerWeapon			= ModApi_GetPlayerWeapon;
+	api.GetEntityOrigin			= ModApi_GetEntityOrigin;
+	api.GetEntityModelHandle	= ModApi_GetEntityModelHandle;
+	api.GetEntityType			= ModApi_GetEntityType;
+	api.GetSnapshotEntityCount	= ModApi_GetSnapshotEntityCount;
+	api.GetSnapshotEntityNum	= ModApi_GetSnapshotEntityNum;
+
 	CG_Printf( "Mod host loaded, initializing...\n" );
-	fn_Init( (intptr_t)syscall, screenWidth, screenHeight );
+	fn_Init( (intptr_t)syscall, screenWidth, screenHeight, &api );
 }
 
 
@@ -134,6 +224,7 @@ void CG_Mod_Shutdown( void ) {
 	fn_Draw2D = NULL;
 	fn_ConsoleCommand = NULL;
 	fn_EntityEvent = NULL;
+	highlightEntity = -1;
 }
 
 
@@ -183,4 +274,16 @@ void CG_Mod_EntityEvent( int entityNum, int eventType, int eventParm ) {
 	if ( fn_EntityEvent ) {
 		fn_EntityEvent( entityNum, eventType, eventParm );
 	}
+}
+
+
+/*
+==================
+CG_Mod_GetHighlightEntity
+
+Returns the entity number the mod wants highlighted, or -1 for none.
+==================
+*/
+int CG_Mod_GetHighlightEntity( void ) {
+	return highlightEntity;
 }

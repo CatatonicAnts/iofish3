@@ -52,6 +52,7 @@ public sealed unsafe class SceneManager
     private const int RF_FIRST_PERSON = 0x0004;
     private const int RF_DEPTHHACK = 0x0008;
     private const int RF_LIGHTING_ORIGIN = 0x0080;
+    private const int RF_HIGHLIGHT = 0x0400;
     private const int RDF_NOWORLDMODEL = 0x0001;
 
     // Entity types
@@ -612,6 +613,98 @@ public sealed unsafe class SceneManager
 
             if (depthHack)
                 _gl.DepthRange(0.0, 1.0);
+        }
+
+        // Wireframe highlight pass for entities with RF_HIGHLIGHT
+        {
+            bool hasHighlight = false;
+            foreach (var ent in _entities)
+            {
+                if ((ent.Renderfx & RF_HIGHLIGHT) != 0 && ent.ReType == RT_MODEL)
+                {
+                    hasHighlight = true;
+                    break;
+                }
+            }
+
+            if (hasHighlight)
+            {
+                _gl.PolygonMode(TriangleFace.FrontAndBack, Silk.NET.OpenGL.PolygonMode.Line);
+                _gl.Enable(EnableCap.PolygonOffsetLine);
+                _gl.PolygonOffset(-1.0f, -1.0f);
+                _gl.DepthMask(false);
+                _gl.LineWidth(2.0f);
+
+                foreach (var ent in _entities)
+                {
+                    if ((ent.Renderfx & RF_HIGHLIGHT) == 0 || ent.ReType != RT_MODEL)
+                        continue;
+
+                    if (_models.IsBspModel(ent.ModelHandle) && _bspRenderer != null)
+                    {
+                        int bspIdx = _models.GetBspModelIndex(ent.ModelHandle);
+                        BuildModelMatrix(ent, modelMat);
+                        MatMul(vp, modelMat, mvp);
+                        fixed (float* mvpPtr = mvp)
+                        {
+                            _bspRenderer.RenderSubmodel(bspIdx, mvpPtr, _shaders, time / 1000.0f);
+                        }
+                        continue;
+                    }
+
+                    var hlModel = _models.GetModel(ent.ModelHandle);
+                    var hlIqmModel = hlModel == null ? _models.GetIqmModel(ent.ModelHandle) : null;
+                    if (hlModel == null && hlIqmModel == null) continue;
+
+                    BuildModelMatrix(ent, modelMat);
+                    MatMul(vp, modelMat, mvp);
+
+                    if (hlIqmModel != null)
+                    {
+                        int numJoints = hlIqmModel.NumJoints;
+                        var poseMats = iqmPoseMats[..(numJoints * 12)];
+                        IqmLoader.ComputePoseMatrices(hlIqmModel, ent.Frame, ent.OldFrame, ent.BackLerp, poseMats);
+                        foreach (var surface in hlIqmModel.Surfaces)
+                        {
+                            int shaderHandle = ResolveIqmSurfaceShader(ent, surface);
+                            uint texId = _shaders.GetTextureId(shaderHandle);
+                            fixed (float* mvpPtr = mvp)
+                            fixed (float* modelPtr = modelMat)
+                            fixed (float* posePtr = poseMats)
+                            {
+                                _renderer3D.DrawIqmSurface(surface, hlIqmModel, posePtr, numJoints,
+                                    mvpPtr, modelPtr, texId, 0f, 1f, 1f, 1f,
+                                    false, viewOrg[0], viewOrg[1], viewOrg[2],
+                                    BlendMode.Opaque, 0,
+                                    0.5f, 0.5f, 0.5f, 0f, 0f, 0f, 0f, 1f, 0f);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        foreach (var surface in hlModel!.Surfaces)
+                        {
+                            int shaderHandle = surface.ShaderHandle;
+                            uint texId = _shaders.GetTextureId(shaderHandle);
+
+                            fixed (float* mvpPtr = mvp)
+                            fixed (float* modelPtr = modelMat)
+                            {
+                                _renderer3D.DrawSurface(surface, ent.Frame, ent.OldFrame, ent.BackLerp,
+                                    mvpPtr, modelPtr, texId, 0f, 1f, 1f, 1f,
+                                    false, viewOrg[0], viewOrg[1], viewOrg[2],
+                                    BlendMode.Opaque, 0,
+                                    0.5f, 0.5f, 0.5f, 0f, 0f, 0f, 0f, 1f, 0f);
+                            }
+                        }
+                    }
+                }
+
+                _gl.DepthMask(true);
+                _gl.Disable(EnableCap.PolygonOffsetLine);
+                _gl.PolygonOffset(0f, 0f);
+                _gl.PolygonMode(TriangleFace.FrontAndBack, Silk.NET.OpenGL.PolygonMode.Fill);
+            }
         }
 
         // Render scene polys (decals, trails, effects)
