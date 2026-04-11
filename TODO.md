@@ -61,13 +61,7 @@ A list of planned features, improvements, and tasks for this project.
 
 - [ ] **HUD offset cvars** - Global offsets (cg_hudOffsetX, cg_hudOffsetY) and per-element Y offsets (cg_hudStatusOffsetY, cg_hudWeaponOffsetY, cg_hudAmmoWarningOffsetY) implemented. Remaining: test in-game at various HUD scales. `CPX 2 (mostly done)`
 
-- [x] **Widescreen FOV verification** - Hor+ FOV implemented (cg_fov as 4:3 reference, vertical stays constant, horizontal expands for widescreen). Added cg_fovViewmodel cvar for independent weapon FOV. Weapon pull-back uses actual rendered fov_x. Remaining: test on ultra-wide (21:9) display, verify zoom transitions feel natural with Hor+ active. `CPX 2 (mostly done)`
-
-- [ ] **Skirmish menu map filter** - Add filter in skirmish/start server menu to show only downloaded maps (not in base pak .pk3 files). Add a flag/toggle to load the map using `devmap` instead of `map`. Requires tracking map origin (pk3 vs loose file) in UI_LoadArenasIntoMapList and adding filter UI. `CPX 3`
-
 ### Low Priority
-
-- [ ] **Find console command** - `find <pattern>` searches both commands and cvars matching a substring, printing all matches. Similar to existing `cmdlist`/`cvarlist` filtering but combined. `CPX 1`
 
 - [ ] **.NET cgame mod loading** - Load .NET mod assemblies from `baseq3/mods/cgame/` directory, allowing HUD extensions and game event hooks without modifying base cgame. Requires plugin interface design, dynamic AssemblyLoadContext loading, registration API for commands/cvars/hooks. `CPX 4`
 
@@ -144,7 +138,10 @@ A list of planned features, improvements, and tasks for this project.
 
 - [x] HUD customization cvars (cg_hudScale, per-element toggles), FreeType font rendering, shadow mapping, local gravity, bot AI improvements, DDS cubemaps
 - [x] Hor+ widescreen FOV (4:3 reference, expands horizontal on widescreen), cg_fovViewmodel cvar
-- [x] HUD offset cvars (cg_hudOffsetX/Y global, cg_hudStatusOffsetY, cg_hudWeaponOffsetY, cg_hudAmmoWarningOffsetY)
+- [x] Widescreen FOV verification — Hor+ FOV, cg_fovViewmodel, weapon pull-back uses rendered fov_x
+- [x] HUD offset cvars (cg_hudOffsetX/Y, per-element Y offsets)
+- [x] `find` console command — case-insensitive substring search across commands and cvars
+- [x] Skirmish menu map filter — "Custom Only" toggle filters base pak maps, "Dev Map" toggle for devmap launch
 
 ### Improvements
 
