@@ -1713,10 +1713,24 @@ Sends result back to client as "toolHit entNum classname".
 #define CONTENTS_TRIGGER	0x40000000
 #define MASK_TOOL			(MASK_SHOT | CONTENTS_TRIGGER)
 
+static void ToolTrace_SendHit( int clientNum, int entNum ) {
+	gentity_t	*hit = &g_entities[entNum];
+	const char	*cn = hit->classname ? hit->classname : "";
+	trap_SendServerCommand( clientNum,
+		va( "toolHit %d %s %.0f %.0f %.0f",
+			entNum, cn,
+			hit->r.currentOrigin[0],
+			hit->r.currentOrigin[1],
+			hit->r.currentOrigin[2] ) );
+}
+
 static void Cmd_ToolTrace_f( gentity_t *ent ) {
 	char		arg[64];
-	vec3_t		start, end;
+	vec3_t		start, end, dir;
 	trace_t		tr;
+	float		rayLen;
+	int			clientNum = ent - g_entities;
+	int			i;
 
 	if ( trap_Argc() < 7 ) return;
 
@@ -1727,22 +1741,69 @@ static void Cmd_ToolTrace_f( gentity_t *ent ) {
 	trap_Argv( 5, arg, sizeof(arg) ); end[1] = atof(arg);
 	trap_Argv( 6, arg, sizeof(arg) ); end[2] = atof(arg);
 
+	VectorSubtract( end, start, dir );
+	rayLen = VectorNormalize( dir );
+
+	// 1) Trace: hits solids, bodies, triggers with clip models
 	trap_Trace( &tr, start, vec3_origin, vec3_origin, end,
 		ent->s.number, MASK_TOOL );
 
 	if ( tr.entityNum != ENTITYNUM_NONE && tr.entityNum != ENTITYNUM_WORLD
 		&& tr.entityNum < MAX_GENTITIES ) {
-		gentity_t	*hit = &g_entities[tr.entityNum];
-		const char	*cn = hit->classname ? hit->classname : "";
-		trap_SendServerCommand( ent - g_entities,
-			va( "toolHit %d %s %.0f %.0f %.0f",
-				tr.entityNum, cn,
-				hit->r.currentOrigin[0],
-				hit->r.currentOrigin[1],
-				hit->r.currentOrigin[2] ) );
-	} else {
-		trap_SendServerCommand( ent - g_entities, "toolHit -1" );
+		ToolTrace_SendHit( clientNum, tr.entityNum );
+		return;
 	}
+
+	// 2) Proximity fallback: find closest entity whose AABB the ray passes near.
+	//    Handles items and other entities without clip models.
+	{
+		int		bestEnt = -1;
+		float	bestDist = rayLen;
+
+		for ( i = 0; i < level.num_entities; i++ ) {
+			gentity_t	*check = &g_entities[i];
+			vec3_t		center, toEnt;
+			float		along, px, py, pz, perpDistSq, halfSize;
+
+			if ( !check->inuse ) continue;
+			if ( i == clientNum ) continue;  // skip self
+			if ( i == ENTITYNUM_WORLD ) continue;
+			if ( !check->classname || !check->classname[0] ) continue;
+
+			// Use AABB center
+			center[0] = ( check->r.absmin[0] + check->r.absmax[0] ) * 0.5f;
+			center[1] = ( check->r.absmin[1] + check->r.absmax[1] ) * 0.5f;
+			center[2] = ( check->r.absmin[2] + check->r.absmax[2] ) * 0.5f;
+
+			VectorSubtract( center, start, toEnt );
+			along = DotProduct( toEnt, dir );
+			if ( along < 0 || along > bestDist ) continue;
+
+			// Perpendicular distance from ray to center
+			px = toEnt[0] - along * dir[0];
+			py = toEnt[1] - along * dir[1];
+			pz = toEnt[2] - along * dir[2];
+			perpDistSq = px * px + py * py + pz * pz;
+
+			// Use entity half-size as threshold (min 24 units for small items)
+			halfSize = ( check->r.absmax[0] - check->r.absmin[0]
+					   + check->r.absmax[1] - check->r.absmin[1]
+					   + check->r.absmax[2] - check->r.absmin[2] ) / 6.0f;
+			if ( halfSize < 24.0f ) halfSize = 24.0f;
+
+			if ( perpDistSq < halfSize * halfSize && along < bestDist ) {
+				bestDist = along;
+				bestEnt = i;
+			}
+		}
+
+		if ( bestEnt >= 0 ) {
+			ToolTrace_SendHit( clientNum, bestEnt );
+			return;
+		}
+	}
+
+	trap_SendServerCommand( clientNum, "toolHit -1" );
 }
 
 /*
