@@ -63,6 +63,21 @@ A list of planned features, improvements, and tasks for this project.
 
 ---
 
+## .NET Server Mod Host (qagamemod)
+
+*Implemented — C game module loads NativeAOT host DLL with 4 hook points + entity API. See Completed section.*
+
+### Notes
+
+- The C game module (`qagamex86_64.dll`) loads `qagamemod.dll` via `LoadLibrary` at `G_InitGame`
+- The mod host receives the engine syscall pointer AND a Game API struct with entity manipulation callbacks
+- Game API provides: GetEntityCount, GetEntityInfo, SpawnEntity, FireEntity, RemoveEntity
+- Mods implement `IQGameMod` interface (Init, Shutdown, Frame, ConsoleCommand)
+- Built-in EntityCommandsMod provides `ent_list`, `ent_create`, `ent_fire`, `ent_remove`, `ent_info`
+- .NET server mod: `cd code\qagamemod && dotnet publish -c Release` (publishes NativeAOT DLL to baseq3)
+
+---
+
 ## Other Features
 
 ### High Priority
@@ -128,6 +143,7 @@ A list of planned features, improvements, and tasks for this project.
 - .NET renderer: `cd code\rendererdotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
 - .NET cgame: `cd code\cgamedotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
 - .NET mod host: `cd code\cgamemod && dotnet publish -c Release` (publishes NativeAOT DLL to baseq3)
+- .NET server mod host: `cd code\qagamemod && dotnet publish -c Release` (publishes NativeAOT DLL to baseq3)
 - Test .NET renderer: launch with `+set cl_renderer dotnet`
 - Test .NET cgame: rename output to `cgamex86_64.dll` and launch with `+set vm_cgame 0`
 - Project uses internal/bundled libraries by default (`USE_INTERNAL_LIBS=ON`)
@@ -157,6 +173,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] `find` console command — case-insensitive substring search across commands and cvars
 - [x] Skirmish menu map filter — "Custom Only" toggle filters base pak maps, "Dev Map" toggle for devmap launch
 - [x] .NET cgame mod loading — C cgame loads NativeAOT host DLL (`cgamemod.dll`), dispatches Init/Shutdown/Frame/Draw2D/ConsoleCommand/EntityEvent hooks. Mods implement `ICGameMod` interface. Example mod with FPS overlay and test command.
+- [x] .NET server mod loading — C game module loads NativeAOT host DLL (`qagamemod.dll`), dispatches Init/Shutdown/Frame/ConsoleCommand hooks. Game API provides entity manipulation callbacks (get/spawn/fire/remove). Built-in EntityCommandsMod: `ent_list`, `ent_create`, `ent_fire`, `ent_remove`, `ent_info`.
 
 ### Improvements
 

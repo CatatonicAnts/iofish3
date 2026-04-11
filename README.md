@@ -27,6 +27,20 @@ The C cgame DLL loads a NativeAOT mod host (`cgamemod.dll`) that provides hook p
 
 Mods access engine functions (print, cvars, draw, sound, commands) through the `Syscalls` class, which wraps the engine's syscall interface.
 
+### .NET Server Mod Host (`qagamemod`)
+The C game module loads a NativeAOT server mod host (`qagamemod.dll`) that provides hook points for server-side .NET mods. Mods implement the `IQGameMod` interface and receive callbacks for:
+- **Init / Shutdown** — map load/unload lifecycle
+- **Frame** — per-server-frame update with level time
+- **ConsoleCommand** — intercept server console commands
+
+In addition to engine syscalls, server mods have access to a **Game API** for entity manipulation:
+- `GetEntityCount` / `GetEntityInfo` — query entity state
+- `SpawnEntity` — create entities by classname at a position
+- `FireEntity` — trigger entity use functions by targetname
+- `RemoveEntity` — remove entities by index
+
+Built-in **EntityCommandsMod** provides: `ent_list`, `ent_create`, `ent_fire`, `ent_remove`, `ent_info`.
+
 ### .NET Client Game (`cgame_dotnet`)
 An alternative complete cgame written in C# — 15 core subsystems and 35 polish features. Can be used instead of the C cgame by renaming it to `cgamex86_64.dll`.
 
@@ -59,8 +73,11 @@ cmake --build msvc --config Release
 # Build .NET renderer
 cd code/rendererdotnet && dotnet publish -c Release
 
-# Build .NET mod host
+# Build .NET mod host (client-side)
 cd code/cgamemod && dotnet publish -c Release
+
+# Build .NET server mod host (server-side entity commands)
+cd code/qagamemod && dotnet publish -c Release
 
 # (Optional) Build .NET cgame
 cd code/cgamedotnet && dotnet publish -c Release
@@ -89,8 +106,9 @@ code/
 ├── rendererdotnet/   # .NET renderer (NativeAOT, Silk.NET/OpenGL 4.5)
 ├── cgamedotnet/      # .NET client game (alternative to C cgame)
 ├── cgamemod/         # .NET mod host (loaded by C cgame)
+├── qagamemod/        # .NET server mod host (loaded by C game module)
 ├── cgame/            # C client game (with mod host integration)
-├── game/             # Server-side game logic
+├── game/             # Server-side game logic (with mod host integration)
 ├── ui/               # UI code
 ├── renderergl1/      # Stock OpenGL 1 renderer
 ├── renderergl2/      # Stock OpenGL 2 renderer
