@@ -135,6 +135,14 @@ public sealed unsafe class BspRenderer : IDisposable
     private uint _portalTexture;  // Set by SceneManager before Render()
     private int _portalSurfIdx = -1;  // First visible portal surface index
 
+    /// <summary>When true, frustum culling is skipped (debug for portal pass).</summary>
+    public bool SkipFrustumCulling { get; set; }
+
+    /// <summary>Number of deferred opaque surfaces after the last Render() call.</summary>
+    public int LastDeferredOpaqueCount { get; private set; }
+    /// <summary>Number of transparent surfaces after the last Render() call.</summary>
+    public int LastTransparentCount { get; private set; }
+
     private const string DlightVertSrc = """
         #version 450 core
         layout(location = 0) in vec3 aPos;
@@ -1225,6 +1233,10 @@ public sealed unsafe class BspRenderer : IDisposable
         // (opaque surfaces are deferred for shader-sorted batching)
         _deferredOpaque.Clear();
         WalkBspTree(0, cameraCluster, shaders);
+
+        // Record diagnostic counts
+        LastDeferredOpaqueCount = _deferredOpaque.Count;
+        LastTransparentCount = _transparentSurfaces.Count;
 
         // Batch-draw opaque surfaces sorted by shader to minimize state changes
         if (_deferredOpaque.Count > 0)
@@ -2364,6 +2376,8 @@ public sealed unsafe class BspRenderer : IDisposable
     /// </summary>
     private bool BoxInFrustum(int minX, int minY, int minZ, int maxX, int maxY, int maxZ)
     {
+        if (SkipFrustumCulling) return true;
+
         for (int i = 0; i < 6; i++)
         {
             float nx = _frustum[i*4], ny = _frustum[i*4+1], nz = _frustum[i*4+2], d = _frustum[i*4+3];

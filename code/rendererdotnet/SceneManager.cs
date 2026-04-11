@@ -72,6 +72,7 @@ public sealed unsafe class SceneManager
     private int _portalTexW;
     private int _portalTexH;
     private bool _isPortalPass;  // Prevent recursion
+    private int _portalDebugFrame; // For one-time debug logging
 
     public void Init(ModelManager models, ShaderManager shaders, SkinManager skins,
                      Renderer3D renderer3D, World.BspRenderer bspRenderer,
@@ -1452,9 +1453,21 @@ public sealed unsafe class SceneManager
         _isPortalPass = true;
 
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _portalFbo);
+
+        // Verify FBO completeness
+        var fboStatus = _gl.CheckFramebufferStatus(FramebufferTarget.Framebuffer);
+        if (fboStatus != GLEnum.FramebufferComplete)
+        {
+            Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ERROR,
+                $"[.NET] Portal FBO incomplete: {fboStatus}\n");
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+            _isPortalPass = false;
+            return 0;
+        }
+
         _gl.Viewport(0, 0, (uint)width, (uint)height);
-        _gl.Enable(EnableCap.ScissorTest);
         _gl.Scissor(0, 0, (uint)width, (uint)height);
+        _gl.Enable(EnableCap.ScissorTest);
         _gl.ClearColor(0, 0, 0, 1);
         _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
@@ -1484,11 +1497,31 @@ public sealed unsafe class SceneManager
                 _skyboxRenderer.Render(vpPtr, newViewOrg[0], newViewOrg[1], newViewOrg[2]);
         }
 
-        // Render world BSP (skip portal surfaces in portal pass)
+        // Prevent portal texture feedback — don't draw portal surfaces using
+        // the FBO we're currently rendering to
+        _bspRenderer.SetPortalTexture(0);
+
+        // Temporarily skip frustum culling for portal pass (debug)
+        _bspRenderer.SkipFrustumCulling = true;
+
+        // Render world BSP
         fixed (float* vpPtr = pVp)
         {
             _bspRenderer.Render(vpPtr, newViewOrg[0], newViewOrg[1], newViewOrg[2],
                 _shaders, timeSec, _dlights);
+        }
+
+        _bspRenderer.SkipFrustumCulling = false;
+
+        // Debug: log portal pass surface counts and GL errors once
+        if (_portalDebugFrame == 0)
+        {
+            _portalDebugFrame = 1;
+            var glErr = _gl.GetError();
+            Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
+                $"[.NET] Portal pass: mirror={isMirror} org=({newViewOrg[0]:F0},{newViewOrg[1]:F0},{newViewOrg[2]:F0})" +
+                $" opaque={_bspRenderer.LastDeferredOpaqueCount} trans={_bspRenderer.LastTransparentCount}" +
+                $" glErr={glErr}\n");
         }
 
         // Render entities (skip portal surface entities and RF_THIRD_PERSON)
@@ -1611,6 +1644,7 @@ public sealed unsafe class SceneManager
         if (isMirror)
             _gl.FrontFace(FrontFaceDirection.Ccw);
 
+        _gl.Disable(EnableCap.ScissorTest);
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         _isPortalPass = false;
 
