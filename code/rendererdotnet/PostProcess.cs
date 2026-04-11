@@ -240,7 +240,6 @@ public sealed unsafe class PostProcess : IDisposable
         uniform vec4 uViewInfo; // x=zFar/zNear, y=zFar, z=1/width, w=1/height
         out vec4 oColor;
 
-        // Returns normalized linear depth in [zNear/zFar, 1.0] range
         float getLinearDepth(vec2 tex) {
             float d = texture(uDepth, tex).r;
             return 1.0 / mix(uViewInfo.x, 1.0, d);
@@ -273,35 +272,58 @@ public sealed unsafe class PostProcess : IDisposable
 
             float zFarDivZNear = uViewInfo.x;
             float zFar = uViewInfo.y;
-            vec2 scale = uViewInfo.wz; // height, width (matching GL2 convention)
+            vec2 scale = uViewInfo.wz;
 
             float sampleZ = getLinearDepth(vUV);
             float scaleZ = zFarDivZNear * sampleZ;
 
-            // Surface slope detection to prevent self-occlusion on angled surfaces
-            vec2 slope = vec2(dFdx(sampleZ), dFdy(sampleZ)) / vec2(dFdx(vUV.x), dFdy(vUV.y));
-            if (length(slope) * zFar > 5000.0) {
+            // Compute surface slope from depth derivatives for self-occlusion prevention.
+            // Use min-abs to pick the derivative with less noise at each axis,
+            // reducing artifacts at depth discontinuities and grazing angles.
+            vec2 dUV = vec2(dFdx(vUV.x), dFdy(vUV.y));
+            vec2 dZ  = vec2(dFdx(sampleZ), dFdy(sampleZ));
+
+            // Protect against zero UV derivatives (can happen at half-res boundaries)
+            vec2 safeDUV = max(abs(dUV), vec2(1e-7));
+            vec2 slope = dZ / (sign(dUV) * safeDUV);
+
+            // Smooth falloff instead of hard cutoff for steep surfaces.
+            // Gradually reduce SSAO contribution as slope increases.
+            float slopeMag = length(slope) * zFar;
+            float slopeFade = 1.0 - smoothstep(2000.0, 6000.0, slopeMag);
+            if (slopeFade <= 0.0) {
                 oColor = vec4(1.0);
                 return;
             }
 
             vec2 offsetScale = scale * 1024.0 / scaleZ;
+            // Clamp offset scale to prevent extreme sampling distances
+            offsetScale = clamp(offsetScale, vec2(0.001), vec2(0.5));
+
             mat2 rmat = randomRotation(vUV);
 
             float invZFar = 1.0 / zFar;
-            float zLimit = 20.0 * invZFar;
-            float result = 0.0;
+            // Adaptive range check: scale with depth so distant surfaces
+            // don't get excessive occlusion from small depth differences
+            float zLimit = max(20.0, 200.0 * sampleZ) * invZFar;
 
+            float result = 0.0;
             for (int i = 0; i < NUM_SAMPLES; i++) {
                 vec2 offset = rmat * poissonDisc[i] * offsetScale;
                 float sampleDiff = getLinearDepth(vUV + offset) - sampleZ;
 
+                // Slope-aware bias: samples in the direction of the slope
+                // are expected to have depth differences matching the slope
+                float slopeBias = dot(slope, offset) - invZFar;
+
                 bool s1 = abs(sampleDiff) > zLimit;
-                bool s2 = sampleDiff + invZFar > dot(slope, offset);
+                bool s2 = sampleDiff > slopeBias;
                 result += float(s1 || s2);
             }
 
             result /= float(NUM_SAMPLES);
+            // Apply slope fade to smoothly disable SSAO on steep surfaces
+            result = mix(1.0, result, slopeFade);
             oColor = vec4(vec3(result), 1.0);
         }
         """;
@@ -326,6 +348,10 @@ public sealed unsafe class PostProcess : IDisposable
             float totalWeight = 0.0;
             float centerZ = getLinearDepth(vUV);
 
+            // Depth-relative threshold: samples within 0.5% of center depth
+            // get full weight; farther samples are down-weighted
+            float depthThreshold = max(centerZ * 0.005, 0.0001);
+
             for (int x = -2; x <= 2; x++) {
                 for (int y = -2; y <= 2; y++) {
                     vec2 offset = vec2(float(x), float(y)) * uTexelSize;
@@ -333,7 +359,7 @@ public sealed unsafe class PostProcess : IDisposable
                     float sampleZ = getLinearDepth(vUV + offset);
 
                     float depthDiff = abs(centerZ - sampleZ);
-                    float w = exp(-depthDiff * 10.0 / max(centerZ, 0.001));
+                    float w = exp(-depthDiff * depthDiff / (2.0 * depthThreshold * depthThreshold));
                     result += sampleAO * w;
                     totalWeight += w;
                 }
