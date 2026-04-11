@@ -12,12 +12,18 @@ public class EntityCommandsMod : IQGameMod
 {
     public string Name => "Entity Commands";
 
+    private static readonly string[] _commands = { "ent_list", "ent_create", "ent_fire", "ent_remove", "ent_info" };
+
     public void Init()
     {
+        foreach (var cmd in _commands)
+            Syscalls.AddCommand(cmd);
     }
 
     public void Shutdown()
     {
+        foreach (var cmd in _commands)
+            Syscalls.RemoveCommand(cmd);
     }
 
     public void Frame(int levelTime)

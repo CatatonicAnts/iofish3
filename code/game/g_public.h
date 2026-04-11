@@ -230,6 +230,10 @@ typedef enum {
 	// 1.32
 	G_FS_SEEK,
 
+	// iofish3 extensions
+	G_ADD_COMMAND,		// ( const char *cmdName );
+	G_REMOVE_COMMAND,	// ( const char *cmdName );
+
 	BOTLIB_SETUP = 200,				// ( void );
 	BOTLIB_SHUTDOWN,				// ( void );
 	BOTLIB_LIBVAR_SET,

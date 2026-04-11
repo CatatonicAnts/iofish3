@@ -338,6 +338,13 @@ intptr_t SV_GameSystemCalls( intptr_t *args ) {
 	case G_FS_SEEK:
 		return FS_Seek( args[1], args[2], args[3] );
 
+	case G_ADD_COMMAND:
+		Cmd_AddCommand( VMA(1), NULL );
+		return 0;
+	case G_REMOVE_COMMAND:
+		Cmd_RemoveCommand( VMA(1) );
+		return 0;
+
 	case G_LOCATE_GAME_DATA:
 		SV_LocateGameData( VMA(1), args[2], args[3], VMA(4), args[5] );
 		return 0;

@@ -50,6 +50,8 @@ public static unsafe class Syscalls
     private const int G_ARGV = 9;
     private const int G_SEND_CONSOLE_COMMAND = 14;
     private const int G_SEND_SERVER_COMMAND = 17;
+    private const int G_ADD_COMMAND = 46;
+    private const int G_REMOVE_COMMAND = 47;
 
     // --- Print ---
     public static void Print(string msg)
@@ -108,5 +110,18 @@ public static unsafe class Syscalls
     {
         fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(cmd + '\0'))
             Call(G_SEND_SERVER_COMMAND, clientNum, (nint)p);
+    }
+
+    // --- Command registration ---
+    public static void AddCommand(string cmdName)
+    {
+        fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(cmdName + '\0'))
+            Call(G_ADD_COMMAND, (nint)p);
+    }
+
+    public static void RemoveCommand(string cmdName)
+    {
+        fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(cmdName + '\0'))
+            Call(G_REMOVE_COMMAND, (nint)p);
     }
 }
