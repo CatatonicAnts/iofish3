@@ -1489,6 +1489,36 @@ public sealed unsafe class SceneManager
                 BuildViewMatrix(newOrgPtr, newAxisPtr, pView);
             }
             BuildPerspective(fovX, fovY, 1.0f, 8192.0f, pProj);
+
+            // Oblique near-plane clipping: clip geometry behind the portal plane.
+            // Lengyel, "Modifying the Projection Matrix to Perform Oblique Near-Plane Clipping", 2004.
+            {
+                float rfx = newViewAxis[0], rfy = newViewAxis[1], rfz = newViewAxis[2];
+                float rlx = newViewAxis[3], rly = newViewAxis[4], rlz = newViewAxis[5];
+                float rux = newViewAxis[6], ruy = newViewAxis[7], ruz = newViewAxis[8];
+
+                // Transform mirror/portal plane into view space
+                float cpx = -(rlx * pnX + rly * pnY + rlz * pnZ);
+                float cpy = rux * pnX + ruy * pnY + ruz * pnZ;
+                float cpz = -(rfx * pnX + rfy * pnY + rfz * pnZ);
+                float cpw = (pnX * newViewOrg[0] + pnY * newViewOrg[1] + pnZ * newViewOrg[2]) - pDist;
+
+                float qx = MathF.Sign(cpx) / pProj[0];
+                float qy = MathF.Sign(cpy) / pProj[5];
+                float qz = -1.0f;
+                float qw = (1.0f + pProj[10]) / pProj[14];
+
+                float dot4 = cpx * qx + cpy * qy + cpz * qz + cpw * qw;
+                if (MathF.Abs(dot4) > 0.001f)
+                {
+                    float s = 2.0f / dot4;
+                    pProj[2] = cpx * s;
+                    pProj[6] = cpy * s;
+                    pProj[10] = cpz * s + 1.0f;
+                    pProj[14] = cpw * s;
+                }
+            }
+
             MatMul(pProj, pView, pVp);
 
             float timeSec = time / 1000.0f;
