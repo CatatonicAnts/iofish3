@@ -442,6 +442,75 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 
 /*
 ================
+G_MissileTouchTriggers
+
+Check if a missile overlaps any teleporter or jump pad triggers.
+If so, teleport or redirect the missile and return qtrue.
+================
+*/
+static qboolean G_MissileTouchTriggers( gentity_t *ent ) {
+	int			touch[MAX_GENTITIES];
+	int			num, i;
+	gentity_t	*hit;
+	vec3_t		mins, maxs;
+
+	VectorAdd( ent->r.currentOrigin, ent->r.mins, mins );
+	VectorAdd( ent->r.currentOrigin, ent->r.maxs, maxs );
+
+	num = trap_EntitiesInBox( mins, maxs, touch, MAX_GENTITIES );
+
+	for ( i = 0; i < num; i++ ) {
+		hit = &g_entities[touch[i]];
+
+		if ( !( hit->r.contents & CONTENTS_TRIGGER ) ) {
+			continue;
+		}
+		if ( !trap_EntityContact( mins, maxs, hit ) ) {
+			continue;
+		}
+
+		// Teleporter trigger — teleport missile to destination
+		if ( hit->s.eType == ET_TELEPORT_TRIGGER ) {
+			gentity_t *dest = G_PickTarget( hit->target );
+			if ( dest ) {
+				vec3_t	velocity, forward;
+				float	speed;
+
+				BG_EvaluateTrajectoryDelta( &ent->s.pos, level.time, velocity );
+				speed = VectorNormalize( velocity );
+
+				// Redirect missile along destination angles
+				AngleVectors( dest->s.angles, forward, NULL, NULL );
+				VectorScale( forward, speed, ent->s.pos.trDelta );
+				SnapVector( ent->s.pos.trDelta );
+
+				VectorCopy( dest->s.origin, ent->s.pos.trBase );
+				ent->s.pos.trTime = level.time;
+				VectorCopy( dest->s.origin, ent->r.currentOrigin );
+
+				trap_LinkEntity( ent );
+				return qtrue;
+			}
+		}
+
+		// Push trigger (jump pad) — apply push velocity
+		if ( hit->s.eType == ET_PUSH_TRIGGER ) {
+			VectorCopy( hit->s.origin2, ent->s.pos.trDelta );
+			SnapVector( ent->s.pos.trDelta );
+			VectorCopy( ent->r.currentOrigin, ent->s.pos.trBase );
+			ent->s.pos.trTime = level.time;
+			ent->s.pos.trType = TR_GRAVITY;
+
+			trap_LinkEntity( ent );
+			return qtrue;
+		}
+	}
+
+	return qfalse;
+}
+
+/*
+================
 G_RunMissile
 ================
 */
@@ -480,6 +549,12 @@ void G_RunMissile( gentity_t *ent ) {
 	}
 
 	trap_LinkEntity( ent );
+
+	// Check if missile entered a teleporter or jump pad
+	if ( G_MissileTouchTriggers( ent ) ) {
+		G_RunThink( ent );
+		return;
+	}
 
 	if ( tr.fraction != 1 ) {
 		// never explode or bounce on sky
