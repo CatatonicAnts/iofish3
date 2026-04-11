@@ -90,6 +90,10 @@ static int ModApi_GetPlayerWeapon( void ) {
 	return cg.predictedPlayerState.weapon;
 }
 
+static int ModApi_GetClientNum( void ) {
+	return cg.clientNum;
+}
+
 static void ModApi_GetEntityOrigin( int entityNum, float *out ) {
 	if ( entityNum >= 0 && entityNum < MAX_GENTITIES ) {
 		VectorCopy( cg_entities[entityNum].lerpOrigin, out );
@@ -265,6 +269,7 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	api.GetEntityInfo			= ModApi_GetEntityInfo;
 	api.SetHighlightAABB		= ModApi_SetHighlightAABB;
 	api.SetHighlightTrajectory	= ModApi_SetHighlightTrajectory;
+	api.GetClientNum			= ModApi_GetClientNum;
 
 	CG_Printf( "Mod host loaded, initializing...\n" );
 	fn_Init( (intptr_t)syscall, screenWidth, screenHeight, &api );

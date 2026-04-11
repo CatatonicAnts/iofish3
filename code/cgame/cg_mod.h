@@ -32,6 +32,8 @@ typedef struct {
 	void	(*SetHighlightAABB)( float *mins, float *maxs );
 	// Set a trajectory polyline for highlight drawing. points is float[numPoints*3]. Pass NULL/0 to clear.
 	void	(*SetHighlightTrajectory)( float *points, int numPoints );
+	// Get the local client (player) number
+	int		(*GetClientNum)( void );
 } cgameModApi_t;
 
 // Initialize the mod host (loads DLL, calls CgMod_Init)

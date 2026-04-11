@@ -1833,6 +1833,61 @@ static void Cmd_ToolTrace_f( gentity_t *ent ) {
 
 /*
 =================
+Cmd_ToolSpawn_f
+
+Client requests entity spawn at traced hit point.
+Format: toolSpawn <classname> <startX> <startY> <startZ> <endX> <endY> <endZ>
+=================
+*/
+static void Cmd_ToolSpawn_f( gentity_t *ent ) {
+	char		arg[64];
+	char		classname[64];
+	vec3_t		start, end, spawnPoint;
+	trace_t		tr;
+	gentity_t	*newEnt;
+	int			clientNum = ent - g_entities;
+
+	if ( trap_Argc() < 8 ) return;
+
+	trap_Argv( 1, classname, sizeof(classname) );
+	trap_Argv( 2, arg, sizeof(arg) ); start[0] = atof(arg);
+	trap_Argv( 3, arg, sizeof(arg) ); start[1] = atof(arg);
+	trap_Argv( 4, arg, sizeof(arg) ); start[2] = atof(arg);
+	trap_Argv( 5, arg, sizeof(arg) ); end[0] = atof(arg);
+	trap_Argv( 6, arg, sizeof(arg) ); end[1] = atof(arg);
+	trap_Argv( 7, arg, sizeof(arg) ); end[2] = atof(arg);
+
+	trap_Trace( &tr, start, vec3_origin, vec3_origin, end,
+		ent->s.number, MASK_SOLID );
+
+	if ( tr.fraction >= 1.0f ) {
+		trap_SendServerCommand( clientNum, "print \"No surface hit\n\"" );
+		return;
+	}
+
+	// Offset slightly from surface
+	VectorMA( tr.endpos, 16.0f, tr.plane.normal, spawnPoint );
+
+	newEnt = G_Spawn();
+	newEnt->classname = G_NewString( classname );
+	VectorCopy( spawnPoint, newEnt->s.origin );
+	VectorCopy( spawnPoint, newEnt->r.currentOrigin );
+
+	if ( !G_CallSpawn( newEnt ) ) {
+		G_FreeEntity( newEnt );
+		trap_SendServerCommand( clientNum,
+			va( "print \"Unknown entity '%s'\n\"", classname ) );
+		return;
+	}
+
+	trap_SendServerCommand( clientNum,
+		va( "print \"Spawned '%s' (#%d) at %.0f %.0f %.0f\n\"",
+			classname, (int)(newEnt - g_entities),
+			spawnPoint[0], spawnPoint[1], spawnPoint[2] ) );
+}
+
+/*
+=================
 ClientCommand
 =================
 */
@@ -1947,6 +2002,8 @@ void ClientCommand( int clientNum ) {
 		Cmd_SetViewpos_f( ent );
 	else if (Q_stricmp (cmd, "toolTrace") == 0)
 		Cmd_ToolTrace_f( ent );
+	else if (Q_stricmp (cmd, "toolSpawn") == 0)
+		Cmd_ToolSpawn_f( ent );
 	else if (Q_stricmp (cmd, "stats") == 0)
 		Cmd_Stats_f( ent );
 	else

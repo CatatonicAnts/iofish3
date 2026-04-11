@@ -20,6 +20,7 @@ public static unsafe class CGameApi
     private delegate void GetEntityInfoDelegate(int entityNum, int* weapon, int* eFlags, int* frame, int* evnt);
     private delegate void SetHighlightAABBDelegate(float* mins, float* maxs);
     private delegate void SetHighlightTrajectoryDelegate(float* points, int numPoints);
+    private delegate int GetClientNumDelegate();
 
     // Cached delegate instances (prevent GC of the thunks)
     private static DoTraceDelegate? _doTrace;
@@ -36,12 +37,13 @@ public static unsafe class CGameApi
     private static GetEntityInfoDelegate? _getEntityInfo;
     private static SetHighlightAABBDelegate? _setHighlightAABB;
     private static SetHighlightTrajectoryDelegate? _setHighlightTrajectory;
+    private static GetClientNumDelegate? _getClientNum;
 
     private static bool _initialized;
 
     /// <summary>
     /// Parse the cgameModApi_t struct from C and cache delegate wrappers.
-    /// The struct is 14 function pointers (nint each).
+    /// The struct is 15 function pointers (nint each).
     /// </summary>
     public static void Init(nint apiPtr)
     {
@@ -62,6 +64,7 @@ public static unsafe class CGameApi
         _getEntityInfo = Marshal.GetDelegateForFunctionPointer<GetEntityInfoDelegate>(ptrs[11]);
         _setHighlightAABB = Marshal.GetDelegateForFunctionPointer<SetHighlightAABBDelegate>(ptrs[12]);
         _setHighlightTrajectory = Marshal.GetDelegateForFunctionPointer<SetHighlightTrajectoryDelegate>(ptrs[13]);
+        _getClientNum = Marshal.GetDelegateForFunctionPointer<GetClientNumDelegate>(ptrs[14]);
 
         _initialized = true;
     }
@@ -184,5 +187,11 @@ public static unsafe class CGameApi
     public static void ClearHighlightTrajectory()
     {
         if (_initialized) _setHighlightTrajectory!(null, 0);
+    }
+
+    /// <summary>Get the local player's client number.</summary>
+    public static int GetClientNum()
+    {
+        return _initialized ? _getClientNum!() : 0;
     }
 }
