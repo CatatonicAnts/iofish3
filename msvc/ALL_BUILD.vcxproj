@@ -189,14 +189,6 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{60272705-C6F8-3641-890B-030ACD9585F3}</Project>
       <Name>bspc</Name>
     </ProjectReference>
-    <ProjectReference Include="E:\Projects\iofish3\msvc\cgame_baseq3.vcxproj">
-      <Project>{DB82DCB5-2FA7-3FA4-BFF3-97E8FAE4E74D}</Project>
-      <Name>cgame_baseq3</Name>
-    </ProjectReference>
-    <ProjectReference Include="E:\Projects\iofish3\msvc\cgame_missionpack.vcxproj">
-      <Project>{9C97508A-B321-3203-B76B-558671A4799C}</Project>
-      <Name>cgame_missionpack</Name>
-    </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\cgameqvm_baseq3.vcxproj">
       <Project>{B3852A9D-6503-3E58-807E-7782C862B5C9}</Project>
       <Name>cgameqvm_baseq3</Name>
@@ -209,6 +201,14 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\msvc\cgamex86_64_baseq3.vcxproj">
+      <Project>{0081F714-771F-3C0D-9FC1-A5F253660EEE}</Project>
+      <Name>cgamex86_64_baseq3</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\msvc\cgamex86_64_missionpack.vcxproj">
+      <Project>{5A2E3460-E185-388E-ABE4-294BD0FA971B}</Project>
+      <Name>cgamex86_64_missionpack</Name>
+    </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\ioq3ded.vcxproj">
       <Project>{683C3A82-1914-37F8-92E5-ECA21CFEF344}</Project>
       <Name>ioq3ded</Name>
@@ -216,14 +216,6 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ProjectReference Include="E:\Projects\iofish3\msvc\ioquake3.vcxproj">
       <Project>{6B6F944A-141E-3A5C-B1CD-C73E0B48AD19}</Project>
       <Name>ioquake3</Name>
-    </ProjectReference>
-    <ProjectReference Include="E:\Projects\iofish3\msvc\qagame_baseq3.vcxproj">
-      <Project>{49CA836D-C6D8-320A-B981-1BC88C509F15}</Project>
-      <Name>qagame_baseq3</Name>
-    </ProjectReference>
-    <ProjectReference Include="E:\Projects\iofish3\msvc\qagame_missionpack.vcxproj">
-      <Project>{EAB0E694-9279-3B3B-8F85-5D48C0417E6C}</Project>
-      <Name>qagame_missionpack</Name>
     </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\qagameqvm_baseq3.vcxproj">
       <Project>{645C1FD1-EA97-3E39-9368-D4B67FA32399}</Project>
@@ -236,6 +228,14 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Name>qagameqvm_missionpack</Name>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\msvc\qagamex86_64_baseq3.vcxproj">
+      <Project>{EC0E72BA-534A-3334-812B-2C112067C87A}</Project>
+      <Name>qagamex86_64_baseq3</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\msvc\qagamex86_64_missionpack.vcxproj">
+      <Project>{FDEF5A7F-D836-3893-91F3-FA02D30DE207}</Project>
+      <Name>qagamex86_64_missionpack</Name>
     </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\qvm_tools.vcxproj">
       <Project>{35DCFC1F-B975-3F1C-A45E-097B41DC2290}</Project>
@@ -251,14 +251,6 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Project>{CE3DEAA5-5FF4-33C8-A922-4E814FB4C603}</Project>
       <Name>renderer_opengl2</Name>
     </ProjectReference>
-    <ProjectReference Include="E:\Projects\iofish3\msvc\ui_baseq3.vcxproj">
-      <Project>{20F155E1-6F03-36D9-A619-8CA4686D9B44}</Project>
-      <Name>ui_baseq3</Name>
-    </ProjectReference>
-    <ProjectReference Include="E:\Projects\iofish3\msvc\ui_missionpack.vcxproj">
-      <Project>{B64D71E0-AB88-3BEF-8F84-CA31C18226B7}</Project>
-      <Name>ui_missionpack</Name>
-    </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\uiqvm_baseq3.vcxproj">
       <Project>{04A351AD-C603-3439-BB4F-202CFFAD7A2D}</Project>
       <Name>uiqvm_baseq3</Name>
@@ -270,6 +262,14 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Name>uiqvm_missionpack</Name>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\msvc\uix86_64_baseq3.vcxproj">
+      <Project>{66602858-E886-3EB8-B7B5-EBE6E8DE71B0}</Project>
+      <Name>uix86_64_baseq3</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\msvc\uix86_64_missionpack.vcxproj">
+      <Project>{65B3EA5C-CC64-358A-9F38-0D03A2E9256C}</Project>
+      <Name>uix86_64_missionpack</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -112,16 +112,16 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gcb09a5fe\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Debug\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Debug\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
@@ -173,18 +173,18 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gcb09a5fe\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Release\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Release\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
@@ -236,18 +236,18 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gcb09a5fe\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"MinSizeRel\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"MinSizeRel\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
@@ -300,16 +300,16 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gcb09a5fe\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"RelWithDebInfo\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"RelWithDebInfo\";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gcb09a5fe";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;USE_INTERNAL_SDL_HEADERS;USE_RENDERER_DLOPEN;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";renderer_opengl2_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\code\thirdparty\jpeg-9f;E:\Projects\iofish3\code\thirdparty\SDL2-2.32.8\include;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>

@@ -22,33 +22,33 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{683C3A82-1914-37F8-92E5-ECA21CFEF344}</ProjectGuid>
+    <ProjectGuid>{FDEF5A7F-D836-3893-91F3-FA02D30DE207}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
     <Platform>x64</Platform>
-    <ProjectName>ioq3ded</ProjectName>
+    <ProjectName>qagamex86_64_missionpack</ProjectName>
     <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <CharacterSet>MultiByte</CharacterSet>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -63,34 +63,34 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
-    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">E:\Games\Quake3\</OutDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ioq3ded.dir\Debug\</IntDir>
-    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ioq3ded</TargetName>
-    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">E:\Games\Quake3\missionpack\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">qagamex86_64_missionpack.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">qagamex86_64</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.dll</TargetExt>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
-    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</GenerateManifest>
-    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">E:\Games\Quake3\</OutDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ioq3ded.dir\Release\</IntDir>
-    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ioq3ded</TargetName>
-    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">E:\Games\Quake3\missionpack\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">qagamex86_64_missionpack.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">qagamex86_64</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.dll</TargetExt>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'"></LinkIncremental>
-    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</GenerateManifest>
-    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">E:\Games\Quake3\</OutDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">ioq3ded.dir\MinSizeRel\</IntDir>
-    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">ioq3ded</TargetName>
-    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.exe</TargetExt>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">E:\Games\Quake3\missionpack\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">qagamex86_64_missionpack.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">qagamex86_64</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.dll</TargetExt>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'"></LinkIncremental>
-    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</GenerateManifest>
-    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">E:\Games\Quake3\</OutDir>
-    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">ioq3ded.dir\RelWithDebInfo\</IntDir>
-    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">ioq3ded</TargetName>
-    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.exe</TargetExt>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">E:\Games\Quake3\missionpack\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">qagamex86_64_missionpack.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">qagamex86_64</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.dll</TargetExt>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'"></LinkIncremental>
-    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</GenerateManifest>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">true</GenerateManifest>
   </PropertyGroup>
+  <PropertyGroup />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -111,21 +111,19 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;QAGAME;MISSIONPACK;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Debug\";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
-      <IncludePaths>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
     <Midl>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -140,9 +138,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
-      <ImportLibrary>E:/Games/Quake3/ioq3ded.lib</ImportLibrary>
+      <ImportLibrary>E:/Games/Quake3/missionpack/qagamex86_64.lib</ImportLibrary>
       <LinkErrorReporting></LinkErrorReporting>
-      <ProgramDataBaseFile>E:/Games/Quake3/ioq3ded.pdb</ProgramDataBaseFile>
+      <ProgramDataBaseFile>E:/Games/Quake3/missionpack/qagamex86_64.pdb</ProgramDataBaseFile>
       <RandomizedBaseAddress></RandomizedBaseAddress>
       <SubSystem>Console</SubSystem>
     </Link>
@@ -152,7 +150,6 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -172,23 +169,21 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Release\";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
-      <IncludePaths>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
     <Midl>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -203,9 +198,9 @@
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
-      <ImportLibrary>E:/Games/Quake3/ioq3ded.lib</ImportLibrary>
+      <ImportLibrary>E:/Games/Quake3/missionpack/qagamex86_64.lib</ImportLibrary>
       <LinkErrorReporting></LinkErrorReporting>
-      <ProgramDataBaseFile>E:/Games/Quake3/ioq3ded.pdb</ProgramDataBaseFile>
+      <ProgramDataBaseFile>E:/Games/Quake3/missionpack/qagamex86_64.pdb</ProgramDataBaseFile>
       <RandomizedBaseAddress></RandomizedBaseAddress>
       <SubSystem>Console</SubSystem>
     </Link>
@@ -215,7 +210,6 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -235,23 +229,21 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"MinSizeRel\";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
-      <IncludePaths>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
     <Midl>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -266,9 +258,9 @@
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
-      <ImportLibrary>E:/Games/Quake3/ioq3ded.lib</ImportLibrary>
+      <ImportLibrary>E:/Games/Quake3/missionpack/qagamex86_64.lib</ImportLibrary>
       <LinkErrorReporting></LinkErrorReporting>
-      <ProgramDataBaseFile>E:/Games/Quake3/ioq3ded.pdb</ProgramDataBaseFile>
+      <ProgramDataBaseFile>E:/Games/Quake3/missionpack/qagamex86_64.pdb</ProgramDataBaseFile>
       <RandomizedBaseAddress></RandomizedBaseAddress>
       <SubSystem>Console</SubSystem>
     </Link>
@@ -278,7 +270,6 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <BufferSecurityCheck></BufferSecurityCheck>
@@ -299,21 +290,19 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION=\"1.36_gf1ee920a\";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"RelWithDebInfo\";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;NO_GZIP;DEDICATED;BOTLIB;USE_VOIP;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
-      <IncludePaths>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(IncludePaths)</IncludePaths>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;QAGAME;MISSIONPACK;PRODUCT_VERSION="1.36_gf1ee920a";__inline__=inline;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";qagamex86_64_missionpack_EXPORTS</PreprocessorDefinitions>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
     <Midl>
-      <AdditionalIncludeDirectories>E:\Projects\iofish3\code\thirdparty\zlib-1.3.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
       <HeaderFileName>%(Filename).h</HeaderFileName>
       <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
@@ -328,9 +317,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
       <ImageHasSafeExceptionHandlers></ImageHasSafeExceptionHandlers>
-      <ImportLibrary>E:/Games/Quake3/ioq3ded.lib</ImportLibrary>
+      <ImportLibrary>E:/Games/Quake3/missionpack/qagamex86_64.lib</ImportLibrary>
       <LinkErrorReporting></LinkErrorReporting>
-      <ProgramDataBaseFile>E:/Games/Quake3/ioq3ded.pdb</ProgramDataBaseFile>
+      <ProgramDataBaseFile>E:/Games/Quake3/missionpack/qagamex86_64.pdb</ProgramDataBaseFile>
       <RandomizedBaseAddress></RandomizedBaseAddress>
       <SubSystem>Console</SubSystem>
     </Link>
@@ -396,146 +385,40 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_bot.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_client.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_ccmds.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_game.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_init.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_main.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_net_chan.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_snapshot.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\server\sv_world.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\null\null_client.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\null\null_input.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\null\null_snddma.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_load.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_patch.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_polylib.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_test.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cm_trace.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cmd.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\common.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\cvar.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\files.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\md4.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\md5.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\msg.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\net_chan.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\net_ip.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\huffman.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_main.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\ai_chat.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\ai_cmd.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\ai_dmnet.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\ai_dmq3.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\ai_main.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\ai_team.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\ai_vcmd.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\bg_misc.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\bg_pmove.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\bg_slidemove.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\bg_lib.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_active.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_arenas.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_bot.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_client.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_cmds.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_combat.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_items.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_mem.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_misc.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_missile.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_mover.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_session.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_spawn.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_svcmds.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_target.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_team.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_trigger.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_utils.c" />
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_weapon.c" />
     <ClCompile Include="E:\Projects\iofish3\code\qcommon\q_math.c" />
     <ClCompile Include="E:\Projects\iofish3\code\qcommon\q_shared.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\unzip.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\ioapi.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_armv7l.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_interpreted.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_powerpc.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_sparc.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\qcommon\vm_x86.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_bspq3.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_cluster.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_debug.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_entity.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_file.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_main.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_move.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_optimize.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_reach.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_route.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_routealt.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_aas_sample.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_char.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_chat.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_gen.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_goal.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_move.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_weap.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ai_weight.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_ea.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\be_interface.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_crc.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_libvar.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_log.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_memory.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_precomp.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_script.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\botlib\l_struct.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\sys\con_log.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\sys\sys_autoupdater.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\sys\sys_main.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\sys\sys_win32.c" />
-    <ResourceCompile Include="E:\Projects\iofish3\code\sys\win_resource.rc">
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(PreprocessorDefinitions);WINDOWS_ICON_PATH=\"E:/Projects/iofish3/misc/windows/quake3.ico\"</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(PreprocessorDefinitions);WINDOWS_ICON_PATH=\"E:/Projects/iofish3/misc/windows/quake3.ico\"</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">%(PreprocessorDefinitions);WINDOWS_ICON_PATH=\"E:/Projects/iofish3/misc/windows/quake3.ico\"</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">%(PreprocessorDefinitions);WINDOWS_ICON_PATH=\"E:/Projects/iofish3/misc/windows/quake3.ico\"</PreprocessorDefinitions>
-    </ResourceCompile>
-    <MASM Include="E:\Projects\iofish3\code\asm\snapvector.asm">
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-    </MASM>
-    <MASM Include="E:\Projects\iofish3\code\asm\ftola.asm">
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-    </MASM>
-    <MASM Include="E:\Projects\iofish3\code\asm\vm_x86_64.asm">
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">%(PreprocessorDefinitions);idx64</PreprocessorDefinitions>
-    </MASM>
-    <ClCompile Include="E:\Projects\iofish3\code\sys\con_win32.c" />
-    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\adler32.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\crc32.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\inffast.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\inflate.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\inftrees.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\thirdparty\zlib-1.3.1\zutil.c">
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">4131;4245;4100;4127;4244;4310;4457;4456;4701;4305;4189;4232;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\game\g_syscalls.c" />
   </ItemGroup>
   <ItemGroup />
   <ItemGroup>
