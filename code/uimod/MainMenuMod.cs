@@ -118,10 +118,10 @@ public class MainMenuMod : IUiMod
         Drawing.SetColor(0.25f, 0.25f, 0.25f, 0.4f);
         DrawCenteredText(FOOTER_Y, "(c) 1999-2000 id Software", 6f, 10f);
 
-        // Cursor
+        // Cursor (centered: Q3 draws 32x32 cursor offset by -16,-16)
         Drawing.ClearColor();
         if (_cursorShader != 0)
-            Drawing.DrawPic(_cursorX, _cursorY, 32, 32, _cursorShader);
+            Drawing.DrawPic(_cursorX - 16, _cursorY - 16, 32, 32, _cursorShader);
 
         return true;
     }
