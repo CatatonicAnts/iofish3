@@ -259,6 +259,20 @@ static void UI_LoadArenas( void ) {
 
 		Info_SetValueForKey( ui_arenaInfos[n], "num", va( "%i", otherNum++ ) );
 	}
+
+	// tag each arena with whether its BSP is in a base pak
+	for( n = 0; n < ui_numArenas; n++ ) {
+		char mapname[64];
+		char bsppath[128];
+
+		Q_strncpyz( mapname, Info_ValueForKey( ui_arenaInfos[n], "map" ), sizeof( mapname ) );
+		if( !*mapname ) {
+			continue;
+		}
+		Com_sprintf( bsppath, sizeof(bsppath), "maps/%s.bsp", mapname );
+		Info_SetValueForKey( ui_arenaInfos[n], "basepak",
+			trap_FS_IsFileInBasePak( bsppath ) ? "1" : "0" );
+	}
 }
 
 /*

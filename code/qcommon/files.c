@@ -1766,6 +1766,64 @@ int	FS_FileIsInPAK(const char *filename, int *pChecksum ) {
 
 /*
 ============
+FS_IsFileInBasePak
+
+Returns qtrue if the file is found inside pak0-pak8.pk3 (the base game paks).
+Used by the UI to distinguish stock maps from downloaded/custom ones.
+============
+*/
+qboolean FS_IsFileInBasePak( const char *filename ) {
+	searchpath_t	*search;
+	pack_t			*pak;
+	fileInPack_t	*pakFile;
+	long			hash = 0;
+	const char		*bn;
+
+	if ( !fs_searchpaths ) {
+		return qfalse;
+	}
+
+	if ( !filename ) {
+		return qfalse;
+	}
+
+	// qpaths are not supposed to have a leading slash
+	if ( filename[0] == '/' || filename[0] == '\\' ) {
+		filename++;
+	}
+
+	if ( strstr( filename, ".." ) || strstr( filename, "::" ) ) {
+		return qfalse;
+	}
+
+	for ( search = fs_searchpaths ; search ; search = search->next ) {
+		if ( !search->pack ) {
+			continue;
+		}
+
+		pak = search->pack;
+		bn = pak->pakBasename;
+
+		// only check base paks (pak0 through pak8)
+		if ( strlen(bn) != 4 || bn[0] != 'p' || bn[1] != 'a' || bn[2] != 'k'
+			|| bn[3] < '0' || bn[3] > '8' ) {
+			continue;
+		}
+
+		hash = FS_HashFileName(filename, pak->hashSize);
+		pakFile = pak->hashTable[hash];
+		while ( pakFile ) {
+			if ( !FS_FilenameCompare( pakFile->name, filename ) ) {
+				return qtrue;
+			}
+			pakFile = pakFile->next;
+		}
+	}
+	return qfalse;
+}
+
+/*
+============
 FS_ReadFileDir
 
 Filename are relative to the quake search path

@@ -124,6 +124,8 @@ typedef enum {
 	// 1.32
 	UI_FS_SEEK,
 	UI_SET_PBCLSTATUS,
+	// iofish3 extensions
+	UI_FS_ISINBASEPAK,
 
 	UI_MEMSET = 100,
 	UI_MEMCPY,

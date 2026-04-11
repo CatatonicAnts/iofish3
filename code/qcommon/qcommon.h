@@ -656,6 +656,9 @@ long		FS_FOpenFileRead( const char *qpath, fileHandle_t *file, qboolean uniqueFI
 int		FS_FileIsInPAK(const char *filename, int *pChecksum );
 // returns 1 if a file is in the PAK file, otherwise -1
 
+qboolean FS_IsFileInBasePak( const char *filename );
+// returns qtrue if file is in pak0-pak8.pk3 (stock game data)
+
 int		FS_Write( const void *buffer, int len, fileHandle_t f );
 
 int		FS_Read( void *buffer, int len, fileHandle_t f );

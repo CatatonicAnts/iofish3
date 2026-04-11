@@ -992,6 +992,9 @@ intptr_t CL_UISystemCalls( intptr_t *args ) {
 	case UI_SET_PBCLSTATUS:
 		return 0;	
 
+	case UI_FS_ISINBASEPAK:
+		return FS_IsFileInBasePak( VMA(1) );
+
 	case UI_R_REGISTERFONT:
 		re.RegisterFont( VMA(1), args[2], VMA(3));
 		return 0;

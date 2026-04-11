@@ -58,6 +58,7 @@ START SERVER MENU *****
 #define ID_NEXTPAGE				16
 #define ID_STARTSERVERBACK		17
 #define ID_STARTSERVERNEXT		18
+#define ID_CUSTOMONLY			19
 
 typedef struct {
 	menuframework_s	menu;
@@ -67,6 +68,7 @@ typedef struct {
 	menubitmap_s	framer;
 
 	menulist_s		gametype;
+	menuradiobutton_s	customonly;
 	menubitmap_s	mappics[MAX_MAPSPERPAGE];
 	menubitmap_s	mapbuttons[MAX_MAPSPERPAGE];
 	menubitmap_s	arrows;
@@ -270,6 +272,13 @@ static void StartServer_GametypeEvent( void* ptr, int event ) {
 			continue;
 		}
 
+		// filter out base pak maps when "Custom Only" is on
+		if( s_startserver.customonly.curvalue ) {
+			if( atoi( Info_ValueForKey( info, "basepak" ) ) ) {
+				continue;
+			}
+		}
+
 		s_startserver.maplist[ s_startserver.nummaps ] = i;
 		s_startserver.nummaps++;
 	}
@@ -304,6 +313,10 @@ static void StartServer_MenuEvent( void* ptr, int event ) {
 			s_startserver.page++;
 			StartServer_Update();
 		}
+		break;
+
+	case ID_CUSTOMONLY:
+		StartServer_GametypeEvent( NULL, QM_ACTIVATED );
 		break;
 
 	case ID_STARTSERVERNEXT:
@@ -432,6 +445,14 @@ static void StartServer_MenuInit( void ) {
 	s_startserver.gametype.generic.y		= 368;
 	s_startserver.gametype.itemnames		= gametype_items;
 
+	s_startserver.customonly.generic.type		= MTYPE_RADIOBUTTON;
+	s_startserver.customonly.generic.name		= "Custom Only:";
+	s_startserver.customonly.generic.flags		= QMF_PULSEIFFOCUS|QMF_SMALLFONT;
+	s_startserver.customonly.generic.callback	= StartServer_MenuEvent;
+	s_startserver.customonly.generic.id			= ID_CUSTOMONLY;
+	s_startserver.customonly.generic.x			= 320 - 24;
+	s_startserver.customonly.generic.y			= 384;
+
 	for (i=0; i<MAX_MAPSPERPAGE; i++)
 	{
 		x =	(i % MAX_MAPCOLS) * (128+8) + 188;
@@ -533,6 +554,7 @@ static void StartServer_MenuInit( void ) {
 	Menu_AddItem( &s_startserver.menu, &s_startserver.framer );
 
 	Menu_AddItem( &s_startserver.menu, &s_startserver.gametype );
+	Menu_AddItem( &s_startserver.menu, &s_startserver.customonly );
 	for (i=0; i<MAX_MAPSPERPAGE; i++)
 	{
 		Menu_AddItem( &s_startserver.menu, &s_startserver.mappics[i] );
@@ -618,6 +640,7 @@ SERVER OPTIONS MENU *****
 #define ID_DEDICATED			22
 #define ID_GO					23
 #define ID_BACK					24
+#define ID_DEVMAP				25
 
 #define PLAYER_SLOTS			12
 
@@ -658,6 +681,7 @@ typedef struct {
 	char				newBotName[16];
 	
 	menulist_s		punkbuster;
+	menuradiobutton_s	devmap;
 } serveroptions_t;
 
 static serveroptions_t s_serveroptions;
@@ -792,7 +816,9 @@ static void ServerOptions_Start( void ) {
 
 	// the wait commands will allow the dedicated to take effect
 	info = UI_GetArenaInfoByNumber( s_startserver.maplist[ s_startserver.currentmap ]);
-	trap_Cmd_ExecuteText( EXEC_APPEND, va( "wait ; wait ; map %s\n", Info_ValueForKey( info, "map" )));
+	trap_Cmd_ExecuteText( EXEC_APPEND, va( "wait ; wait ; %s %s\n",
+		s_serveroptions.devmap.curvalue ? "devmap" : "map",
+		Info_ValueForKey( info, "map" )));
 
 	// add bots
 	trap_Cmd_ExecuteText( EXEC_APPEND, "wait 3\n" );
@@ -1358,6 +1384,14 @@ static void ServerOptions_MenuInit( qboolean multiplayer ) {
 	s_serveroptions.punkbuster.generic.x				= OPTIONS_X;
 	s_serveroptions.punkbuster.generic.y				= y;
 	s_serveroptions.punkbuster.itemnames				= punkbuster_items;
+
+	y += BIGCHAR_HEIGHT+2;
+	s_serveroptions.devmap.generic.type			= MTYPE_RADIOBUTTON;
+	s_serveroptions.devmap.generic.flags		= QMF_PULSEIFFOCUS|QMF_SMALLFONT;
+	s_serveroptions.devmap.generic.x			= OPTIONS_X;
+	s_serveroptions.devmap.generic.y			= y;
+	s_serveroptions.devmap.generic.name			= "Dev Map:";
+	s_serveroptions.devmap.generic.id			= ID_DEVMAP;
 	
 	y = 80;
 	s_serveroptions.botSkill.generic.type			= MTYPE_SPINCONTROL;
@@ -1483,6 +1517,7 @@ static void ServerOptions_MenuInit( qboolean multiplayer ) {
 	Menu_AddItem( &s_serveroptions.menu, &s_serveroptions.go );
 
 	Menu_AddItem( &s_serveroptions.menu, (void*) &s_serveroptions.punkbuster );
+	Menu_AddItem( &s_serveroptions.menu, &s_serveroptions.devmap );
 	
 	ServerOptions_SetMenuItems();
 }
