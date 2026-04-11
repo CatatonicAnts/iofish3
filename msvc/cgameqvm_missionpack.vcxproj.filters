@@ -43,9 +43,6 @@
     <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\9cd9c16ef213732088d077cf7ecf5de2\cg_marks.asm.rule">
       <Filter>CMake Rules</Filter>
     </CustomBuild>
-    <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\9cd9c16ef213732088d077cf7ecf5de2\cg_mod.asm.rule">
-      <Filter>CMake Rules</Filter>
-    </CustomBuild>
     <CustomBuild Include="E:\Projects\iofish3\msvc\CMakeFiles\9cd9c16ef213732088d077cf7ecf5de2\cg_newdraw.asm.rule">
       <Filter>CMake Rules</Filter>
     </CustomBuild>

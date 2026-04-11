@@ -70,9 +70,6 @@
     <ClCompile Include="E:\Projects\iofish3\code\cgame\cg_weapons.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="E:\Projects\iofish3\code\cgame\cg_mod.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="E:\Projects\iofish3\code\cgame\cg_newdraw.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -86,6 +83,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="E:\Projects\iofish3\code\cgame\cg_syscalls.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\cgame\cg_mod.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

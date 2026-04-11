@@ -116,16 +116,16 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";freetype_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_gea8a1fc0\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Debug\";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_g14fb3892\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Debug\";freetype_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Debug";freetype_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
@@ -178,18 +178,18 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";freetype_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_gea8a1fc0\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Release\";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_g14fb3892\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"Release\";freetype_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="Release";freetype_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
@@ -242,18 +242,18 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";freetype_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <DebugInformationFormat>
       </DebugInformationFormat>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_gea8a1fc0\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"MinSizeRel\";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_g14fb3892\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"MinSizeRel\";freetype_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="MinSizeRel";freetype_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
@@ -307,16 +307,16 @@
       <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
       <UseFullPaths>false</UseFullPaths>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";freetype_EXPORTS</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
       <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_gea8a1fc0\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"RelWithDebInfo\";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION=\"1.36_g14fb3892\";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR=\"RelWithDebInfo\";freetype_EXPORTS</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <MASM>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_gea8a1fc0";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";freetype_EXPORTS</PreprocessorDefinitions>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;FT2_BUILD_LIBRARY;_CRT_SECURE_NO_WARNINGS;_CRT_NONSTDC_NO_WARNINGS;DLL_EXPORT;PRODUCT_VERSION="1.36_g14fb3892";__inline__=inline;_WINSOCK_DEPRECATED_NO_WARNINGS;CMAKE_INTDIR="RelWithDebInfo";freetype_EXPORTS</PreprocessorDefinitions>
       <IncludePaths>E:\Projects\iofish3\msvc\freetype\include;E:\Projects\iofish3\code\libs\freetype\include;E:\Projects\iofish3\msvc\freetype\include\freetype\config;%(IncludePaths)</IncludePaths>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </MASM>
