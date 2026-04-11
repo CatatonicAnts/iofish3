@@ -511,9 +511,18 @@ int BotExportTest(int parm0, char *parm1, vec3_t parm2, vec3_t parm3)
 	*/
 	AAS_ClearShownPolygons();
 	AAS_ClearShownDebugLines();
-	// Show all AAS area polygons, not just the current one
-	for (i = 1; i < aasworld.numareas; i++) {
-		AAS_ShowAreaPolygons(i, 1, parm0 & 4);
+	// Show AAS area polygons near the player
+	{
+		vec3_t diff;
+		float dist_sq, radius = 1024.0f;
+		float radius_sq = radius * radius;
+		for (i = 1; i < aasworld.numareas; i++) {
+			VectorSubtract(aasworld.areas[i].center, origin, diff);
+			dist_sq = diff[0]*diff[0] + diff[1]*diff[1] + diff[2]*diff[2];
+			if (dist_sq <= radius_sq) {
+				AAS_ShowAreaPolygons(i, 1, parm0 & 4);
+			}
+		}
 	}
 	if (parm0 & 2) AAS_ShowReachableAreas(area);
 	else

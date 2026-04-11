@@ -485,7 +485,7 @@ void SV_BotInitCvars(void) {
 	Cvar_Get("bot_enable", "1", 0);						//enable the bot
 	Cvar_Get("bot_developer", "0", CVAR_CHEAT);			//bot developer mode
 	Cvar_Get("bot_debug", "0", CVAR_CHEAT);				//enable bot debugging
-	Cvar_Get("bot_maxdebugpolys", "65536", 0);			//maximum number of debug polys
+	Cvar_Get("bot_maxdebugpolys", "4096", 0);			//maximum number of debug polys
 	Cvar_Get("bot_groundonly", "1", 0);					//only show ground faces of areas
 	Cvar_Get("bot_reachability", "0", 0);				//show all reachabilities to other areas
 	Cvar_Get("bot_visualizejumppads", "0", CVAR_CHEAT);	//show jumppads

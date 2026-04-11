@@ -43,7 +43,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "be_aas_def.h"
 
 #define MAX_DEBUGLINES				1024
-#define MAX_DEBUGPOLYGONS			65536
+#define MAX_DEBUGPOLYGONS			4096
 
 int debuglines[MAX_DEBUGLINES];
 int debuglinevisible[MAX_DEBUGLINES];
