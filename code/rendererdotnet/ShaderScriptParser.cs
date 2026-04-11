@@ -394,6 +394,11 @@ public sealed unsafe class ShaderScriptParser
                 {
                     polygonOffset = true;
                 }
+                else if (string.Equals(token, "portal", StringComparison.OrdinalIgnoreCase))
+                {
+                    isPortal = true;
+                    if (sortKey == 0) sortKey = 1; // SS_PORTAL
+                }
                 else if (string.Equals(token, "entityMergable", StringComparison.OrdinalIgnoreCase))
                 {
                     entityMergable = true;
