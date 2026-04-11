@@ -180,6 +180,11 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Name>CGameDotNet</Name>
       <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
     </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\code\cgamemod\CGameMod.csproj">
+      <Project>{C3D4E5F6-7A8B-9C0D-1E2F-3A4B5C6D7E8F}</Project>
+      <Name>CGameMod</Name>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+    </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\code\rendererdotnet\RendererDotNet.csproj">
       <Project>{8536048D-9926-4F59-B825-8D54A596B548}</Project>
       <Name>RendererDotNet</Name>
