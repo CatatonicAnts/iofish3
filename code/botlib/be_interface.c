@@ -380,8 +380,6 @@ int BotExportTest(int parm0, char *parm1, vec3_t parm2, vec3_t parm3)
 		newarea = BotFuzzyPointReachabilityArea(origin);
 	} //end else
 
-	botimport.Print(PRT_MESSAGE, "\rtravel time to goal (%d) = %d  ", botlibglobals.goalareanum,
-		AAS_AreaTravelTimeToGoalArea(newarea, origin, botlibglobals.goalareanum, TFL_DEFAULT));
 	//newarea = BotReachabilityArea(origin, qtrue);
 	if (newarea != area)
 	{

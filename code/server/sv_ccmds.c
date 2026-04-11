@@ -1764,15 +1764,10 @@ static void SV_AASStatus_f( void ) {
 	}
 #endif
 
-	// Auto-reload AAS if the generated map matches the current map
+	// Notify user to restart the map to use the new AAS
 	if ( !Q_stricmp( aasGenerationMapName, sv_mapname->string ) ) {
-		Com_Printf( "Reloading AAS for current map...\n" );
-		if ( botlib_export ) {
-			botlib_export->BotLibLoadMap( aasGenerationMapName );
-			Com_Printf( S_COLOR_GREEN "AAS reloaded successfully.\n" );
-		} else {
-			Com_Printf( S_COLOR_YELLOW "Note: botlib not initialized, AAS will load on next map start.\n" );
-		}
+		Com_Printf( S_COLOR_CYAN "AAS ready. Use 'devmap %s' to reload with new AAS data.\n",
+			aasGenerationMapName );
 	}
 }
 
@@ -1842,13 +1837,10 @@ void SV_CheckAASGeneration( void ) {
 	}
 #endif
 
-	// Auto-reload AAS if the generated map matches the current map
+	// Notify user to restart the map to use the new AAS
 	if ( !Q_stricmp( aasGenerationMapName, sv_mapname->string ) ) {
-		Com_Printf( "Reloading AAS for current map...\n" );
-		if ( botlib_export ) {
-			botlib_export->BotLibLoadMap( aasGenerationMapName );
-			Com_Printf( S_COLOR_GREEN "AAS reloaded successfully.\n" );
-		}
+		Com_Printf( S_COLOR_CYAN "AAS ready. Use 'devmap %s' to reload with new AAS data.\n",
+			aasGenerationMapName );
 	}
 }
 
