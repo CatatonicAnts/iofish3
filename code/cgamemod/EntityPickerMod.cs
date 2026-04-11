@@ -15,7 +15,6 @@ public class EntityPickerMod : ICGameMod
     private const int WP_TOOL = 11;
     private const float TRACE_RANGE = 8192f;
     private const int TRACE_INTERVAL_MS = 100;
-    private const int EF_FIRING = 0x0010;
 
     private int _charsetShader;
     private int _whiteShader;
@@ -33,7 +32,9 @@ public class EntityPickerMod : ICGameMod
 
     // ── Spawner state ──
     private int _spawnSelection;
-    private bool _wasFiring;
+
+    // ── Bind management ──
+    private bool _spawnerBindsActive;
 
     // ── Spawn entity catalog ──
     private static readonly (string category, string classname, string label)[] SpawnEntities =
@@ -106,19 +107,21 @@ public class EntityPickerMod : ICGameMod
         Syscalls.AddCommand("toolcycle");
         Syscalls.AddCommand("toolup");
         Syscalls.AddCommand("tooldown");
+        Syscalls.AddCommand("toolfire");
     }
 
     public void Shutdown()
     {
+        RestoreDefaultBinds();
         ClearHighlights();
         Syscalls.RemoveCommand("tool");
         Syscalls.RemoveCommand("toolcycle");
         Syscalls.RemoveCommand("toolup");
         Syscalls.RemoveCommand("tooldown");
+        Syscalls.RemoveCommand("toolfire");
     }
 
     private bool _pendingWeaponSwitch;
-    private bool _pendingBinds;
 
     public bool ConsoleCommand(string cmd)
     {
@@ -127,7 +130,8 @@ public class EntityPickerMod : ICGameMod
             case "tool":
                 Syscalls.SendConsoleCommand("give Tool\n");
                 _pendingWeaponSwitch = true;
-                _pendingBinds = true;
+                _mode = ToolMode.Picker;
+                ApplyBindsForMode();
                 Syscalls.Print("[MOD] ^5Tool weapon equipped. mouse2=cycle, mwheelup/down=scroll\n");
                 return true;
             case "toolcycle":
@@ -140,6 +144,10 @@ public class EntityPickerMod : ICGameMod
             case "tooldown":
                 if (_mode == ToolMode.Spawner)
                     _spawnSelection = Math.Min(SpawnEntities.Length - 1, _spawnSelection + 1);
+                return true;
+            case "toolfire":
+                if (_mode == ToolMode.Spawner)
+                    DoSpawn();
                 return true;
         }
         return false;
@@ -161,14 +169,6 @@ public class EntityPickerMod : ICGameMod
             _pendingWeaponSwitch = false;
         }
 
-        if (_pendingBinds)
-        {
-            Syscalls.SendConsoleCommand("bind mouse2 toolcycle\n");
-            Syscalls.SendConsoleCommand("bind mwheelup toolup\n");
-            Syscalls.SendConsoleCommand("bind mwheeldown tooldown\n");
-            _pendingBinds = false;
-        }
-
         int weapon = CGameApi.GetPlayerWeapon();
         if (weapon != WP_TOOL)
         {
@@ -177,13 +177,12 @@ public class EntityPickerMod : ICGameMod
                 ClearHighlights();
                 _lastHitEntity = -1;
             }
+            RestoreDefaultBinds();
             return;
         }
 
         if (_mode == ToolMode.Picker)
             FramePicker(serverTime);
-        else
-            FrameSpawner(serverTime);
     }
 
     private void FramePicker(int serverTime)
@@ -210,23 +209,38 @@ public class EntityPickerMod : ICGameMod
         }
     }
 
-    private void FrameSpawner(int serverTime)
+    private void DoSpawn()
     {
-        // Detect fire button press (edge: not-firing → firing)
-        int clientNum = CGameApi.GetClientNum();
-        var (_, eFlags, _, _) = CGameApi.GetEntityInfo(clientNum);
-        bool firing = (eFlags & EF_FIRING) != 0;
+        var entry = SpawnEntities[_spawnSelection];
+        var (ox, oy, oz) = CGameApi.GetViewOrigin();
+        var (endX, endY, endZ) = GetViewEnd();
+        Syscalls.SendClientCommand(
+            $"toolSpawn {entry.classname} {ox:F1} {oy:F1} {oz:F1} {endX:F1} {endY:F1} {endZ:F1}");
+    }
 
-        if (firing && !_wasFiring)
+    private void ApplyBindsForMode()
+    {
+        Syscalls.SendConsoleCommand("bind mouse2 toolcycle\n");
+        if (_mode == ToolMode.Spawner)
         {
-            // Spawn selected entity at crosshair
-            var entry = SpawnEntities[_spawnSelection];
-            var (ox, oy, oz) = CGameApi.GetViewOrigin();
-            var (endX, endY, endZ) = GetViewEnd();
-            Syscalls.SendClientCommand(
-                $"toolSpawn {entry.classname} {ox:F1} {oy:F1} {oz:F1} {endX:F1} {endY:F1} {endZ:F1}");
+            Syscalls.SendConsoleCommand("bind mouse1 toolfire\n");
+            Syscalls.SendConsoleCommand("bind mwheelup toolup\n");
+            Syscalls.SendConsoleCommand("bind mwheeldown tooldown\n");
+            _spawnerBindsActive = true;
         }
-        _wasFiring = firing;
+        else
+        {
+            RestoreDefaultBinds();
+        }
+    }
+
+    private void RestoreDefaultBinds()
+    {
+        if (!_spawnerBindsActive) return;
+        Syscalls.SendConsoleCommand("bind mouse1 +attack\n");
+        Syscalls.SendConsoleCommand("bind mwheelup weapprev\n");
+        Syscalls.SendConsoleCommand("bind mwheeldown weapnext\n");
+        _spawnerBindsActive = false;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -476,7 +490,7 @@ public class EntityPickerMod : ICGameMod
         ClearHighlights();
         _lastHitEntity = -1;
         _serverHitEntity = -1;
-        _wasFiring = true; // suppress accidental fire on switch
+        ApplyBindsForMode();
         Syscalls.Print($"[MOD] ^5Tool mode: {ModeNames[(int)_mode]}\n");
     }
 
