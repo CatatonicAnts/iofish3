@@ -1419,15 +1419,30 @@ public sealed unsafe class SceneManager
             }
             else
             {
-                // Build surface orientation (matches Q3's R_GetPortalOrientations)
+                // Build surface orientation matching Q3's PerpendicularVector exactly.
+                // The entity axis was built by C cgame using Q3's PerpendicularVector,
+                // so the surface basis must use the same algorithm for the basis change.
                 float s0x = pnX, s0y = pnY, s0z = pnZ;
-                float s1x, s1y, s1z;
-                if (MathF.Abs(s0z) > 0.9f) { s1x = 1; s1y = 0; s1z = 0; }
-                else { s1x = 0; s1y = 0; s1z = 1; }
-                float ds = s1x * s0x + s1y * s0y + s1z * s0z;
-                s1x -= ds * s0x; s1y -= ds * s0y; s1z -= ds * s0z;
+
+                // Q3 PerpendicularVector: find axis with smallest absolute component
+                int pos = 0;
+                float minelem = 1.0f;
+                float abs0 = MathF.Abs(s0x), abs1 = MathF.Abs(s0y), abs2 = MathF.Abs(s0z);
+                if (abs0 < minelem) { minelem = abs0; pos = 0; }
+                if (abs1 < minelem) { minelem = abs1; pos = 1; }
+                if (abs2 < minelem) { pos = 2; }
+                float tx = pos == 0 ? 1f : 0f;
+                float ty = pos == 1 ? 1f : 0f;
+                float tz = pos == 2 ? 1f : 0f;
+
+                // Project onto plane perpendicular to s0 and normalize
+                float dp = tx * s0x + ty * s0y + tz * s0z;
+                float s1x = tx - dp * s0x;
+                float s1y = ty - dp * s0y;
+                float s1z = tz - dp * s0z;
                 float len = MathF.Sqrt(s1x * s1x + s1y * s1y + s1z * s1z);
                 if (len > 0.001f) { s1x /= len; s1y /= len; s1z /= len; }
+
                 float s2x = s0y * s1z - s0z * s1y;
                 float s2y = s0z * s1x - s0x * s1z;
                 float s2z = s0x * s1y - s0y * s1x;
