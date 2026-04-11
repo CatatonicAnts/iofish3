@@ -115,7 +115,7 @@ set(UI_SOURCES
     ${SOURCE_DIR}/q3_ui/ui_video.c
 )
 
-set(UI_BINARY_SOURCES ${SOURCE_DIR}/ui/ui_syscalls.c)
+set(UI_BINARY_SOURCES ${SOURCE_DIR}/ui/ui_syscalls.c ${SOURCE_DIR}/ui/ui_mod.c)
 set(UI_QVM_SOURCES ${SOURCE_DIR}/ui/ui_syscalls.asm)
 
 set(GAME_MODULE_SHARED_SOURCES

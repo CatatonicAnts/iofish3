@@ -2636,26 +2636,27 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 				cgs.screenYBias += cg_hudWeaponOffsetY.value * cgs.screenYScale;
 				CG_DrawWeaponSelect();
 				cgs.screenYBias -= cg_hudWeaponOffsetY.value * cgs.screenYScale;
-
-#ifndef MISSIONPACK
-				if ( cg_drawHoldableItem.integer ) {
-					CG_DrawHoldableItem();
-				}
-#else
-				//CG_DrawPersistantPowerup();
-#endif
-				CG_DrawReward();
 			}
+
+			// Always draw holdable item and reward (even with mod HUD)
+			// — these use internal C shader handles not easily exposed to C#
+#ifndef MISSIONPACK
+			if ( cg_drawHoldableItem.integer ) {
+				CG_DrawHoldableItem();
+			}
+#endif
+			CG_DrawReward();
 		}
 	}
 
-	if ( !modHud ) {
-		if ( cgs.gametype >= GT_TEAM ) {
+	// Always draw team info (complex C-side data not in mod API)
+	if ( cgs.gametype >= GT_TEAM ) {
 #ifndef MISSIONPACK
-			CG_DrawTeamInfo();
+		CG_DrawTeamInfo();
 #endif
-		}
+	}
 
+	if ( !modHud ) {
 		CG_DrawVote();
 		CG_DrawTeamVote();
 	}

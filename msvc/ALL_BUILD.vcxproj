@@ -195,6 +195,11 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <Name>RendererDotNet</Name>
       <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
     </ProjectReference>
+    <ProjectReference Include="E:\Projects\iofish3\code\uimod\UiMod.csproj">
+      <Project>{E5F6A7B8-9C0D-1E2F-3A4B-5C6D7E8F9012}</Project>
+      <Name>UiMod</Name>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+    </ProjectReference>
     <ProjectReference Include="E:\Projects\iofish3\msvc\bspc.vcxproj">
       <Project>{60272705-C6F8-3641-890B-030ACD9585F3}</Project>
       <Name>bspc</Name>

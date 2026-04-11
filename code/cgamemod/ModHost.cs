@@ -148,6 +148,7 @@ public static unsafe class ModHost
         // Built-in mods
         _mods.Add(new ExampleMod());
         _mods.Add(new EntityPickerMod());
+        _mods.Add(new HudMod());
 
         // Future: scan baseq3/mods/ for additional NativeAOT mod DLLs
     }

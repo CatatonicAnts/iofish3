@@ -273,6 +273,38 @@ static void ModApi_GetHudState( modHudState_t *out ) {
 			bg_itemlist[cg.itemPickup].pickup_name,
 			sizeof(out->itemPickupName) );
 	}
+
+	// Team vote
+	{
+		int cs_offset = -1;
+		if ( cgs.clientinfo[cg.clientNum].team == TEAM_RED )
+			cs_offset = 0;
+		else if ( cgs.clientinfo[cg.clientNum].team == TEAM_BLUE )
+			cs_offset = 1;
+
+		if ( cs_offset >= 0 ) {
+			out->teamVoteTime = cgs.teamVoteTime[cs_offset];
+			out->teamVoteYes = cgs.teamVoteYes[cs_offset];
+			out->teamVoteNo = cgs.teamVoteNo[cs_offset];
+			Q_strncpyz( out->teamVoteString, cgs.teamVoteString[cs_offset],
+				sizeof(out->teamVoteString) );
+		}
+	}
+
+	// Attacker name
+	{
+		int aClientNum = out->attackerClientNum;
+		if ( aClientNum >= 0 && aClientNum < MAX_CLIENTS &&
+			 aClientNum != cg.snap->ps.clientNum &&
+			 cgs.clientinfo[aClientNum].infoValid ) {
+			Q_strncpyz( out->attackerName,
+				cgs.clientinfo[aClientNum].name,
+				sizeof(out->attackerName) );
+		}
+	}
+
+	// Armor icon shader handle (for 2D fallback)
+	out->armorIconShader = cgs.media.armorIcon;
 }
 
 static void ModApi_SetHudFlags( int flags ) {

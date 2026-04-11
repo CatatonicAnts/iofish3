@@ -31,6 +31,9 @@
     <ClCompile Include="E:\Projects\iofish3\code\ui\ui_syscalls.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\ui\ui_mod.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="E:\Projects\iofish3\CMakeLists.txt" />

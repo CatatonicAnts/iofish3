@@ -127,4 +127,8 @@ if(MSVC)
         "${CMAKE_SOURCE_DIR}/code/qagamemod/QGameMod.csproj"
         GUID "D4E5F6A7-8B9C-0D1E-2F3A-4B5C6D7E8F90"
         PLATFORM "AnyCPU")
+    include_external_msproject(UiMod
+        "${CMAKE_SOURCE_DIR}/code/uimod/UiMod.csproj"
+        GUID "E5F6A7B8-9C0D-1E2F-3A4B-5C6D7E8F9012"
+        PLATFORM "AnyCPU")
 endif()

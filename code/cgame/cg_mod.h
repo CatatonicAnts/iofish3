@@ -74,10 +74,16 @@ typedef struct {
 	int		attackerClientNum;	// from PERS_ATTACKER
 	int		numClients;			// number of connected clients
 	int		localServer;		// 1 if local server (for lagometer)
+	int		teamVoteTime;
+	int		teamVoteYes;
+	int		teamVoteNo;
+	int		armorIconShader;	// cgs.media.armorIcon handle
 	char	centerPrint[1024];
 	char	voteString[256];
 	char	crosshairClientName[64];
 	char	itemPickupName[64];		// bg_itemlist[itemPickup].pickup_name
+	char	teamVoteString[256];
+	char	attackerName[64];
 } modHudState_t;
 
 

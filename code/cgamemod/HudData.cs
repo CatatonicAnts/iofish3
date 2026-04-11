@@ -150,10 +150,16 @@ public unsafe struct ModHudState
     public int AttackerClientNum;
     public int NumClients;
     public int LocalServer;
+    public int TeamVoteTime;
+    public int TeamVoteYes;
+    public int TeamVoteNo;
+    public int ArmorIconShader;
     public fixed byte CenterPrint[1024];
     public fixed byte VoteString[256];
     public fixed byte CrosshairClientName[64];
     public fixed byte ItemPickupName[64];
+    public fixed byte TeamVoteString[256];
+    public fixed byte AttackerName[64];
 
     // Gametype constants
     public const int GT_FFA = 0;

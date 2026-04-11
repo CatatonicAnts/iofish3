@@ -31,6 +31,12 @@ USER INTERFACE MAIN
 
 #include "ui_local.h"
 
+#ifndef Q3_VM
+#include "../ui/ui_mod.h"
+// Defined in ui_syscalls.c
+intptr_t (QDECL *UI_GetSyscall( void ))( intptr_t, ... );
+#endif
+
 
 /*
 ================
@@ -47,35 +53,65 @@ Q_EXPORT intptr_t vmMain( int command, int arg0, int arg1, int arg2, int arg3, i
 
 	case UI_INIT:
 		UI_Init();
+#ifndef Q3_VM
+		UI_Mod_Init( UI_GetSyscall() );
+#endif
 		return 0;
 
 	case UI_SHUTDOWN:
+#ifndef Q3_VM
+		UI_Mod_Shutdown();
+#endif
 		UI_Shutdown();
 		return 0;
 
 	case UI_KEY_EVENT:
+#ifndef Q3_VM
+		if ( UI_Mod_KeyEvent( arg0, arg1 ) ) return 0;
+#endif
 		UI_KeyEvent( arg0, arg1 );
 		return 0;
 
 	case UI_MOUSE_EVENT:
+#ifndef Q3_VM
+		if ( UI_Mod_MouseEvent( arg0, arg1 ) ) return 0;
+#endif
 		UI_MouseEvent( arg0, arg1 );
 		return 0;
 
 	case UI_REFRESH:
+#ifndef Q3_VM
+		if ( UI_Mod_Refresh( arg0 ) ) return 0;
+#endif
 		UI_Refresh( arg0 );
 		return 0;
 
 	case UI_IS_FULLSCREEN:
+#ifndef Q3_VM
+		{
+			int modResult = UI_Mod_IsFullscreen();
+			if ( modResult >= 0 ) return modResult;
+		}
+#endif
 		return UI_IsFullscreen();
 
 	case UI_SET_ACTIVE_MENU:
+#ifndef Q3_VM
+		if ( UI_Mod_SetActiveMenu( arg0 ) ) return 0;
+#endif
 		UI_SetActiveMenu( arg0 );
 		return 0;
 
 	case UI_CONSOLE_COMMAND:
+#ifndef Q3_VM
+		if ( UI_Mod_ConsoleCommand( arg0 ) ) return 0;
+#endif
 		return UI_ConsoleCommand(arg0);
 
 	case UI_DRAW_CONNECT_SCREEN:
+#ifndef Q3_VM
+		if ( UI_Mod_DrawConnectScreen( arg0 ) ) return 0;
+#endif
 		UI_DrawConnectScreen( arg0 );
 		return 0;
 	case UI_HASUNIQUECDKEY:				// mod authors need to observe this

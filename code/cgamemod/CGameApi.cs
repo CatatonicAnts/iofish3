@@ -21,6 +21,10 @@ public static unsafe class CGameApi
     private delegate void SetHighlightAABBDelegate(float* mins, float* maxs);
     private delegate void SetHighlightTrajectoryDelegate(float* points, int numPoints);
     private delegate int GetClientNumDelegate();
+    private delegate void GetPlayerStateDelegate(ModPlayerState* outState);
+    private delegate void GetHudStateDelegate(ModHudState* outState);
+    private delegate void SetHudFlagsDelegate(int flags);
+    private delegate int GetConfigStringDelegate(int index, byte* buf, int bufSize);
 
     // Cached delegate instances (prevent GC of the thunks)
     private static DoTraceDelegate? _doTrace;
@@ -38,6 +42,10 @@ public static unsafe class CGameApi
     private static SetHighlightAABBDelegate? _setHighlightAABB;
     private static SetHighlightTrajectoryDelegate? _setHighlightTrajectory;
     private static GetClientNumDelegate? _getClientNum;
+    private static GetPlayerStateDelegate? _getPlayerState;
+    private static GetHudStateDelegate? _getHudState;
+    private static SetHudFlagsDelegate? _setHudFlags;
+    private static GetConfigStringDelegate? _getConfigString;
 
     private static bool _initialized;
 
@@ -65,6 +73,12 @@ public static unsafe class CGameApi
         _setHighlightAABB = Marshal.GetDelegateForFunctionPointer<SetHighlightAABBDelegate>(ptrs[12]);
         _setHighlightTrajectory = Marshal.GetDelegateForFunctionPointer<SetHighlightTrajectoryDelegate>(ptrs[13]);
         _getClientNum = Marshal.GetDelegateForFunctionPointer<GetClientNumDelegate>(ptrs[14]);
+
+        // HUD data API (ptrs 15-18)
+        _getPlayerState = Marshal.GetDelegateForFunctionPointer<GetPlayerStateDelegate>(ptrs[15]);
+        _getHudState = Marshal.GetDelegateForFunctionPointer<GetHudStateDelegate>(ptrs[16]);
+        _setHudFlags = Marshal.GetDelegateForFunctionPointer<SetHudFlagsDelegate>(ptrs[17]);
+        _getConfigString = Marshal.GetDelegateForFunctionPointer<GetConfigStringDelegate>(ptrs[18]);
 
         _initialized = true;
     }
@@ -193,5 +207,37 @@ public static unsafe class CGameApi
     public static int GetClientNum()
     {
         return _initialized ? _getClientNum!() : 0;
+    }
+
+    /// <summary>Get the current player state (health, armor, ammo, etc.).</summary>
+    public static ModPlayerState GetPlayerState()
+    {
+        ModPlayerState ps = default;
+        if (_initialized) _getPlayerState!(&ps);
+        return ps;
+    }
+
+    /// <summary>Get the current HUD/game state.</summary>
+    public static ModHudState GetHudState()
+    {
+        ModHudState hs = default;
+        if (_initialized) _getHudState!(&hs);
+        return hs;
+    }
+
+    /// <summary>Set HUD control flags (e.g., HUD_FLAG_DISABLED=0x0001 to suppress C HUD).</summary>
+    public static void SetHudFlags(int flags)
+    {
+        if (_initialized) _setHudFlags!(flags);
+    }
+
+    /// <summary>Get a config string by index.</summary>
+    public static string GetConfigString(int index)
+    {
+        if (!_initialized) return "";
+        byte* buf = stackalloc byte[1024];
+        int len = _getConfigString!(index, buf, 1024);
+        if (len <= 0) return "";
+        return System.Text.Encoding.ASCII.GetString(buf, len);
     }
 }

@@ -37,6 +37,7 @@ public unsafe class HudMod : ICGameMod
     private const int POWERUP_BLINKS = 5;
     private const int POWERUP_BLINK_TIME = 1000;
     private const int FPS_FRAMES = 4;
+    private const int ATTACKER_HEAD_TIME = 10000;
 
     // Teams
     private const int TEAM_FREE = 0;
@@ -57,6 +58,7 @@ public unsafe class HudMod : ICGameMod
     private int _whiteShader;
     private int _selectShader;
     private int _crosshairShader;
+    private int _armorIconShader;
     private int[] _numberShaders = new int[11]; // 0-9 + minus
     private int[] _weaponIcons = new int[ModPlayerState.WP_NUM_WEAPONS];
 
@@ -123,6 +125,7 @@ public unsafe class HudMod : ICGameMod
         }
 
         _crosshairShader = Syscalls.R_RegisterShaderNoMip("gfx/2d/crosshaira");
+        _armorIconShader = Syscalls.R_RegisterShaderNoMip("icons/iconr_yellow");
 
         CGameApi.SetHudFlags(HUD_FLAG_DISABLED);
     }
@@ -160,7 +163,7 @@ public unsafe class HudMod : ICGameMod
         }
         else if (isAlive && !isDead && hs.ShowScores == 0)
         {
-            // Status bar (health, armor, ammo)
+            // Status bar (health, armor, ammo + icons)
             DrawStatusBar(ref ps, ref hs);
 
             // Ammo warning text
@@ -176,10 +179,11 @@ public unsafe class HudMod : ICGameMod
         // Crosshair (always, even spectator)
         DrawCrosshair();
 
-        // Vote display
+        // Vote and team vote
         DrawVote(ref hs);
+        DrawTeamVote(ref hs);
 
-        // Upper right (FPS, timer)
+        // Upper right (FPS, timer, attacker)
         DrawUpperRight(ref ps, ref hs);
 
         // Lower right (scores, powerup timers)
@@ -229,6 +233,13 @@ public unsafe class HudMod : ICGameMod
         {
             SetColor(0f, 1f, 0f, 1f);
             DrawField(370, STATUS_Y, 3, armor);
+
+            // Armor icon after digits
+            if (_armorIconShader != 0)
+            {
+                SetColor(1f, 1f, 1f, 1f);
+                DrawPic(370 + NUM_W * 3 + TEXT_ICON_SPACE, STATUS_Y, ICON_SIZE, ICON_SIZE, _armorIconShader);
+            }
         }
 
         ResetColor();
@@ -402,6 +413,9 @@ public unsafe class HudMod : ICGameMod
 
         // Timer
         y = DrawTimer(y, ref hs);
+
+        // Attacker name
+        y = DrawAttacker(y, ref hs);
     }
 
     private float DrawFPS(float y, int realTime)
@@ -446,6 +460,30 @@ public unsafe class HudMod : ICGameMod
         SetColor(1f, 1f, 1f, 1f);
         DrawString(635 - w, y + 2, s, BIGCHAR_W, BIGCHAR_H);
         ResetColor();
+
+        return y + BIGCHAR_H + 4;
+    }
+
+    private unsafe float DrawAttacker(float y, ref ModHudState hs)
+    {
+        if (hs.AttackerTime == 0) return y;
+
+        int elapsed = hs.Time - hs.AttackerTime;
+        if (elapsed < 0 || elapsed > ATTACKER_HEAD_TIME) return y;
+
+        fixed (byte* p = hs.AttackerName)
+        {
+            string name = GetFixedString(p, 64);
+            if (string.IsNullOrEmpty(name)) return y;
+
+            float alpha = 1f - (float)elapsed / ATTACKER_HEAD_TIME;
+            if (alpha < 0.1f) alpha = 0.1f;
+
+            float w = name.Length * BIGCHAR_W;
+            SetColor(1f, 0.2f, 0.2f, alpha);
+            DrawString(635 - w, y + 2, name, BIGCHAR_W, BIGCHAR_H);
+            ResetColor();
+        }
 
         return y + BIGCHAR_H + 4;
     }
@@ -740,6 +778,24 @@ public unsafe class HudMod : ICGameMod
         string text = $"VOTE({sec}):{vote} yes:{hs.VoteYes} no:{hs.VoteNo}";
         SetColor(1f, 1f, 0f, 1f);
         DrawString(0, 58, text, SMALLCHAR_W, SMALLCHAR_H);
+        ResetColor();
+    }
+
+    private unsafe void DrawTeamVote(ref ModHudState hs)
+    {
+        if (hs.TeamVoteTime == 0) return;
+        int elapsed = hs.Time - hs.TeamVoteTime;
+        if (elapsed < 0 || elapsed > 30000) return;
+
+        string vote;
+        fixed (byte* p = hs.TeamVoteString)
+            vote = GetFixedString(p, 256);
+        if (vote.Length == 0) return;
+
+        int sec = (30000 - elapsed) / 1000;
+        string text = $"TEAMVOTE({sec}):{vote} yes:{hs.TeamVoteYes} no:{hs.TeamVoteNo}";
+        SetColor(0f, 1f, 1f, 1f);
+        DrawString(0, 90, text, SMALLCHAR_W, SMALLCHAR_H);
         ResetColor();
     }
 
