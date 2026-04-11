@@ -119,4 +119,8 @@ if(MSVC)
         "${CMAKE_SOURCE_DIR}/code/cgamedotnet/CGameDotNet.csproj"
         GUID "A7B2F3E1-6D4C-4E5A-9F8B-1C2D3E4F5A6B"
         PLATFORM "AnyCPU")
+    include_external_msproject(CGameMod
+        "${CMAKE_SOURCE_DIR}/code/cgamemod/CGameMod.csproj"
+        GUID "C3D4E5F6-7A8B-9C0D-1E2F-3A4B5C6D7E8F"
+        PLATFORM "AnyCPU")
 endif()

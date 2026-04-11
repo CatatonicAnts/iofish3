@@ -35,6 +35,9 @@ Q_EXPORT void dllEntry( intptr_t (QDECL  *syscallptr)( intptr_t arg,... ) ) {
 	syscall = syscallptr;
 }
 
+intptr_t (QDECL *CG_GetSyscall( void ))( intptr_t, ... ) {
+	return syscall;
+}
 
 int PASSFLOAT( float x ) {
 	floatint_t fi;

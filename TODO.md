@@ -63,7 +63,7 @@ A list of planned features, improvements, and tasks for this project.
 
 ### Low Priority
 
-- [ ] **.NET cgame mod loading** - Load .NET mod assemblies from `baseq3/mods/cgame/` directory, allowing HUD extensions and game event hooks without modifying base cgame. Requires plugin interface design, dynamic AssemblyLoadContext loading, registration API for commands/cvars/hooks. `CPX 4`
+*No items*
 
 ---
 
@@ -114,6 +114,7 @@ A list of planned features, improvements, and tasks for this project.
 - **Primary build environment: Visual Studio 2022** — open `msvc\ioq3.sln`, all projects output directly to the game directory. CMake is considered deprecated; only use it to regenerate the solution if needed (`cmake -B msvc -G "Visual Studio 17 2022" -DGAME_DIR="E:/Games/Quake3"`).
 - .NET renderer: `cd code\rendererdotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
 - .NET cgame: `cd code\cgamedotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
+- .NET mod host: `cd code\cgamemod && dotnet publish -c Release` (publishes NativeAOT DLL to baseq3)
 - Test .NET renderer: launch with `+set cl_renderer dotnet`
 - Test .NET cgame: launch with `+set vm_cgame 0` (loads cgamex86_64.dll from baseq3)
 - Project uses internal/bundled libraries by default (`USE_INTERNAL_LIBS=ON`)
@@ -143,6 +144,7 @@ A list of planned features, improvements, and tasks for this project.
 - [x] HUD offset cvars (cg_hudOffsetX/Y, per-element Y offsets)
 - [x] `find` console command — case-insensitive substring search across commands and cvars
 - [x] Skirmish menu map filter — "Custom Only" toggle filters base pak maps, "Dev Map" toggle for devmap launch
+- [x] .NET cgame mod loading — C cgame loads NativeAOT host DLL (`cgamemod.dll`), dispatches Init/Shutdown/Frame/Draw2D/ConsoleCommand/EntityEvent hooks. Mods implement `ICGameMod` interface. Example mod with FPS overlay and test command.
 
 ### Improvements
 

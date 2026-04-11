@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // cg_event.c -- handle entity events at snapshot or playerstate transitions
 
 #include "cg_local.h"
+#include "cg_mod.h"
 
 // for the voice chats
 #ifdef MISSIONPACK
@@ -538,6 +539,9 @@ void CG_EntityEvent( centity_t *cent, vec3_t position ) {
 		DEBUGNAME("ZEROEVENT");
 		return;
 	}
+
+	// Notify .NET mods
+	CG_Mod_EntityEvent( es->number, event, es->eventParm );
 
 	clientNum = es->clientNum;
 	if ( clientNum < 0 || clientNum >= MAX_CLIENTS ) {

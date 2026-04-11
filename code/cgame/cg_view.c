@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // cg_view.c -- setup all the parameters (position, angle, etc)
 // for a 3D rendering
 #include "cg_local.h"
+#include "cg_mod.h"
 
 
 /*
@@ -884,6 +885,9 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 			trap_Cvar_Set("timescale", va("%f", cg_timescale.value));
 		}
 	}
+
+	// .NET mod frame update
+	CG_Mod_Frame( serverTime );
 
 	// actually issue the rendering calls
 	CG_DrawActive( stereoView );

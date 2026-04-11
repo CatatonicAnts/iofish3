@@ -1494,6 +1494,9 @@ void CG_CheckChangedPredictableEvents( playerState_t *ps );
 // print message on the local console
 void		trap_Print( const char *fmt );
 
+// get the engine syscall function pointer (for passing to mod host)
+intptr_t	(QDECL *CG_GetSyscall( void ))( intptr_t, ... );
+
 // abort the game
 void		trap_Error(const char *fmt) Q_NO_RETURN;
 

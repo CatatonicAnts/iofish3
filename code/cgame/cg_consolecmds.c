@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // executed by a key binding
 
 #include "cg_local.h"
+#include "cg_mod.h"
 #ifdef MISSIONPACK
 #include "../ui/ui_shared.h"
 extern menuDef_t *menuScoreboard;
@@ -515,6 +516,11 @@ Cmd_Argc() / Cmd_Argv()
 qboolean CG_ConsoleCommand( void ) {
 	const char	*cmd;
 	int		i;
+
+	// Let .NET mods handle commands first
+	if ( CG_Mod_ConsoleCommand() ) {
+		return qtrue;
+	}
 
 	cmd = CG_Argv(0);
 

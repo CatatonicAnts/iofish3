@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // active (after loading) gameplay
 
 #include "cg_local.h"
+#include "cg_mod.h"
 
 #ifdef MISSIONPACK
 #include "../ui/ui_shared.h"
@@ -2661,6 +2662,9 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 	if ( !cg.scoreBoardShowing) {
 		CG_DrawCenterString();
 	}
+
+	// .NET mod overlay
+	CG_Mod_Draw2D();
 
 restore:
 	// restore original screen scale/bias

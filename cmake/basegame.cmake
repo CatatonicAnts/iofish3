@@ -29,6 +29,7 @@ set(CGAME_SOURCES
     ${SOURCE_DIR}/cgame/cg_snapshot.c
     ${SOURCE_DIR}/cgame/cg_view.c
     ${SOURCE_DIR}/cgame/cg_weapons.c
+    ${SOURCE_DIR}/cgame/cg_mod.c
 )
 
 set(CGAME_BINARY_SOURCES ${SOURCE_DIR}/cgame/cg_syscalls.c)

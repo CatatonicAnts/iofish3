@@ -70,6 +70,9 @@
     <ClCompile Include="E:\Projects\iofish3\code\cgame\cg_weapons.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="E:\Projects\iofish3\code\cgame\cg_mod.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="E:\Projects\iofish3\code\qcommon\q_math.c">
       <Filter>Source Files</Filter>
     </ClCompile>
