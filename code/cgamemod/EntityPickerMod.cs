@@ -17,6 +17,12 @@ public class EntityPickerMod : ICGameMod
     // MASK_SHOT = CONTENTS_SOLID | CONTENTS_BODY | CONTENTS_CORPSE
     private const int MASK_SHOT = 0x6000001;
 
+    // CONTENTS_TRIGGER for picking brush entities like jump pads and teleporters
+    private const int CONTENTS_TRIGGER = 0x40000000;
+
+    // Tool trace mask: MASK_SHOT + triggers
+    private const int MASK_TOOL = MASK_SHOT | CONTENTS_TRIGGER;
+
     // Trace range for entity picking
     private const float TRACE_RANGE = 8192f;
 
@@ -83,7 +89,7 @@ public class EntityPickerMod : ICGameMod
 
         // Trace from view origin along view direction
         var (fraction, hitX, hitY, hitZ, hitEnt) = CGameApi.DoTrace(
-            ox, oy, oz, endX, endY, endZ, -1, MASK_SHOT);
+            ox, oy, oz, endX, endY, endZ, -1, MASK_TOOL);
 
         // Also check snapshot entities by proximity to view ray.
         // Items (weapons, ammo, health) don't have clip models and won't be hit by traces.
