@@ -1120,6 +1120,25 @@ void CG_AddPacketEntities( void ) {
 
 				trap_R_AddRefEntityToScene( &hlRef );
 			}
+
+			// Also submit world-space AABB from server data (works for all entities)
+			{
+				vec3_t			aabbMins, aabbMaxs;
+
+				if ( CG_Mod_GetHighlightAABB( aabbMins, aabbMaxs ) ) {
+					refEntity_t		aabbRef;
+
+					memset( &aabbRef, 0, sizeof(aabbRef) );
+					aabbRef.reType = RT_MODEL;
+					aabbRef.hModel = 0;	// signal: world-space AABB, not model bounds
+					VectorCopy( aabbMins, aabbRef.origin );
+					VectorCopy( aabbMaxs, aabbRef.oldorigin );
+					aabbRef.renderfx = RF_HIGHLIGHT;
+					AxisClear( aabbRef.axis );
+
+					trap_R_AddRefEntityToScene( &aabbRef );
+				}
+			}
 		}
 	}
 #endif

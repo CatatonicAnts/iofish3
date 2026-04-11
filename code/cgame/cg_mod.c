@@ -45,6 +45,10 @@ static CgMod_ServerCommandFunc	fn_ServerCommand;
 // Highlight entity set by the mod
 static int		highlightEntity = -1;
 
+// World-space AABB for highlight wireframe (set by mod)
+static qboolean	highlightAABBSet = qfalse;
+static vec3_t	highlightMins, highlightMaxs;
+
 
 /*
 ==================
@@ -147,6 +151,16 @@ static void ModApi_GetEntityInfo( int entityNum, int *weapon, int *eFlags, int *
 	}
 }
 
+static void ModApi_SetHighlightAABB( float *mins, float *maxs ) {
+	if ( mins && maxs ) {
+		VectorCopy( mins, highlightMins );
+		VectorCopy( maxs, highlightMaxs );
+		highlightAABBSet = qtrue;
+	} else {
+		highlightAABBSet = qfalse;
+	}
+}
+
 
 /*
 ==================
@@ -182,8 +196,9 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	cgameModApi_t	api;
 
 	highlightEntity = -1;
+	highlightAABBSet = qfalse;
 
-	// Get fs_basepath and fs_game via trap calls
+	// Get fs_basepathand fs_game via trap calls
 	trap_Cvar_VariableStringBuffer( "fs_basepath", basePath, sizeof(basePath) );
 	trap_Cvar_VariableStringBuffer( "fs_game", gameDir, sizeof(gameDir) );
 
@@ -233,6 +248,7 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	api.GetSnapshotEntityNum	= ModApi_GetSnapshotEntityNum;
 	api.GetEntityModelName		= ModApi_GetEntityModelName;
 	api.GetEntityInfo			= ModApi_GetEntityInfo;
+	api.SetHighlightAABB		= ModApi_SetHighlightAABB;
 
 	CG_Printf( "Mod host loaded, initializing...\n" );
 	fn_Init( (intptr_t)syscall, screenWidth, screenHeight, &api );
@@ -261,6 +277,7 @@ void CG_Mod_Shutdown( void ) {
 	fn_EntityEvent = NULL;
 	fn_ServerCommand = NULL;
 	highlightEntity = -1;
+	highlightAABBSet = qfalse;
 }
 
 
@@ -322,6 +339,21 @@ Returns the entity number the mod wants highlighted, or -1 for none.
 */
 int CG_Mod_GetHighlightEntity( void ) {
 	return highlightEntity;
+}
+
+
+/*
+==================
+CG_Mod_GetHighlightAABB
+
+Returns qtrue if the mod has set a world-space AABB for highlight wireframe.
+==================
+*/
+qboolean CG_Mod_GetHighlightAABB( float *mins, float *maxs ) {
+	if ( !highlightAABBSet ) return qfalse;
+	VectorCopy( highlightMins, mins );
+	VectorCopy( highlightMaxs, maxs );
+	return qtrue;
 }
 
 

@@ -18,6 +18,7 @@ public static unsafe class CGameApi
     private delegate int GetSnapshotEntityNumDelegate(int index);
     private delegate int GetEntityModelNameDelegate(int entityNum, byte* buf, int bufSize);
     private delegate void GetEntityInfoDelegate(int entityNum, int* weapon, int* eFlags, int* frame, int* evnt);
+    private delegate void SetHighlightAABBDelegate(float* mins, float* maxs);
 
     // Cached delegate instances (prevent GC of the thunks)
     private static DoTraceDelegate? _doTrace;
@@ -32,6 +33,7 @@ public static unsafe class CGameApi
     private static GetSnapshotEntityNumDelegate? _getSnapshotEntityNum;
     private static GetEntityModelNameDelegate? _getEntityModelName;
     private static GetEntityInfoDelegate? _getEntityInfo;
+    private static SetHighlightAABBDelegate? _setHighlightAABB;
 
     private static bool _initialized;
 
@@ -56,6 +58,7 @@ public static unsafe class CGameApi
         _getSnapshotEntityNum = Marshal.GetDelegateForFunctionPointer<GetSnapshotEntityNumDelegate>(ptrs[9]);
         _getEntityModelName = Marshal.GetDelegateForFunctionPointer<GetEntityModelNameDelegate>(ptrs[10]);
         _getEntityInfo = Marshal.GetDelegateForFunctionPointer<GetEntityInfoDelegate>(ptrs[11]);
+        _setHighlightAABB = Marshal.GetDelegateForFunctionPointer<SetHighlightAABBDelegate>(ptrs[12]);
 
         _initialized = true;
     }
@@ -154,5 +157,17 @@ public static unsafe class CGameApi
         int weapon, eFlags, frame, evnt;
         _getEntityInfo!(entityNum, &weapon, &eFlags, &frame, &evnt);
         return (weapon, eFlags, frame, evnt);
+    }
+
+    /// <summary>Set a world-space AABB for highlight wireframe. Pass null to clear.</summary>
+    public static void SetHighlightAABB(float* mins, float* maxs)
+    {
+        if (_initialized) _setHighlightAABB!(mins, maxs);
+    }
+
+    /// <summary>Clear the AABB highlight.</summary>
+    public static void ClearHighlightAABB()
+    {
+        if (_initialized) _setHighlightAABB!(null, null);
     }
 }

@@ -1715,13 +1715,30 @@ Sends result back to client as "toolHit entNum classname".
 
 static void ToolTrace_SendHit( int clientNum, int entNum ) {
 	gentity_t	*hit = &g_entities[entNum];
-	const char	*cn = hit->classname ? hit->classname : "";
+	const char	*cn = hit->classname ? hit->classname : "-";
+	const char	*tn = ( hit->targetname && hit->targetname[0] ) ? hit->targetname : "-";
+	const char	*tg = ( hit->target && hit->target[0] ) ? hit->target : "-";
+	const char	*mdl = ( hit->model && hit->model[0] ) ? hit->model : "-";
+	const char	*msg = ( hit->message && hit->message[0] ) ? hit->message : "-";
+	const char	*tm = ( hit->team && hit->team[0] ) ? hit->team : "-";
+
+	// Format: entNum classname targetname target model spawnflags health speed
+	//         count damage splashDamage splashRadius
+	//         ox oy oz  mnx mny mnz  mxx mxy mxz  mdx mdy mdz
+	//         contents clipmask svFlags message team
 	trap_SendServerCommand( clientNum,
-		va( "toolHit %d %s %.0f %.0f %.0f",
-			entNum, cn,
-			hit->r.currentOrigin[0],
-			hit->r.currentOrigin[1],
-			hit->r.currentOrigin[2] ) );
+		va( "toolHit %d %s %s %s %s %d %d %.0f %d %d %d %d "
+			"%.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f %.0f "
+			"%d %d %d %s %s",
+			entNum, cn, tn, tg, mdl,
+			hit->spawnflags, hit->health, hit->speed,
+			hit->count, hit->damage, hit->splashDamage, hit->splashRadius,
+			hit->r.currentOrigin[0], hit->r.currentOrigin[1], hit->r.currentOrigin[2],
+			hit->r.absmin[0], hit->r.absmin[1], hit->r.absmin[2],
+			hit->r.absmax[0], hit->r.absmax[1], hit->r.absmax[2],
+			hit->movedir[0], hit->movedir[1], hit->movedir[2],
+			hit->r.contents, hit->clipmask, hit->r.svFlags,
+			msg, tm ) );
 }
 
 static void Cmd_ToolTrace_f( gentity_t *ent ) {

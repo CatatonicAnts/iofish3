@@ -28,6 +28,8 @@ typedef struct {
 	int		(*GetEntityModelName)( int entityNum, char *buf, int bufSize );
 	// Returns packed entity info: weapon, eFlags, frame, event
 	void	(*GetEntityInfo)( int entityNum, int *weapon, int *eFlags, int *frame, int *event );
+	// Set world-space AABB for highlight wireframe. Pass NULL to clear.
+	void	(*SetHighlightAABB)( float *mins, float *maxs );
 } cgameModApi_t;
 
 // Initialize the mod host (loads DLL, calls CgMod_Init)
@@ -50,6 +52,9 @@ void CG_Mod_EntityEvent( int entityNum, int eventType, int eventParm );
 
 // Get the currently highlighted entity (-1 if none)
 int CG_Mod_GetHighlightEntity( void );
+
+// Get the world-space AABB set by the mod. Returns qtrue if set.
+qboolean CG_Mod_GetHighlightAABB( float *mins, float *maxs );
 
 // Route a server command to the mod host (returns qtrue if handled)
 qboolean CG_Mod_ServerCommand( const char *cmd );

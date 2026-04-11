@@ -640,7 +640,6 @@ public sealed unsafe class SceneManager
                 _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _debugVbo);
                 _gl.DepthMask(false);
                 _gl.LineWidth(2.0f);
-                _gl.Uniform4(_debugColorLoc, 0.0f, 1.0f, 0.3f, 1.0f); // green
 
                 Span<float> corners = stackalloc float[8 * 3];
                 Span<float> aabbLines = stackalloc float[24 * 3];
@@ -656,12 +655,38 @@ public sealed unsafe class SceneManager
                     if ((ent.Renderfx & RF_HIGHLIGHT) == 0 || ent.ReType != RT_MODEL)
                         continue;
 
-                    if (!_models.GetBounds(ent.ModelHandle, out float minX, out float minY, out float minZ,
-                                           out float maxX, out float maxY, out float maxZ))
-                        continue;
+                    float minX, minY, minZ, maxX, maxY, maxZ;
 
-                    BuildModelMatrix(ent, modelMat);
-                    MatMul(vp, modelMat, mvp);
+                    if (ent.ModelHandle == 0)
+                    {
+                        // World-space AABB: origin=mins, oldOrigin=maxs
+                        minX = ent.OriginX; minY = ent.OriginY; minZ = ent.OriginZ;
+                        maxX = ent.OldOriginX; maxY = ent.OldOriginY; maxZ = ent.OldOriginZ;
+
+                        // Skip degenerate boxes
+                        if (minX == maxX && minY == maxY && minZ == maxZ)
+                            continue;
+
+                        // World-space: use view-projection only (identity model matrix)
+                        Span<float> identMat = stackalloc float[16];
+                        identMat.Clear();
+                        identMat[0] = 1; identMat[5] = 1; identMat[10] = 1; identMat[15] = 1;
+                        MatMul(vp, identMat, mvp);
+
+                        _gl.Uniform4(_debugColorLoc, 0.0f, 1.0f, 1.0f, 1.0f); // cyan for server AABB
+                    }
+                    else
+                    {
+                        // Model-space AABB: get bounds from model, transform by model matrix
+                        if (!_models.GetBounds(ent.ModelHandle, out minX, out minY, out minZ,
+                                               out maxX, out maxY, out maxZ))
+                            continue;
+
+                        BuildModelMatrix(ent, modelMat);
+                        MatMul(vp, modelMat, mvp);
+
+                        _gl.Uniform4(_debugColorLoc, 0.0f, 1.0f, 0.3f, 1.0f); // green for model AABB
+                    }
 
                     // 8 corners of the AABB
                     corners[0]  = minX; corners[1]  = minY; corners[2]  = minZ;
