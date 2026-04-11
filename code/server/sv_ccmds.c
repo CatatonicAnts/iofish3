@@ -1637,6 +1637,9 @@ static void SV_GenerateAAS_f( void ) {
 	Com_sprintf( outputPath, sizeof(outputPath), "%s%c%s%cmaps",
 		basepath, PATH_SEP, gamedir, PATH_SEP );
 
+	// Ensure output directory exists
+	Sys_Mkdir( outputPath );
+
 	Q_strncpyz( aasGenerationMapName, mapname, sizeof(aasGenerationMapName) );
 
 	Com_Printf( "Generating AAS for '%s'...\n", mapname );
