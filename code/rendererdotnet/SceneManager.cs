@@ -1364,6 +1364,14 @@ public sealed unsafe class SceneManager
                     out float pcX, out float pcY, out float pcZ))
                 continue;
 
+            // Ensure surface normal faces the viewer (Q3 guarantees this via face culling)
+            float toCamX = viewOrg[0] - pcX, toCamY = viewOrg[1] - pcY, toCamZ = viewOrg[2] - pcZ;
+            if (pnX * toCamX + pnY * toCamY + pnZ * toCamZ < 0)
+            {
+                pnX = -pnX; pnY = -pnY; pnZ = -pnZ;
+                pDist = -pDist;
+            }
+
             // Find matching RT_PORTALSURFACE entity for THIS surface
             bool isMirror = false;
             float camX = 0, camY = 0, camZ = 0;
