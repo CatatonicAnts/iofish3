@@ -131,9 +131,9 @@ public sealed unsafe class BspRenderer : IDisposable
     private float[] _autospVerts = new float[4096]; // reusable per-frame
     private uint[] _autospIndices = new uint[2048];
 
-    // Portal rendering: collected portal surface info and portal texture
-    private uint _portalTexture;  // Set by SceneManager before Render()
-    private int _portalSurfIdx = -1;  // First visible portal surface index
+    // Portal rendering: collected portal surface info and per-surface textures
+    private readonly List<int> _portalSurfIndices = new();  // All visible portal surface indices
+    private readonly Dictionary<int, uint> _portalTextures = new();  // surfIdx → texture ID
 
     /// <summary>When true, frustum culling is skipped (debug for portal pass).</summary>
     public bool SkipFrustumCulling { get; set; }
@@ -1097,20 +1097,31 @@ public sealed unsafe class BspRenderer : IDisposable
     /// <summary>
     /// Render the world using BSP tree traversal for visibility.
     /// Renders opaque surfaces first, then transparent surfaces in a second pass.
-    /// <summary>Set the portal texture ID for this frame's portal surface rendering.</summary>
-    public void SetPortalTexture(uint texId) => _portalTexture = texId;
+    /// <summary>Set portal texture mappings for this frame.</summary>
+    public void SetPortalTextures(Dictionary<int, uint> textures) 
+    {
+        _portalTextures.Clear();
+        foreach (var kv in textures)
+            _portalTextures[kv.Key] = kv.Value;
+    }
+
+    /// <summary>Clear all portal textures.</summary>
+    public void ClearPortalTextures() => _portalTextures.Clear();
+
+    /// <summary>Get all visible portal surface indices from the last frame.</summary>
+    public IReadOnlyList<int> GetPortalSurfaceIndices() => _portalSurfIndices;
 
     /// <summary>
-    /// Get the plane of the first visible portal surface from the last frame.
-    /// Returns false if no portal surface was visible.
+    /// Get the plane of a specific portal surface.
+    /// Returns false if the surface is invalid.
     /// </summary>
-    public bool GetPortalSurface(out float normalX, out float normalY, out float normalZ,
+    public bool GetPortalSurfacePlane(int surfIdx, out float normalX, out float normalY, out float normalZ,
         out float dist, out float centerX, out float centerY, out float centerZ)
     {
         normalX = normalY = normalZ = dist = centerX = centerY = centerZ = 0;
-        if (_portalSurfIdx < 0 || _world == null) return false;
+        if (_world == null || surfIdx < 0 || surfIdx >= _world.Surfaces.Length) return false;
 
-        ref var surf = ref _world.Surfaces[_portalSurfIdx];
+        ref var surf = ref _world.Surfaces[surfIdx];
         if (surf.NumVertices < 3) return false;
 
         // Compute plane from first 3 vertices
@@ -1155,7 +1166,7 @@ public sealed unsafe class BspRenderer : IDisposable
         _transparentSurfaces.Clear();
         _visibleSurfaceIndices.Clear();
         _visibleFlares.Clear();
-        _portalSurfIdx = -1;
+        _portalSurfIndices.Clear();
         _viewX = viewX;
         _viewY = viewY;
         _viewZ = viewZ;
@@ -1463,12 +1474,12 @@ public sealed unsafe class BspRenderer : IDisposable
             int sortKey0 = shaders.GetSortKey(surf.ShaderHandle);
             if (sortKey0 == 1)
             {
-                // Record the first portal surface for the next frame's portal render
-                if (_portalSurfIdx < 0)
-                    _portalSurfIdx = surfIdx;
+                // Record all portal surfaces for the next frame's portal render
+                if (!_portalSurfIndices.Contains(surfIdx))
+                    _portalSurfIndices.Add(surfIdx);
 
-                if (_portalTexture != 0)
-                    DrawSurfacePortalFbo(ref surf, shaders);
+                if (_portalTextures.TryGetValue(surfIdx, out uint portalTex) && portalTex != 0)
+                    DrawSurfacePortalFbo(ref surf, shaders, portalTex);
                 else
                     DrawSurfacePortal(ref surf, shaders);
                 return;
@@ -1657,10 +1668,10 @@ public sealed unsafe class BspRenderer : IDisposable
     /// <summary>
     /// Render a portal/mirror surface using the portal FBO texture with screen-space UVs.
     /// </summary>
-    private void DrawSurfacePortalFbo(ref BspSurface surf, ShaderManager shaders)
+    private void DrawSurfacePortalFbo(ref BspSurface surf, ShaderManager shaders, uint portalTex)
     {
         _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _portalTexture);
+        _gl.BindTexture(TextureTarget.Texture2D, portalTex);
 
         _gl.Uniform1(_useLightmapLoc, 0);
         _gl.Uniform1(_alphaFuncLoc, 0);
