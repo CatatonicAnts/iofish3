@@ -110,6 +110,7 @@ A list of planned features, improvements, and tasks for this project.
 ## Notes
 
 - Game installation: `E:\Games\Quake3`
+- **QVM builds are not maintained** — the game defaults to native DLL loading (`vm_cgame 0`, `vm_game 0`, `vm_ui 0`). QVM targets exist in the solution but may not compile with newer code changes.
 - **Primary build environment: Visual Studio 2022** — open `msvc\ioq3.sln`, all projects output directly to the game directory. CMake is considered deprecated; only use it to regenerate the solution if needed (`cmake -B msvc -G "Visual Studio 17 2022" -DGAME_DIR="E:/Games/Quake3"`).
 - .NET renderer: `cd code\rendererdotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
 - .NET cgame: `cd code\cgamedotnet && dotnet publish -c Release` (publishes NativeAOT DLL to game dir)
