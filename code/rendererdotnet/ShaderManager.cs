@@ -429,7 +429,7 @@ public unsafe class ShaderManager
             if (entry.Name.StartsWith("models/", StringComparison.OrdinalIgnoreCase) &&
                 entry.Blend.NeedsBlending)
             {
-                Interop.EngineImports.Printf(Interop.EngineImports.PRINT_ALL,
+                Interop.EngineImports.Printf(Interop.EngineImports.PRINT_DEVELOPER,
                     $"[.NET] Shader '{entry.Name}' blend: src=0x{entry.Blend.SrcFactor:X}, dst=0x{entry.Blend.DstFactor:X}, cull={entry.CullMode}\n");
             }
 
@@ -528,9 +528,10 @@ public unsafe class ShaderManager
         }
         else if (entry.Name.StartsWith("models/", StringComparison.OrdinalIgnoreCase))
         {
-            // No shader script found for a model shader — blend defaults to Opaque
-            Interop.EngineImports.Printf(Interop.EngineImports.PRINT_WARNING,
-                $"[.NET] WARNING: No shader script for model shader '{entry.Name}' (will render opaque)\n");
+            // No shader script found for a model shader — this is normal,
+            // most model textures render fine as plain opaque.
+            Interop.EngineImports.Printf(Interop.EngineImports.PRINT_DEVELOPER,
+                $"[.NET] Model shader '{entry.Name}' has no script (rendering opaque)\n");
         }
 
         if (texResult == null)
