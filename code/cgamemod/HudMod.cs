@@ -71,8 +71,9 @@ public unsafe class HudMod : ICGameMod
         _selectShader = Syscalls.R_RegisterShaderNoMip("gfx/2d/select");
 
         // Number shaders (gfx/2d/numbers/...)
+        string[] numNames = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
         for (int i = 0; i < 10; i++)
-            _numberShaders[i] = Syscalls.R_RegisterShaderNoMip($"gfx/2d/numbers/{i}_32b");
+            _numberShaders[i] = Syscalls.R_RegisterShaderNoMip($"gfx/2d/numbers/{numNames[i]}_32b");
         _numberShaders[10] = Syscalls.R_RegisterShaderNoMip("gfx/2d/numbers/minus_32b");
 
         // Weapon icons

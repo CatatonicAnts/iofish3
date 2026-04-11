@@ -65,7 +65,7 @@ public static unsafe class Syscalls
     private const int CG_ARGV = 8;
     private const int CG_ARGS = 9;
     private const int CG_R_REGISTERSHADER = 39;
-    private const int CG_R_REGISTERSHADERNOMIP = 54;
+    private const int CG_R_REGISTERSHADERNOMIP = 57;
     private const int CG_R_CLEARSCENE = 40;
     private const int CG_R_ADDREFENTITYTOSCENE = 41;
     private const int CG_R_ADDPOLYTOSCENE = 42;
@@ -73,12 +73,12 @@ public static unsafe class Syscalls
     private const int CG_R_RENDERSCENE = 44;
     private const int CG_R_SETCOLOR = 45;
     private const int CG_R_DRAWSTRETCHPIC = 46;
-    private const int CG_R_REGISTERFONT = 56;
+    private const int CG_R_REGISTERFONT = 59;
     private const int CG_R_REGISTERMODEL = 37;
     private const int CG_S_REGISTERSOUND = 34;
     private const int CG_S_STARTLOCALSOUND = 29;
     private const int CG_ADDCOMMAND = 15;
-    private const int CG_REMOVECOMMAND = 69;
+    private const int CG_REMOVECOMMAND = 72;
     private const int CG_SENDCONSOLECOMMAND = 14;
     private const int CG_SENDCLIENTCOMMAND = 16;
 
