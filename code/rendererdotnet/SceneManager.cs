@@ -911,13 +911,13 @@ public sealed unsafe class SceneManager
         float r = (color & 1) != 0 ? 1.0f : 0.0f;
         float g = (color & 2) != 0 ? 1.0f : 0.0f;
         float b = (color & 4) != 0 ? 1.0f : 0.0f;
-        gl.Uniform4(inst._debugColorLoc, r, g, b, 0.3f);
+        gl.Uniform4(inst._debugColorLoc, r, g, b, 0.15f);
         gl.DrawElements(PrimitiveType.Triangles, (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
 
         // Draw wireframe outline on top (closer to camera)
         gl.DepthRange(0.0, 0.0);
         gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
-        gl.Uniform4(inst._debugColorLoc, 1.0f, 1.0f, 1.0f, 0.5f);
+        gl.Uniform4(inst._debugColorLoc, 1.0f, 1.0f, 1.0f, 0.25f);
         gl.DrawElements(PrimitiveType.Triangles, (uint)(numTris * 3), DrawElementsType.UnsignedInt, null);
         gl.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
         gl.DepthRange(0.0, 1.0);
