@@ -51,4 +51,7 @@ void CG_Mod_EntityEvent( int entityNum, int eventType, int eventParm );
 // Get the currently highlighted entity (-1 if none)
 int CG_Mod_GetHighlightEntity( void );
 
+// Route a server command to the mod host (returns qtrue if handled)
+qboolean CG_Mod_ServerCommand( const char *cmd );
+
 #endif // CG_MOD_H

@@ -25,6 +25,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // be a valid snapshot this frame
 
 #include "cg_local.h"
+#ifndef Q3_VM
+#include "cg_mod.h"
+#endif
 #ifdef MISSIONPACK
 #include "../../ui/menudef.h"
 
@@ -1103,6 +1106,22 @@ static void CG_ServerCommand( void ) {
 		CG_LoadDeferredPlayers();
 		return;
 	}
+
+	// Route tool commands to the mod host
+#ifndef Q3_VM
+	if ( !strcmp( cmd, "toolHit" ) ) {
+		// Build full args string: "entNum classname ox oy oz"
+		int i, argc = trap_Argc();
+		char buf[256];
+		buf[0] = '\0';
+		for ( i = 1; i < argc; i++ ) {
+			if ( i > 1 ) Q_strcat( buf, sizeof(buf), " " );
+			Q_strcat( buf, sizeof(buf), CG_Argv(i) );
+		}
+		CG_Mod_ServerCommand( buf );
+		return;
+	}
+#endif
 
 	// clientLevelShot is sent before taking a special screenshot for
 	// the menu system during development

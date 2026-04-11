@@ -26,4 +26,7 @@ public interface ICGameMod
 
     /// <summary>Called when a game entity event fires (kills, pickups, etc.).</summary>
     void EntityEvent(int entityNum, int eventType, int eventParm);
+
+    /// <summary>Called when a server command is routed to mods (e.g. toolHit).</summary>
+    void ServerCommand(string args) { }
 }

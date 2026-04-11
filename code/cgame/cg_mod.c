@@ -30,6 +30,7 @@ typedef void	(*CgMod_FrameFunc)( int serverTime );
 typedef void	(*CgMod_Draw2DFunc)( void );
 typedef int		(*CgMod_ConsoleCommandFunc)( void );
 typedef void	(*CgMod_EntityEventFunc)( int entityNum, int eventType, int eventParm );
+typedef void	(*CgMod_ServerCommandFunc)( const char *cmd );
 
 static void		*modLib = NULL;
 
@@ -39,6 +40,7 @@ static CgMod_FrameFunc			fn_Frame;
 static CgMod_Draw2DFunc		fn_Draw2D;
 static CgMod_ConsoleCommandFunc	fn_ConsoleCommand;
 static CgMod_EntityEventFunc	fn_EntityEvent;
+static CgMod_ServerCommandFunc	fn_ServerCommand;
 
 // Highlight entity set by the mod
 static int		highlightEntity = -1;
@@ -209,6 +211,7 @@ void CG_Mod_Init( intptr_t (QDECL *syscall)( intptr_t, ... ), int screenWidth, i
 	fn_Draw2D			= (CgMod_Draw2DFunc)MOD_LOADFUNC( modLib, "CgMod_Draw2D" );
 	fn_ConsoleCommand	= (CgMod_ConsoleCommandFunc)MOD_LOADFUNC( modLib, "CgMod_ConsoleCommand" );
 	fn_EntityEvent		= (CgMod_EntityEventFunc)MOD_LOADFUNC( modLib, "CgMod_EntityEvent" );
+	fn_ServerCommand	= (CgMod_ServerCommandFunc)MOD_LOADFUNC( modLib, "CgMod_ServerCommand" );
 
 	if ( !fn_Init ) {
 		CG_Printf( "^1Mod host missing CgMod_Init export\n" );
@@ -256,6 +259,7 @@ void CG_Mod_Shutdown( void ) {
 	fn_Draw2D = NULL;
 	fn_ConsoleCommand = NULL;
 	fn_EntityEvent = NULL;
+	fn_ServerCommand = NULL;
 	highlightEntity = -1;
 }
 
@@ -318,4 +322,21 @@ Returns the entity number the mod wants highlighted, or -1 for none.
 */
 int CG_Mod_GetHighlightEntity( void ) {
 	return highlightEntity;
+}
+
+
+/*
+==================
+CG_Mod_ServerCommand
+
+Route a server command to the .NET mod host.
+Returns qtrue if a mod handled it.
+==================
+*/
+qboolean CG_Mod_ServerCommand( const char *cmd ) {
+	if ( fn_ServerCommand ) {
+		fn_ServerCommand( cmd );
+		return qtrue;
+	}
+	return qfalse;
 }

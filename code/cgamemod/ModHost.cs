@@ -130,6 +130,19 @@ public static unsafe class ModHost
         }
     }
 
+    /// <summary>Called when a server command is routed to the mod host.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "CgMod_ServerCommand")]
+    public static void ServerCommand(nint cmdPtr)
+    {
+        if (!_initialized) return;
+        string args = Marshal.PtrToStringUTF8(cmdPtr) ?? "";
+        foreach (var mod in _mods)
+        {
+            try { mod.ServerCommand(args); }
+            catch { }
+        }
+    }
+
     private static void LoadMods()
     {
         // Built-in mods

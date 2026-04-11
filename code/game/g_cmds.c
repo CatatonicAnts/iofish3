@@ -1703,6 +1703,50 @@ void Cmd_Stats_f( gentity_t *ent ) {
 
 /*
 =================
+Cmd_ToolTrace_f
+
+Server-side trace for the entity picker tool.
+Traces with CONTENTS_TRIGGER so brush entities (jump pads, teleporters) can be hit.
+Sends result back to client as "toolHit entNum classname".
+=================
+*/
+#define CONTENTS_TRIGGER	0x40000000
+#define MASK_TOOL			(MASK_SHOT | CONTENTS_TRIGGER)
+
+static void Cmd_ToolTrace_f( gentity_t *ent ) {
+	char		arg[64];
+	vec3_t		start, end;
+	trace_t		tr;
+
+	if ( trap_Argc() < 7 ) return;
+
+	trap_Argv( 1, arg, sizeof(arg) ); start[0] = atof(arg);
+	trap_Argv( 2, arg, sizeof(arg) ); start[1] = atof(arg);
+	trap_Argv( 3, arg, sizeof(arg) ); start[2] = atof(arg);
+	trap_Argv( 4, arg, sizeof(arg) ); end[0] = atof(arg);
+	trap_Argv( 5, arg, sizeof(arg) ); end[1] = atof(arg);
+	trap_Argv( 6, arg, sizeof(arg) ); end[2] = atof(arg);
+
+	trap_Trace( &tr, start, vec3_origin, vec3_origin, end,
+		ent->s.number, MASK_TOOL );
+
+	if ( tr.entityNum != ENTITYNUM_NONE && tr.entityNum != ENTITYNUM_WORLD
+		&& tr.entityNum < MAX_GENTITIES ) {
+		gentity_t	*hit = &g_entities[tr.entityNum];
+		const char	*cn = hit->classname ? hit->classname : "";
+		trap_SendServerCommand( ent - g_entities,
+			va( "toolHit %d %s %.0f %.0f %.0f",
+				tr.entityNum, cn,
+				hit->r.currentOrigin[0],
+				hit->r.currentOrigin[1],
+				hit->r.currentOrigin[2] ) );
+	} else {
+		trap_SendServerCommand( ent - g_entities, "toolHit -1" );
+	}
+}
+
+/*
+=================
 ClientCommand
 =================
 */
@@ -1815,6 +1859,8 @@ void ClientCommand( int clientNum ) {
 		Cmd_GameCommand_f( ent );
 	else if (Q_stricmp (cmd, "setviewpos") == 0)
 		Cmd_SetViewpos_f( ent );
+	else if (Q_stricmp (cmd, "toolTrace") == 0)
+		Cmd_ToolTrace_f( ent );
 	else if (Q_stricmp (cmd, "stats") == 0)
 		Cmd_Stats_f( ent );
 	else

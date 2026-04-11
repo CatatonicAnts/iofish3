@@ -17,18 +17,20 @@ public class EntityPickerMod : ICGameMod
     // MASK_SHOT = CONTENTS_SOLID | CONTENTS_BODY | CONTENTS_CORPSE
     private const int MASK_SHOT = 0x6000001;
 
-    // CONTENTS_TRIGGER for picking brush entities like jump pads and teleporters
-    private const int CONTENTS_TRIGGER = 0x40000000;
-
-    // Tool trace mask: MASK_SHOT + triggers
-    private const int MASK_TOOL = MASK_SHOT | CONTENTS_TRIGGER;
-
     // Trace range for entity picking
     private const float TRACE_RANGE = 8192f;
+
+    // Throttle server trace requests (milliseconds between requests)
+    private const int TRACE_INTERVAL_MS = 100;
 
     private int _charsetShader;
     private int _whiteShader;
     private int _lastHitEntity = -1;
+    private int _lastTraceTime;
+
+    // Server trace result: entity number and classname from server
+    private int _serverHitEntity = -1;
+    private string _serverHitClassname = "";
 
     public void Init()
     {
@@ -87,12 +89,11 @@ public class EntityPickerMod : ICGameMod
         float endY = oy + fwdY * TRACE_RANGE;
         float endZ = oz + fwdZ * TRACE_RANGE;
 
-        // Trace from view origin along view direction
+        // Client-side trace (hits solids and bodies, not triggers)
         var (fraction, hitX, hitY, hitZ, hitEnt) = CGameApi.DoTrace(
-            ox, oy, oz, endX, endY, endZ, -1, MASK_TOOL);
+            ox, oy, oz, endX, endY, endZ, -1, MASK_SHOT);
 
-        // Also check snapshot entities by proximity to view ray.
-        // Items (weapons, ammo, health) don't have clip models and won't be hit by traces.
+        // Proximity check for items (no clip models) — skip decorative entities
         int bestEnt = -1;
         float bestDist = TRACE_RANGE;
 
@@ -102,28 +103,23 @@ public class EntityPickerMod : ICGameMod
             int entNum = CGameApi.GetSnapshotEntityNum(i);
             if (entNum < 0 || entNum >= 1023) continue;
 
-            // Skip decorative/invisible entities — only pick meaningful types
             int entType = CGameApi.GetEntityType(entNum);
             if (entType == 0 || entType == 10) continue; // ET_GENERAL, ET_INVISIBLE
 
             var (ex, ey, ez) = CGameApi.GetEntityOrigin(entNum);
 
-            // Vector from origin to entity
             float dx = ex - ox;
             float dy = ey - oy;
             float dz = ez - oz;
 
-            // Project onto view direction (dot product)
             float along = dx * fwdX + dy * fwdY + dz * fwdZ;
             if (along < 0 || along > bestDist) continue;
 
-            // Perpendicular distance to ray
             float px = dx - along * fwdX;
             float py = dy - along * fwdY;
             float pz = dz - along * fwdZ;
             float perpDistSq = px * px + py * py + pz * pz;
 
-            // Pick radius — generous for items (32 units)
             if (perpDistSq < 32f * 32f && along < bestDist)
             {
                 bestDist = along;
@@ -131,12 +127,14 @@ public class EntityPickerMod : ICGameMod
             }
         }
 
-        // Prefer proximity pick (handles items without clip models), fall back to trace
+        // Combine: proximity pick > client trace > server trace (for triggers)
         int picked = -1;
         if (bestEnt >= 0)
             picked = bestEnt;
         else if (fraction < 1.0f && hitEnt >= 0 && hitEnt < 1023)
             picked = hitEnt;
+        else if (_serverHitEntity >= 0)
+            picked = _serverHitEntity;
 
         if (picked >= 0)
         {
@@ -153,6 +151,14 @@ public class EntityPickerMod : ICGameMod
                 CGameApi.SetHighlightEntity(-1);
                 _lastHitEntity = -1;
             }
+        }
+
+        // Send throttled server-side trace request (catches triggers/brush entities)
+        if (serverTime - _lastTraceTime >= TRACE_INTERVAL_MS)
+        {
+            _lastTraceTime = serverTime;
+            Syscalls.SendClientCommand(
+                $"toolTrace {ox:F1} {oy:F1} {oz:F1} {endX:F1} {endY:F1} {endZ:F1}");
         }
     }
 
@@ -192,10 +198,14 @@ public class EntityPickerMod : ICGameMod
             string line1 = $"Entity #{_lastHitEntity}  [{typeName}]";
             string line2 = $"Origin: {ex:F0} {ey:F0} {ez:F0}";
             string? line3 = !string.IsNullOrEmpty(modelName) ? $"Model: {GetShortName(modelName)}" : null;
+            // Show server classname for brush entities (triggers, movers)
+            string? lineClass = (_lastHitEntity == _serverHitEntity && !string.IsNullOrEmpty(_serverHitClassname))
+                ? $"Class: {_serverHitClassname}" : null;
             string? line4 = entWeapon > 0 ? $"Weapon: {entWeapon}  Frame: {frame}" : (frame > 0 ? $"Frame: {frame}" : null);
             string? line5 = eFlags != 0 ? $"Flags: 0x{eFlags:X}" : null;
 
             var lines = new System.Collections.Generic.List<string> { line1, line2 };
+            if (lineClass != null) lines.Add(lineClass);
             if (line3 != null) lines.Add(line3);
             if (line4 != null) lines.Add(line4);
             if (line5 != null) lines.Add(line5);
@@ -255,6 +265,28 @@ public class EntityPickerMod : ICGameMod
 
     public void EntityEvent(int entityNum, int eventType, int eventParm)
     {
+    }
+
+    public void ServerCommand(string args)
+    {
+        // Parse "entNum classname ox oy oz" or "-1"
+        if (string.IsNullOrEmpty(args))
+        {
+            _serverHitEntity = -1;
+            _serverHitClassname = "";
+            return;
+        }
+
+        var parts = args.Split(' ', 2);
+        if (parts.Length < 1 || !int.TryParse(parts[0], out int entNum))
+        {
+            _serverHitEntity = -1;
+            _serverHitClassname = "";
+            return;
+        }
+
+        _serverHitEntity = entNum;
+        _serverHitClassname = parts.Length > 1 ? parts[1].Split(' ')[0] : "";
     }
 
     private void DrawString(int x, int y, string text, int charSize)

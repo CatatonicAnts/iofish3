@@ -80,6 +80,7 @@ public static unsafe class Syscalls
     private const int CG_ADDCOMMAND = 15;
     private const int CG_REMOVECOMMAND = 69;
     private const int CG_SENDCONSOLECOMMAND = 14;
+    private const int CG_SENDCLIENTCOMMAND = 16;
 
     // --- Print ---
     public static void Print(string msg)
@@ -180,5 +181,11 @@ public static unsafe class Syscalls
     {
         fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(cmd + '\0'))
             Call(CG_SENDCONSOLECOMMAND, (nint)p);
+    }
+
+    public static void SendClientCommand(string cmd)
+    {
+        fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(cmd + '\0'))
+            Call(CG_SENDCLIENTCOMMAND, (nint)p);
     }
 }
