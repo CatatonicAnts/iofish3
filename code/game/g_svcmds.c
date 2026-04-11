@@ -25,7 +25,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "g_local.h"
 
-
+#ifndef Q3_VM
+#include "g_mod.h"
+#endif
 /*
 ==============================================================================
 
@@ -450,6 +452,13 @@ ConsoleCommand
 */
 qboolean	ConsoleCommand( void ) {
 	char	cmd[MAX_TOKEN_CHARS];
+
+#ifndef Q3_VM
+	// Let .NET mods handle commands first
+	if ( G_Mod_ConsoleCommand() ) {
+		return qtrue;
+	}
+#endif
 
 	trap_Argv( 0, cmd, sizeof( cmd ) );
 

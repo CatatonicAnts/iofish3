@@ -23,6 +23,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "g_local.h"
 
+#ifndef Q3_VM
+#include "g_mod.h"
+#endif
+
 level_locals_t	level;
 
 typedef struct {
@@ -509,6 +513,10 @@ void G_InitGame( int levelTime, int randomSeed, int restart ) {
 	G_RemapTeamShaders();
 
 	trap_SetConfigstring( CS_INTERMISSION, "" );
+
+#ifndef Q3_VM
+	G_Mod_Init( G_GetSyscall() );
+#endif
 }
 
 
@@ -520,6 +528,10 @@ G_ShutdownGame
 */
 void G_ShutdownGame( int restart ) {
 	G_Printf ("==== ShutdownGame ====\n");
+
+#ifndef Q3_VM
+	G_Mod_Shutdown();
+#endif
 
 	if ( level.logFile ) {
 		G_LogPrintf("ShutdownGame:\n" );
@@ -1894,4 +1906,8 @@ void G_RunFrame( int levelTime ) {
 		}
 		trap_Cvar_Set("g_listEntity", "0");
 	}
+
+#ifndef Q3_VM
+	G_Mod_Frame( levelTime );
+#endif
 }

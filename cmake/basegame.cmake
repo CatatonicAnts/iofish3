@@ -68,7 +68,7 @@ set(GAME_SOURCES
     ${SOURCE_DIR}/game/g_weapon.c
 )
 
-set(GAME_BINARY_SOURCES ${SOURCE_DIR}/game/g_syscalls.c)
+set(GAME_BINARY_SOURCES ${SOURCE_DIR}/game/g_syscalls.c ${SOURCE_DIR}/game/g_mod.c)
 set(GAME_QVM_SOURCES ${SOURCE_DIR}/game/g_syscalls.asm)
 
 set(UI_SOURCES

@@ -422,6 +422,7 @@ qboolean	G_SpawnInt( const char *key, const char *defaultString, int *out );
 qboolean	G_SpawnVector( const char *key, const char *defaultString, float *out );
 void		G_SpawnEntitiesFromString( void );
 char *G_NewString( const char *string );
+qboolean G_CallSpawn( gentity_t *ent );
 
 //
 // g_cmds.c
@@ -750,6 +751,10 @@ extern	vmCvar_t	g_localTeamPref;
 
 void	trap_Print( const char *text );
 void	trap_Error( const char *text ) Q_NO_RETURN;
+
+// Expose the syscall pointer for the .NET mod host (g_syscalls.c)
+intptr_t (QDECL *G_GetSyscall( void ))( intptr_t, ... );
+
 int		trap_Milliseconds( void );
 int	trap_RealTime( qtime_t *qtime );
 int		trap_Argc( void );

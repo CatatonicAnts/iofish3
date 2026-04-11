@@ -35,6 +35,11 @@ Q_EXPORT void dllEntry( intptr_t (QDECL *syscallptr)( intptr_t arg,... ) ) {
 	syscall = syscallptr;
 }
 
+// Expose the syscall pointer for the .NET mod host
+intptr_t (QDECL *G_GetSyscall( void ))( intptr_t, ... ) {
+	return syscall;
+}
+
 int PASSFLOAT( float x ) {
 	floatint_t fi;
 	fi.f = x;
