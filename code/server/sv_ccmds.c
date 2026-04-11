@@ -1594,40 +1594,13 @@ static void SV_GenerateAAS_f( void ) {
 	{
 		FILE *f = fopen( bspPath, "rb" );
 		if ( !f ) {
-			// BSP not found as loose file - it may be in a pk3
-			// BSPC can handle pk3 paths, but we need to find which pk3
+			// BSP not found as loose file - use wildcard pk3 path for BSPC
 			Com_Printf( S_COLOR_YELLOW "Warning: BSP not found as loose file at '%s'\n", bspPath );
 			Com_Printf( "Searching pk3 files...\n" );
-
-			// Try common pak files
-			{
-				const char *pakNames[] = { "pak0", "pak1", "pak2", "pak3", "pak4",
-					"pak5", "pak6", "pak7", "pak8", NULL };
-				qboolean found = qfalse;
-				int p;
-
-				for ( p = 0; pakNames[p]; p++ ) {
-					char pakPath[MAX_OSPATH];
-					Com_sprintf( pakPath, sizeof(pakPath), "%s%c%s%c%s.pk3",
-						basepath, PATH_SEP, gamedir, PATH_SEP, pakNames[p] );
-					f = fopen( pakPath, "rb" );
-					if ( f ) {
-						fclose( f );
-						// Use BSPC's pk3 path format: <pk3path>/maps/<mapname>.bsp
-						Com_sprintf( bspPath, sizeof(bspPath),
-							"%s%c%s%c%s.pk3%cmaps%c%s.bsp",
-							basepath, PATH_SEP, gamedir, PATH_SEP,
-							pakNames[p], PATH_SEP, PATH_SEP, mapname );
-						found = qtrue;
-						break;
-					}
-				}
-
-				if ( !found ) {
-					Com_Printf( S_COLOR_RED "Error: Could not find BSP for map '%s'\n", mapname );
-					return;
-				}
-			}
+			Com_sprintf( bspPath, sizeof(bspPath),
+				"%s%c%s%c*.pk3%cmaps%c%s.bsp",
+				basepath, PATH_SEP, gamedir, PATH_SEP,
+				PATH_SEP, PATH_SEP, mapname );
 		} else {
 			fclose( f );
 		}
