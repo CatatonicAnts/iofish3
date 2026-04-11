@@ -167,7 +167,7 @@ public sealed unsafe class SceneManager
         if (reType == RT_MODEL)
         {
             int hModel = *(int*)(entityPtr + 8);
-            if (hModel <= 0) return;
+            if (hModel <= 0 && (renderfx & RF_HIGHLIGHT) == 0) return;
 
             var entity = new SceneEntity
             {
@@ -185,6 +185,11 @@ public sealed unsafe class SceneManager
             entity.OriginX = origin[0];
             entity.OriginY = origin[1];
             entity.OriginZ = origin[2];
+
+            float* oldorigin = (float*)(entityPtr + 84);
+            entity.OldOriginX = oldorigin[0];
+            entity.OldOriginY = oldorigin[1];
+            entity.OldOriginZ = oldorigin[2];
 
             // Read lightingOrigin for RF_LIGHTING_ORIGIN
             float* lightOrigin = (float*)(entityPtr + 12);

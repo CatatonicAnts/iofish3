@@ -178,8 +178,6 @@ public class EntityPickerMod : ICGameMod
 
             // Spatial
             lines.Add(($"Origin: {info.OriginX:F0} {info.OriginY:F0} {info.OriginZ:F0}", 0xE6E6E6));
-            lines.Add(($"AABB min: {info.AbsMinX:F0} {info.AbsMinY:F0} {info.AbsMinZ:F0}", 0xBBBBBB));
-            lines.Add(($"AABB max: {info.AbsMaxX:F0} {info.AbsMaxY:F0} {info.AbsMaxZ:F0}", 0xBBBBBB));
 
             // Movement direction (for jump pads, movers)
             if (info.MoveDirX != 0 || info.MoveDirY != 0 || info.MoveDirZ != 0)
