@@ -511,7 +511,10 @@ int BotExportTest(int parm0, char *parm1, vec3_t parm2, vec3_t parm3)
 	*/
 	AAS_ClearShownPolygons();
 	AAS_ClearShownDebugLines();
-	AAS_ShowAreaPolygons(newarea, 1, parm0 & 4);
+	// Show all AAS area polygons, not just the current one
+	for (i = 1; i < aasworld.numareas; i++) {
+		AAS_ShowAreaPolygons(i, 1, parm0 & 4);
+	}
 	if (parm0 & 2) AAS_ShowReachableAreas(area);
 	else
 	{
