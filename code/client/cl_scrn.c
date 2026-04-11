@@ -57,30 +57,22 @@ Adjusted for resolution and screen aspect ratio
 ================
 */
 void SCR_AdjustFrom640( float *x, float *y, float *w, float *h ) {
-	float	xscale;
-	float	yscale;
+	// Uniform scale based on height prevents widescreen stretching.
+	// The 640-wide virtual area is centered horizontally.
+	float	scale = cls.glconfig.vidHeight / 480.0;
+	float	xoffs = ( cls.glconfig.vidWidth - 640.0 * scale ) * 0.5;
 
-#if 0
-		// adjust for wide screens
-		if ( cls.glconfig.vidWidth * 480 > cls.glconfig.vidHeight * 640 ) {
-			*x += 0.5 * ( cls.glconfig.vidWidth - ( cls.glconfig.vidHeight * 640 / 480 ) );
-		}
-#endif
-
-	// scale for screen sizes
-	xscale = cls.glconfig.vidWidth / 640.0;
-	yscale = cls.glconfig.vidHeight / 480.0;
 	if ( x ) {
-		*x *= xscale;
+		*x = *x * scale + xoffs;
 	}
 	if ( y ) {
-		*y *= yscale;
+		*y *= scale;
 	}
 	if ( w ) {
-		*w *= xscale;
+		*w *= scale;
 	}
 	if ( h ) {
-		*h *= yscale;
+		*h *= scale;
 	}
 }
 

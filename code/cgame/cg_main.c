@@ -1902,8 +1902,12 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 
 	// get the rendering configuration from the client system
 	trap_GetGlconfig( &cgs.glconfig );
-	cgs.screenXScale = cgs.glconfig.vidWidth / 640.0;
+	// Use uniform scale (based on height) to prevent widescreen stretching.
+	// The horizontal bias centers the 640-wide virtual area on screen.
 	cgs.screenYScale = cgs.glconfig.vidHeight / 480.0;
+	cgs.screenXScale = cgs.screenYScale;
+	cgs.screenXBias = ( cgs.glconfig.vidWidth - 640.0 * cgs.screenXScale ) * 0.5;
+	cgs.screenYBias = 0;
 
 	// get the gamestate from the client system
 	trap_GetGameState( &cgs.gameState );
