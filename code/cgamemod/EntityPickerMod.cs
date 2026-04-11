@@ -85,19 +85,20 @@ public class EntityPickerMod : ICGameMod
         var (fraction, hitX, hitY, hitZ, hitEnt) = CGameApi.DoTrace(
             ox, oy, oz, endX, endY, endZ, -1, MASK_SHOT);
 
-        // Trace hit distance (for comparing with proximity picks)
-        float traceDist = fraction < 1.0f ? fraction * TRACE_RANGE : TRACE_RANGE;
-
         // Also check snapshot entities by proximity to view ray.
         // Items (weapons, ammo, health) don't have clip models and won't be hit by traces.
         int bestEnt = -1;
-        float bestDist = traceDist; // don't pick entities behind solid walls
+        float bestDist = TRACE_RANGE;
 
         int snapCount = CGameApi.GetSnapshotEntityCount();
         for (int i = 0; i < snapCount; i++)
         {
             int entNum = CGameApi.GetSnapshotEntityNum(i);
             if (entNum < 0 || entNum >= 1023) continue;
+
+            // Skip decorative/invisible entities — only pick meaningful types
+            int entType = CGameApi.GetEntityType(entNum);
+            if (entType == 0 || entType == 10) continue; // ET_GENERAL, ET_INVISIBLE
 
             var (ex, ey, ez) = CGameApi.GetEntityOrigin(entNum);
 
@@ -124,12 +125,12 @@ public class EntityPickerMod : ICGameMod
             }
         }
 
-        // Prefer trace hit entity if it's a real entity, otherwise use proximity pick
+        // Prefer proximity pick (handles items without clip models), fall back to trace
         int picked = -1;
-        if (fraction < 1.0f && hitEnt >= 0 && hitEnt < 1023)
-            picked = hitEnt;
-        else if (bestEnt >= 0)
+        if (bestEnt >= 0)
             picked = bestEnt;
+        else if (fraction < 1.0f && hitEnt >= 0 && hitEnt < 1023)
+            picked = hitEnt;
 
         if (picked >= 0)
         {
