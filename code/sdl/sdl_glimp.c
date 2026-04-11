@@ -53,6 +53,8 @@ cvar_t *r_allowResize; // make window resizable
 cvar_t *r_centerWindow;
 cvar_t *r_sdlDriver;
 cvar_t *r_preferOpenGLES;
+cvar_t *r_windowX;
+cvar_t *r_windowY;
 
 int qglMajorVersion, qglMinorVersion;
 int qglesMajorVersion, qglesMinorVersion;
@@ -88,6 +90,15 @@ GLimp_Shutdown
 */
 void GLimp_Shutdown( void )
 {
+	// Save window position before shutdown
+	if( SDL_window != NULL )
+	{
+		int x, y;
+		SDL_GetWindowPosition( SDL_window, &x, &y );
+		ri.Cvar_Set( "r_windowX", va( "%d", x ) );
+		ri.Cvar_Set( "r_windowY", va( "%d", y ) );
+	}
+
 	ri.IN_Shutdown();
 
 	SDL_QuitSubSystem( SDL_INIT_VIDEO );
@@ -489,6 +500,11 @@ static int GLimp_SetMode(int mode, qboolean fullscreen, qboolean noborder, qbool
 		x = ( desktopMode.w / 2 ) - ( glConfig.vidWidth / 2 );
 		y = ( desktopMode.h / 2 ) - ( glConfig.vidHeight / 2 );
 	}
+	else if( !fullscreen && r_windowX->integer >= 0 && r_windowY->integer >= 0 )
+	{
+		x = r_windowX->integer;
+		y = r_windowY->integer;
+	}
 
 	// Destroy existing state if it exists
 	if( SDL_glContext != NULL )
@@ -502,6 +518,8 @@ static int GLimp_SetMode(int mode, qboolean fullscreen, qboolean noborder, qbool
 	{
 		SDL_GetWindowPosition( SDL_window, &x, &y );
 		ri.Printf( PRINT_DEVELOPER, "Existing window at %dx%d before being destroyed\n", x, y );
+		ri.Cvar_Set( "r_windowX", va( "%d", x ) );
+		ri.Cvar_Set( "r_windowY", va( "%d", y ) );
 		SDL_DestroyWindow( SDL_window );
 		SDL_window = NULL;
 	}
@@ -1084,6 +1102,8 @@ void GLimp_Init( qboolean fixedFunction )
 	r_allowResize = ri.Cvar_Get( "r_allowResize", "1", CVAR_ARCHIVE | CVAR_LATCH );
 	r_centerWindow = ri.Cvar_Get( "r_centerWindow", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_preferOpenGLES = ri.Cvar_Get( "r_preferOpenGLES", "-1", CVAR_ARCHIVE | CVAR_LATCH );
+	r_windowX = ri.Cvar_Get( "r_windowX", "-1", CVAR_ARCHIVE );
+	r_windowY = ri.Cvar_Get( "r_windowY", "-1", CVAR_ARCHIVE );
 
 	if( ri.Cvar_VariableIntegerValue( "com_abnormalExit" ) )
 	{

@@ -172,6 +172,22 @@ public static unsafe class EngineImports
     }
 
     /// <summary>
+    /// Set a cvar's string value.
+    /// </summary>
+    public static void Cvar_Set(string name, string value)
+    {
+        if (!_initialized || _ri.Cvar_Set == 0)
+            return;
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name + "\0");
+        byte[] valBytes = Encoding.UTF8.GetBytes(value + "\0");
+        fixed (byte* namePtr = nameBytes)
+        fixed (byte* valPtr = valBytes)
+        {
+            ((delegate* unmanaged[Cdecl]<byte*, byte*, void>)_ri.Cvar_Set)(namePtr, valPtr);
+        }
+    }
+
+    /// <summary>
     /// Add a console command handler.
     /// </summary>
     public static void Cmd_AddCommand(string name, delegate* unmanaged[Cdecl]<void> handler)

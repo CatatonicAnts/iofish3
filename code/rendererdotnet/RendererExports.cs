@@ -115,6 +115,15 @@ public static unsafe class RendererExports
 
         if (destroyWindow != 0)
         {
+            // Save window position before destroying
+            if (_sdl != null && _window != null)
+            {
+                int wx = 0, wy = 0;
+                _sdl.GetWindowPosition(_window, ref wx, ref wy);
+                EngineImports.Cvar_Set("r_windowX", wx.ToString());
+                EngineImports.Cvar_Set("r_windowY", wy.ToString());
+            }
+
             _gl?.Dispose();
             _gl = null;
 
@@ -140,6 +149,8 @@ public static unsafe class RendererExports
         EngineImports.Cvar_Get("r_customwidth", "1280", 0x01 | 0x02);  // ARCHIVE | LATCH
         EngineImports.Cvar_Get("r_customheight", "720", 0x01 | 0x02);
         EngineImports.Cvar_Get("r_mode", "-1", 0x01 | 0x02);
+        EngineImports.Cvar_Get("r_windowX", "-1", 0x01);  // CVAR_ARCHIVE
+        EngineImports.Cvar_Get("r_windowY", "-1", 0x01);  // CVAR_ARCHIVE
         int rMode = EngineImports.Cvar_VariableIntegerValue("r_mode");
         if (rMode == -1)
         {
@@ -182,6 +193,17 @@ public static unsafe class RendererExports
                 Sdl.WindowposCentered, Sdl.WindowposCentered,
                 _currentWidth, _currentHeight,
                 (uint)(WindowFlags.Opengl | WindowFlags.Shown | WindowFlags.Resizable));
+
+            if (_window != null)
+            {
+                // Restore saved window position if available
+                int savedX = EngineImports.Cvar_VariableIntegerValue("r_windowX");
+                int savedY = EngineImports.Cvar_VariableIntegerValue("r_windowY");
+                if (savedX >= 0 && savedY >= 0)
+                {
+                    _sdl.SetWindowPosition(_window, savedX, savedY);
+                }
+            }
 
             if (_window == null)
             {
