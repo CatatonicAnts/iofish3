@@ -22,7 +22,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
 // cg_main.c -- initialization and primary entry point for cgame
 #include "cg_local.h"
+#ifndef Q3_VM
 #include "cg_mod.h"
+#endif
 
 #ifdef MISSIONPACK
 #include "../ui/ui_shared.h"
@@ -1970,7 +1972,9 @@ void CG_Init( int serverMessageNum, int serverCommandSequence, int clientNum ) {
 	trap_S_ClearLoopingSounds( qtrue );
 
 	// Initialize .NET mod host
+#ifndef Q3_VM
 	CG_Mod_Init( CG_GetSyscall(), cgs.glconfig.vidWidth, cgs.glconfig.vidHeight );
+#endif
 }
 
 /*
@@ -1981,7 +1985,9 @@ Called before every level change or subsystem restart
 =================
 */
 void CG_Shutdown( void ) {
+#ifndef Q3_VM
 	CG_Mod_Shutdown();
+#endif
 }
 
 

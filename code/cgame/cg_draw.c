@@ -24,7 +24,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // active (after loading) gameplay
 
 #include "cg_local.h"
+#ifndef Q3_VM
 #include "cg_mod.h"
+#endif
 
 #ifdef MISSIONPACK
 #include "../ui/ui_shared.h"
@@ -2664,7 +2666,9 @@ static void CG_Draw2D(stereoFrame_t stereoFrame)
 	}
 
 	// .NET mod overlay
+#ifndef Q3_VM
 	CG_Mod_Draw2D();
+#endif
 
 restore:
 	// restore original screen scale/bias

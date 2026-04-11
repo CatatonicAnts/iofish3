@@ -23,7 +23,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // cg_view.c -- setup all the parameters (position, angle, etc)
 // for a 3D rendering
 #include "cg_local.h"
+#ifndef Q3_VM
 #include "cg_mod.h"
+#endif
 
 
 /*
@@ -887,7 +889,9 @@ void CG_DrawActiveFrame( int serverTime, stereoFrame_t stereoView, qboolean demo
 	}
 
 	// .NET mod frame update
+#ifndef Q3_VM
 	CG_Mod_Frame( serverTime );
+#endif
 
 	// actually issue the rendering calls
 	CG_DrawActive( stereoView );
