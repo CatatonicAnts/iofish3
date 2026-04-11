@@ -376,11 +376,12 @@ public class EntityPickerMod : ICGameMod
         }
 
         int panelH = visLines.Count * LINE_H + 8;
-        int panelX = (screenWidth - maxW) / 2 - 8;
-        int panelY = screenHeight / 2 - panelH / 2;
+        int panelW = maxW + 16;
+        int panelX = screenWidth - panelW - 20;
+        int panelY = 20;
 
         Syscalls.R_SetColor(0f, 0f, 0.1f, 0.8f);
-        Syscalls.R_DrawStretchPic(panelX, panelY, maxW + 16, panelH,
+        Syscalls.R_DrawStretchPic(panelX, panelY, panelW, panelH,
             0, 0, 1, 1, _whiteShader);
 
         int lineY = panelY + 4;
