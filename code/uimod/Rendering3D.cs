@@ -83,27 +83,50 @@ public unsafe class PlayerModel
 
     public void Load(string modelName, string skinName = "default")
     {
-        _modelName = modelName;
-        _skinName = skinName;
-
         string bp = $"models/players/{modelName}";
-        _legsModel  = Syscalls.R_RegisterModel($"{bp}/lower.md3");
-        _torsoModel = Syscalls.R_RegisterModel($"{bp}/upper.md3");
-        _headModel  = Syscalls.R_RegisterModel($"{bp}/head.md3");
+        int newLegs  = Syscalls.R_RegisterModel($"{bp}/lower.md3");
+        int newTorso = Syscalls.R_RegisterModel($"{bp}/upper.md3");
+        int newHead  = Syscalls.R_RegisterModel($"{bp}/head.md3");
 
-        _legsSkin  = Syscalls.R_RegisterSkin($"{bp}/lower_{skinName}.skin");
-        _torsoSkin = Syscalls.R_RegisterSkin($"{bp}/upper_{skinName}.skin");
-        _headSkin  = Syscalls.R_RegisterSkin($"{bp}/head_{skinName}.skin");
+        if (newLegs == 0 || newTorso == 0 || newHead == 0)
+        {
+            Syscalls.Print($"[UIMOD] Model '{modelName}' failed: legs={newLegs} torso={newTorso} head={newHead}\n");
+            return; // keep current model
+        }
+
+        _modelName = modelName;
+        _legsModel  = newLegs;
+        _torsoModel = newTorso;
+        _headModel  = newHead;
+
+        LoadSkins(skinName);
     }
 
     public void SetSkin(string skinName)
     {
         if (_skinName == skinName) return;
+        LoadSkins(skinName);
+    }
+
+    private void LoadSkins(string skinName)
+    {
         _skinName = skinName;
         string bp = $"models/players/{_modelName}";
-        _legsSkin  = Syscalls.R_RegisterSkin($"{bp}/lower_{skinName}.skin");
-        _torsoSkin = Syscalls.R_RegisterSkin($"{bp}/upper_{skinName}.skin");
-        _headSkin  = Syscalls.R_RegisterSkin($"{bp}/head_{skinName}.skin");
+
+        // Try skinName-suffixed path first, then bare path as fallback
+        _legsSkin  = RegisterSkinWithFallback(bp, "lower", skinName);
+        _torsoSkin = RegisterSkinWithFallback(bp, "upper", skinName);
+        _headSkin  = RegisterSkinWithFallback(bp, "head", skinName);
+
+        Syscalls.Print($"[UIMOD] Skins for {_modelName}/{skinName}: legs={_legsSkin} torso={_torsoSkin} head={_headSkin}\n");
+    }
+
+    private static int RegisterSkinWithFallback(string basePath, string part, string skinName)
+    {
+        int h = Syscalls.R_RegisterSkin($"{basePath}/{part}_{skinName}.skin");
+        if (h != 0) return h;
+        // Fallback: try without skin name suffix
+        return Syscalls.R_RegisterSkin($"{basePath}/{part}.skin");
     }
 
     /// <summary>
@@ -151,6 +174,8 @@ public unsafe class PlayerModel
         legs.HModel = _legsModel;
         legs.CustomSkin = _legsSkin;
         legs.RenderFx = renderfx;
+        legs.ShaderRGBA[0] = 255; legs.ShaderRGBA[1] = 255;
+        legs.ShaderRGBA[2] = 255; legs.ShaderRGBA[3] = 255;
         SetVec3(legs.Origin, distance, 0, originZ);
         SetVec3(legs.OldOrigin, distance, 0, originZ);
         SetVec3(legs.LightingOrigin, distance, 0, originZ);
@@ -163,6 +188,8 @@ public unsafe class PlayerModel
         torso.HModel = _torsoModel;
         torso.CustomSkin = _torsoSkin;
         torso.RenderFx = renderfx;
+        torso.ShaderRGBA[0] = 255; torso.ShaderRGBA[1] = 255;
+        torso.ShaderRGBA[2] = 255; torso.ShaderRGBA[3] = 255;
         SetVec3(torso.LightingOrigin, distance, 0, originZ);
         SetIdentityAxis(torso.Axis);
 
@@ -174,6 +201,8 @@ public unsafe class PlayerModel
         head.HModel = _headModel;
         head.CustomSkin = _headSkin;
         head.RenderFx = renderfx;
+        head.ShaderRGBA[0] = 255; head.ShaderRGBA[1] = 255;
+        head.ShaderRGBA[2] = 255; head.ShaderRGBA[3] = 255;
         SetVec3(head.LightingOrigin, distance, 0, originZ);
         SetIdentityAxis(head.Axis);
 
@@ -259,20 +288,30 @@ public unsafe class PlayerModel
     public static string[] DiscoverModels()
     {
         string[] dirs = Syscalls.FS_GetFileList("models/players", "/");
+        Syscalls.Print($"[UIMOD] FS_GetFileList found {dirs.Length} player dirs\n");
+
         if (dirs.Length == 0)
-            return ["sarge", "grunt", "major", "visor", "slash", "razor",
-                    "keel", "lucy", "tankjr", "bitterman", "xaero", "uriel",
-                    "hunter", "klesk", "anarki", "orbb", "bones", "crash",
-                    "doom", "mynx", "patriot", "ranger", "sorlag", "stripe"];
+            return FallbackModels;
 
         var valid = new System.Collections.Generic.List<string>();
         foreach (var d in dirs)
         {
             if (string.IsNullOrEmpty(d) || d == "." || d == "..") continue;
-            valid.Add(d);
+            // Verify the model actually has required files by trying to register
+            int test = Syscalls.R_RegisterModel($"models/players/{d}/lower.md3");
+            if (test != 0)
+                valid.Add(d);
         }
-        return valid.Count > 0 ? valid.ToArray() : ["sarge"];
+
+        Syscalls.Print($"[UIMOD] Valid player models: {valid.Count}\n");
+        return valid.Count > 0 ? valid.ToArray() : FallbackModels;
     }
+
+    private static readonly string[] FallbackModels =
+        ["sarge", "grunt", "major", "visor", "slash", "razor",
+         "keel", "lucy", "tankjr", "bitterman", "xaero", "uriel",
+         "hunter", "klesk", "anarki", "orbb", "bones", "crash",
+         "doom", "mynx", "patriot", "ranger", "sorlag", "stripe"];
 
     public static string[] DiscoverSkins(string modelName)
     {

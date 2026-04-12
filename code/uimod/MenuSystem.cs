@@ -32,6 +32,20 @@ public abstract class MenuScreen
 
     public virtual bool HandleKey(int key, int realtime)
     {
+        if (CursorIndex < 0 || CursorIndex >= Widgets.Count)
+        {
+            if (key == Keys.K_ESCAPE || key == Keys.K_MOUSE2) { System.Pop(); return true; }
+            return true;
+        }
+
+        var widget = Widgets[CursorIndex];
+
+        // Let the focused widget try to handle the key first (important for
+        // text input ESC-to-stop-editing, backspace, arrow-cursor-move, etc.)
+        if (widget.HandleKey(key))
+            return true;
+
+        // Widget didn't consume it — screen-level handling
         switch (key)
         {
             case Keys.K_ESCAPE or Keys.K_MOUSE2:
@@ -46,25 +60,14 @@ public abstract class MenuScreen
                 MoveCursor(1);
                 return true;
 
-            case Keys.K_LEFTARROW or Keys.K_KP_LEFTARROW:
-                if (CursorIndex >= 0 && CursorIndex < Widgets.Count)
-                    Widgets[CursorIndex].HandleKey(key);
-                return true;
-
-            case Keys.K_RIGHTARROW or Keys.K_KP_RIGHTARROW:
-                if (CursorIndex >= 0 && CursorIndex < Widgets.Count)
-                    Widgets[CursorIndex].HandleKey(key);
-                return true;
-
             case Keys.K_ENTER or Keys.K_KP_ENTER or Keys.K_MOUSE1:
-                if (CursorIndex >= 0 && CursorIndex < Widgets.Count)
-                    Widgets[CursorIndex].Activate();
+                widget.Activate();
                 return true;
         }
 
-        // Pass to focused widget for text input
-        if (CursorIndex >= 0 && CursorIndex < Widgets.Count)
-            return Widgets[CursorIndex].HandleKey(key);
+        // Try as character input (printable ASCII)
+        if (key >= 32 && key < 127)
+            return widget.HandleChar(key);
 
         return true;
     }
