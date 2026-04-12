@@ -2,7 +2,8 @@ namespace UiMod;
 
 /// <summary>
 /// In-game escape menu (UIMENU_INGAME). Semi-transparent overlay with
-/// Resume, Add Bot, Disconnect, Quit. Pauses the game while open.
+/// Resume, Add Bot, Remove Bot, Team, Console, Disconnect, Quit.
+/// Pauses the game while open.
 /// </summary>
 public class InGameMenuMod : IUiMod
 {
@@ -11,20 +12,7 @@ public class InGameMenuMod : IUiMod
     private const int UIMENU_NONE = 0;
     private const int UIMENU_INGAME = 2;
     private const int KEYCATCH_UI = 0x0002;
-    private const int CHAN_LOCAL_SOUND = 1;
 
-    // Key codes
-    private const int K_ENTER = 13;
-    private const int K_ESCAPE = 27;
-    private const int K_UPARROW = 132;
-    private const int K_DOWNARROW = 133;
-    private const int K_KP_UPARROW = 161;
-    private const int K_KP_DOWNARROW = 167;
-    private const int K_KP_ENTER = 169;
-    private const int K_MOUSE1 = 178;
-    private const int K_MOUSE2 = 179;
-
-    // State
     private bool _active;
     private int _cursor;
     private float _cursorX = 320f;
@@ -34,32 +22,42 @@ public class InGameMenuMod : IUiMod
     private enum ConfirmMode { None, Disconnect, Quit }
     private ConfirmMode _confirm;
 
-    // Shaders & sounds
+    private enum SubMenu { None, AddBot, RemoveBot }
+    private SubMenu _subMenu;
+
     private int _cursorShader;
     private int _sfxMove;
     private int _sfxSelect;
     private int _sfxBack;
 
-    // Menu items
     private static readonly string[] Items =
-    {
+    [
         "RESUME",
         "ADD BOT",
+        "REMOVE BOT",
+        "RESTART MAP",
         "CONSOLE",
         "DISCONNECT",
         "QUIT",
-    };
+    ];
+
+    private static readonly string[] BotNames =
+        ["sarge", "grunt", "major", "visor", "slash", "razor",
+         "keel", "lucy", "tankjr", "bitterman", "xaero", "uriel"];
+    private static readonly string[] BotSkills = ["1", "2", "3", "4", "5"];
+    private int _botNameIdx;
+    private int _botSkillIdx = 2;
 
     // Layout
     private const float PANEL_W = 300f;
-    private const float PANEL_H = 250f;
+    private const float PANEL_H = 310f;
     private const float PANEL_X = (Drawing.SCREEN_W - PANEL_W) * 0.5f;
     private const float PANEL_Y = (Drawing.SCREEN_H - PANEL_H) * 0.5f;
     private const float TITLE_Y = PANEL_Y + 14f;
     private const float ITEM_START_Y = PANEL_Y + 50f;
-    private const float ITEM_SPACING = 34f;
-    private const float ITEM_CHAR_W = 12f;
-    private const float ITEM_CHAR_H = 12f;
+    private const float ITEM_SPACING = 30f;
+    private const float ITEM_CHAR_W = 11f;
+    private const float ITEM_CHAR_H = 11f;
     private const float BAR_W = 240f;
 
     public void Init()
@@ -79,6 +77,7 @@ public class InGameMenuMod : IUiMod
             _active = true;
             _cursor = 0;
             _confirm = ConfirmMode.None;
+            _subMenu = SubMenu.None;
             _cursorX = 320f;
             _cursorY = 240f;
 
@@ -88,7 +87,7 @@ public class InGameMenuMod : IUiMod
         }
 
         if (menu == UIMENU_NONE && _active) CloseMenu();
-        if (_active) { _active = false; _confirm = ConfirmMode.None; }
+        if (_active) { _active = false; _confirm = ConfirmMode.None; _subMenu = SubMenu.None; }
         return false;
     }
 
@@ -104,8 +103,6 @@ public class InGameMenuMod : IUiMod
         // Panel background
         Drawing.SetColor(0.04f, 0.04f, 0.08f, 0.9f);
         Drawing.FillRect(PANEL_X, PANEL_Y, PANEL_W, PANEL_H);
-
-        // Panel border
         DrawBorder(PANEL_X, PANEL_Y, PANEL_W, PANEL_H, 0.5f, 0.15f, 0.0f, 0.45f);
 
         // Title
@@ -114,16 +111,18 @@ public class InGameMenuMod : IUiMod
         Drawing.SetColor(0.85f, 0.35f, 0.0f, 1.0f);
         DrawCentered(TITLE_Y, "GAME MENU", 12f, 12f);
 
-        // Separator line
+        // Separator
         Drawing.SetColor(0.4f, 0.12f, 0.0f, 0.35f);
         Drawing.FillRect(PANEL_X + 20, PANEL_Y + 36, PANEL_W - 40, 1);
 
         if (_confirm != ConfirmMode.None)
             DrawConfirm();
+        else if (_subMenu != SubMenu.None)
+            DrawSubMenu();
         else
             DrawItems();
 
-        // Cursor (centered: Q3 draws 32x32 cursor offset by -16,-16)
+        // Cursor
         Drawing.ClearColor();
         if (_cursorShader != 0)
             Drawing.DrawPic(_cursorX - 16, _cursorY - 16, 32, 32, _cursorShader);
@@ -176,30 +175,75 @@ public class InGameMenuMod : IUiMod
         DrawCentered(yNo, "NO", 14f, 14f);
     }
 
+    private void DrawSubMenu()
+    {
+        if (_subMenu == SubMenu.AddBot)
+        {
+            Drawing.SetColor(1f, 1f, 1f, 1f);
+            DrawCentered(ITEM_START_Y, "ADD BOT", 12f, 12f);
+
+            float y = ITEM_START_Y + 30;
+            Drawing.SetColor(_cursor == 0 ? 1f : 0.5f, _cursor == 0 ? 0.8f : 0.3f, 0f, 1f);
+            DrawCentered(y, $"Bot: {BotNames[_botNameIdx]}  < >", 10f, 11f);
+
+            y += 26;
+            Drawing.SetColor(_cursor == 1 ? 1f : 0.5f, _cursor == 1 ? 0.8f : 0.3f, 0f, 1f);
+            DrawCentered(y, $"Skill: {BotSkills[_botSkillIdx]}  < >", 10f, 11f);
+
+            y += 34;
+            float pulse = 0.7f + 0.3f * MathF.Sin(_realtime * 0.004f);
+            Drawing.SetColor(_cursor == 2 ? 1f : 0.5f, _cursor == 2 ? pulse : 0.3f, 0f, 1f);
+            DrawCentered(y, "ADD", 12f, 12f);
+
+            y += 26;
+            Drawing.SetColor(_cursor == 3 ? 1f : 0.5f, _cursor == 3 ? pulse : 0.3f, 0f, 1f);
+            DrawCentered(y, "BACK", 10f, 11f);
+        }
+        else if (_subMenu == SubMenu.RemoveBot)
+        {
+            Drawing.SetColor(1f, 1f, 1f, 1f);
+            DrawCentered(ITEM_START_Y, "REMOVE BOT", 12f, 12f);
+
+            float y = ITEM_START_Y + 30;
+            Drawing.SetColor(_cursor == 0 ? 1f : 0.5f, _cursor == 0 ? 0.8f : 0.3f, 0f, 1f);
+            DrawCentered(y, $"Bot: {BotNames[_botNameIdx]}  < >", 10f, 11f);
+
+            y += 34;
+            float pulse = 0.7f + 0.3f * MathF.Sin(_realtime * 0.004f);
+            Drawing.SetColor(_cursor == 1 ? 1f : 0.5f, _cursor == 1 ? pulse : 0.3f, 0f, 1f);
+            DrawCentered(y, "REMOVE", 12f, 12f);
+
+            y += 26;
+            Drawing.SetColor(_cursor == 2 ? 1f : 0.5f, _cursor == 2 ? pulse : 0.3f, 0f, 1f);
+            DrawCentered(y, "BACK", 10f, 11f);
+        }
+    }
+
     public bool KeyEvent(int key, int down)
     {
         if (!_active) return false;
         if (down == 0) return true;
 
         if (_confirm != ConfirmMode.None) return HandleConfirmKey(key);
+        if (_subMenu != SubMenu.None) return HandleSubMenuKey(key);
 
         switch (key)
         {
-            case K_ESCAPE or K_MOUSE2:
+            case Keys.K_ESCAPE or Keys.K_MOUSE2:
                 CloseMenu();
                 return true;
 
-            case K_UPARROW or K_KP_UPARROW:
+            case Keys.K_UPARROW or Keys.K_KP_UPARROW:
                 _cursor = (_cursor - 1 + Items.Length) % Items.Length;
                 PlaySound(_sfxMove);
                 return true;
 
-            case K_DOWNARROW or K_KP_DOWNARROW:
+            case Keys.K_DOWNARROW or Keys.K_KP_DOWNARROW:
                 _cursor = (_cursor + 1) % Items.Length;
                 PlaySound(_sfxMove);
                 return true;
 
-            case K_ENTER or K_KP_ENTER or K_MOUSE1:
+            case Keys.K_ENTER or Keys.K_KP_ENTER or Keys.K_MOUSE1:
                 ActivateItem(_cursor);
                 return true;
         }
@@ -211,13 +255,13 @@ public class InGameMenuMod : IUiMod
     {
         switch (key)
         {
-            case K_UPARROW or K_KP_UPARROW or K_DOWNARROW or K_KP_DOWNARROW:
+            case Keys.K_UPARROW or Keys.K_KP_UPARROW or Keys.K_DOWNARROW or Keys.K_KP_DOWNARROW:
                 _cursor = _cursor == 0 ? 1 : 0;
                 PlaySound(_sfxMove);
                 return true;
 
-            case K_ENTER or K_KP_ENTER or K_MOUSE1:
-                if (_cursor == 0) // YES
+            case Keys.K_ENTER or Keys.K_KP_ENTER or Keys.K_MOUSE1:
+                if (_cursor == 0)
                 {
                     if (_confirm == ConfirmMode.Quit)
                         Syscalls.ExecuteCommand("quit\n");
@@ -236,11 +280,100 @@ public class InGameMenuMod : IUiMod
                 }
                 return true;
 
-            case K_ESCAPE or K_MOUSE2:
+            case Keys.K_ESCAPE or Keys.K_MOUSE2:
                 _confirm = ConfirmMode.None;
                 _cursor = 0;
                 PlaySound(_sfxBack);
                 return true;
+        }
+        return true;
+    }
+
+    private bool HandleSubMenuKey(int key)
+    {
+        if (_subMenu == SubMenu.AddBot)
+        {
+            int maxItems = 4;
+            switch (key)
+            {
+                case Keys.K_UPARROW or Keys.K_KP_UPARROW:
+                    _cursor = (_cursor - 1 + maxItems) % maxItems;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_DOWNARROW or Keys.K_KP_DOWNARROW:
+                    _cursor = (_cursor + 1) % maxItems;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_LEFTARROW or Keys.K_KP_LEFTARROW:
+                    if (_cursor == 0) _botNameIdx = (_botNameIdx - 1 + BotNames.Length) % BotNames.Length;
+                    else if (_cursor == 1) _botSkillIdx = (_botSkillIdx - 1 + BotSkills.Length) % BotSkills.Length;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_RIGHTARROW or Keys.K_KP_RIGHTARROW:
+                    if (_cursor == 0) _botNameIdx = (_botNameIdx + 1) % BotNames.Length;
+                    else if (_cursor == 1) _botSkillIdx = (_botSkillIdx + 1) % BotSkills.Length;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_ENTER or Keys.K_KP_ENTER or Keys.K_MOUSE1:
+                    if (_cursor == 2) // ADD
+                    {
+                        Syscalls.ExecuteCommand($"addbot {BotNames[_botNameIdx]} {BotSkills[_botSkillIdx]}\n");
+                        PlaySound(_sfxSelect);
+                    }
+                    else if (_cursor == 3) // BACK
+                    {
+                        _subMenu = SubMenu.None;
+                        _cursor = 1;
+                        PlaySound(_sfxBack);
+                    }
+                    return true;
+                case Keys.K_ESCAPE or Keys.K_MOUSE2:
+                    _subMenu = SubMenu.None;
+                    _cursor = 1;
+                    PlaySound(_sfxBack);
+                    return true;
+            }
+        }
+        else if (_subMenu == SubMenu.RemoveBot)
+        {
+            int maxItems = 3;
+            switch (key)
+            {
+                case Keys.K_UPARROW or Keys.K_KP_UPARROW:
+                    _cursor = (_cursor - 1 + maxItems) % maxItems;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_DOWNARROW or Keys.K_KP_DOWNARROW:
+                    _cursor = (_cursor + 1) % maxItems;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_LEFTARROW or Keys.K_KP_LEFTARROW:
+                    if (_cursor == 0) _botNameIdx = (_botNameIdx - 1 + BotNames.Length) % BotNames.Length;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_RIGHTARROW or Keys.K_KP_RIGHTARROW:
+                    if (_cursor == 0) _botNameIdx = (_botNameIdx + 1) % BotNames.Length;
+                    PlaySound(_sfxMove);
+                    return true;
+                case Keys.K_ENTER or Keys.K_KP_ENTER or Keys.K_MOUSE1:
+                    if (_cursor == 1) // REMOVE
+                    {
+                        Syscalls.ExecuteCommand($"kick {BotNames[_botNameIdx]}\n");
+                        PlaySound(_sfxSelect);
+                    }
+                    else if (_cursor == 2) // BACK
+                    {
+                        _subMenu = SubMenu.None;
+                        _cursor = 2;
+                        PlaySound(_sfxBack);
+                    }
+                    return true;
+                case Keys.K_ESCAPE or Keys.K_MOUSE2:
+                    _subMenu = SubMenu.None;
+                    _cursor = 2;
+                    PlaySound(_sfxBack);
+                    return true;
+            }
         }
         return true;
     }
@@ -255,18 +388,26 @@ public class InGameMenuMod : IUiMod
                 CloseMenu();
                 break;
             case 1: // ADD BOT
-                Syscalls.ExecuteCommand("addbot sarge 3\n");
+                _subMenu = SubMenu.AddBot;
+                _cursor = 0;
+                break;
+            case 2: // REMOVE BOT
+                _subMenu = SubMenu.RemoveBot;
+                _cursor = 0;
+                break;
+            case 3: // RESTART MAP
+                Syscalls.ExecuteCommand("map_restart 0\n");
                 CloseMenu();
                 break;
-            case 2: // CONSOLE
+            case 4: // CONSOLE
                 CloseMenu();
                 Syscalls.ExecuteCommand("toggleconsole\n");
                 break;
-            case 3: // DISCONNECT
+            case 5: // DISCONNECT
                 _confirm = ConfirmMode.Disconnect;
                 _cursor = 1;
                 break;
-            case 4: // QUIT
+            case 6: // QUIT
                 _confirm = ConfirmMode.Quit;
                 _cursor = 1;
                 break;
@@ -277,6 +418,7 @@ public class InGameMenuMod : IUiMod
     {
         _active = false;
         _confirm = ConfirmMode.None;
+        _subMenu = SubMenu.None;
         Syscalls.CvarSet("cl_paused", "0");
         Syscalls.Key_SetCatcher(Syscalls.Key_GetCatcher() & ~KEYCATCH_UI);
     }
@@ -295,7 +437,7 @@ public class InGameMenuMod : IUiMod
             HitTest(yYes, "YES", 14f, 0);
             HitTest(yNo, "NO", 14f, 1);
         }
-        else
+        else if (_subMenu == SubMenu.None)
         {
             for (int i = 0; i < Items.Length; i++)
             {
@@ -307,7 +449,7 @@ public class InGameMenuMod : IUiMod
         return true;
     }
 
-    public int IsFullscreen() => _active ? 0 : -1; // not fullscreen — game visible behind
+    public int IsFullscreen() => _active ? 0 : -1;
     public bool ConsoleCommand(int realtime) => false;
     public bool DrawConnectScreen(int overlay) => false;
 
@@ -343,6 +485,6 @@ public class InGameMenuMod : IUiMod
 
     private void PlaySound(int sfx)
     {
-        if (sfx > 0) Syscalls.S_StartLocalSound(sfx, CHAN_LOCAL_SOUND);
+        if (sfx > 0) Syscalls.S_StartLocalSound(sfx, 1);
     }
 }

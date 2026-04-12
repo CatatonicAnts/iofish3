@@ -179,6 +179,47 @@ public static unsafe class Syscalls
 
     public static bool Key_IsDown(int key) => Call(UI_KEY_ISDOWN, key) != 0;
 
+    public static string GetBindingBuf(int keyNum)
+    {
+        byte[] buf = new byte[256];
+        fixed (byte* pBuf = buf)
+        {
+            Call(UI_KEY_GETBINDINGBUF, keyNum, (nint)pBuf, buf.Length);
+        }
+        return System.Text.Encoding.UTF8.GetString(buf).TrimEnd('\0').Trim();
+    }
+
+    private static int KeyNameToNum(string name)
+    {
+        // Map common key names to Q3 key numbers
+        if (name.Length == 1 && name[0] >= 'a' && name[0] <= 'z') return name[0];
+        if (name.Length == 1 && name[0] >= '0' && name[0] <= '9') return name[0];
+        return name.ToUpperInvariant() switch
+        {
+            "SPACE" => 32,
+            "ENTER" => 13,
+            "TAB" => 9,
+            "ESCAPE" => 27,
+            "BACKSPACE" => 127,
+            "UPARROW" => 132,
+            "DOWNARROW" => 133,
+            "LEFTARROW" => 134,
+            "RIGHTARROW" => 135,
+            "MOUSE1" => 178,
+            "MOUSE2" => 179,
+            "MOUSE3" => 180,
+            "MWHEELUP" => 182,
+            "MWHEELDOWN" => 183,
+            "CTRL" => 137,
+            "SHIFT" => 136,
+            "ALT" => 138,
+            "F1" => 145, "F2" => 146, "F3" => 147, "F4" => 148,
+            "F5" => 149, "F6" => 150, "F7" => 151, "F8" => 152,
+            "F9" => 153, "F10" => 154, "F11" => 155, "F12" => 156,
+            _ => 0
+        };
+    }
+
     // --- Config ---
     public static string GetConfigString(int index)
     {
