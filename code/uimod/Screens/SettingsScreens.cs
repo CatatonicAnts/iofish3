@@ -88,6 +88,7 @@ public class PlayerSettingsScreen : MenuScreen
 
     private void OnModelChanged(int idx)
     {
+        if (_models.Length == 0 || idx < 0 || idx >= _models.Length) return;
         string name = _models[idx];
         _skins = PlayerModel.DiscoverSkins(name);
         _skinSpin?.UpdateOptions(_skins, 0);
@@ -157,7 +158,7 @@ public class ControlsScreen : MenuScreen
     private const float PANEL_X = 60f;
     private const float PANEL_Y = 40f;
     private const float PANEL_W = 520f;
-    private const float PANEL_H = 400f;
+    private const float PANEL_H = 440f;
     private const float FIELD_X = PANEL_X + 20f;
     private const float START_Y = PANEL_Y + 60f;
 
@@ -180,6 +181,8 @@ public class ControlsScreen : MenuScreen
 
     private int _waitingForBind = -1;
 
+    private static readonly string[] ToggleOpts = ["Off", "On"];
+
     public ControlsScreen(MenuSystem system) : base(system)
     {
         Title = "CONTROLS";
@@ -196,6 +199,47 @@ public class ControlsScreen : MenuScreen
         }
 
         y += 14;
+        Widgets.Add(new LabelWidget("--- MOUSE ---", FIELD_X, y));
+        y += 18;
+
+        // Mouse sensitivity
+        float sens = Syscalls.CvarGetValue("sensitivity");
+        if (sens < 0.5f) sens = 5.0f;
+        Widgets.Add(new SliderWidget("Sensitivity", FIELD_X, y, 0.5f, 30f, 0.5f, sens, val =>
+        {
+            Syscalls.CvarSet("sensitivity", $"{val:F1}");
+        }));
+        y += 24;
+
+        // Invert mouse (m_pitch negative = inverted)
+        float pitch = Syscalls.CvarGetValue("m_pitch");
+        int invertIdx = pitch < 0 ? 1 : 0;
+        Widgets.Add(new SpinWidget("Invert Mouse", FIELD_X, y, ToggleOpts, invertIdx, idx =>
+        {
+            Syscalls.CvarSet("m_pitch", idx == 1 ? "-0.022" : "0.022");
+        }));
+        y += 24;
+
+        y += 6;
+        Widgets.Add(new LabelWidget("--- GAMEPLAY ---", FIELD_X, y));
+        y += 18;
+
+        // Always run
+        int alwaysRun = (int)Syscalls.CvarGetValue("cl_run");
+        Widgets.Add(new SpinWidget("Always Run", FIELD_X, y, ToggleOpts, alwaysRun > 0 ? 1 : 0, idx =>
+        {
+            Syscalls.CvarSet("cl_run", idx.ToString());
+        }));
+        y += 24;
+
+        // Auto-switch weapons
+        int autoSwitch = (int)Syscalls.CvarGetValue("cg_autoswitch");
+        Widgets.Add(new SpinWidget("Auto-Switch Weapons", FIELD_X, y, ToggleOpts, autoSwitch > 0 ? 1 : 0, idx =>
+        {
+            Syscalls.CvarSet("cg_autoswitch", idx.ToString());
+        }));
+        y += 30;
+
         Widgets.Add(new ButtonWidget("BACK", FIELD_X, y, () => System.Pop())
             { CharW = 12f, CharH = 12f });
     }
@@ -247,23 +291,13 @@ public class ControlsScreen : MenuScreen
 
     private static string GetKeyName(int key)
     {
-        // Common key names matching Q3's key numbering
-        if (key >= 'a' && key <= 'z') return ((char)key).ToString();
-        if (key >= '0' && key <= '9') return ((char)key).ToString();
-        return key switch
-        {
-            Keys.K_SPACE => "SPACE",
-            Keys.K_ENTER => "ENTER",
-            Keys.K_TAB => "TAB",
-            Keys.K_MOUSE1 => "MOUSE1",
-            Keys.K_MOUSE2 => "MOUSE2",
-            Keys.K_UPARROW => "UPARROW",
-            Keys.K_DOWNARROW => "DOWNARROW",
-            Keys.K_LEFTARROW => "LEFTARROW",
-            Keys.K_RIGHTARROW => "RIGHTARROW",
-            _ when key >= 32 && key < 127 => ((char)key).ToString(),
-            _ => ""
-        };
+        // Use engine's authoritative key name lookup
+        string name = Syscalls.KeyNumToString(key);
+        if (name.Length > 0) return name;
+
+        // Fallback for printable ASCII
+        if (key >= 32 && key < 127) return ((char)key).ToString();
+        return "";
     }
 }
 
@@ -306,27 +340,32 @@ public class BindWidget : Widget
 
     private static string LookupBinding(string command)
     {
-        // Scan common key numbers to find which one is bound to this command
+        // Scan all common key numbers to find which one is bound to this command
         int[] keyNums = [
-            'w','a','s','d',' ', 137, // CTRL
-            178, 179, 182, 183, // MOUSE1, MOUSE2, MWHEELUP, MWHEELDOWN
-            'e','q','r','f','g','t','y', 9, 13, 136, // TAB, ENTER, SHIFT
-            'c','x','z','v','1','2','3','4','5','6','7','8','9','0',
-            132, 133, 134, 135, // arrows
-        ];
-        string[] keyNames = [
-            "W","A","S","D","SPACE","CTRL",
-            "MOUSE1","MOUSE2","MWHEELUP","MWHEELDOWN",
-            "E","Q","R","F","G","T","Y","TAB","ENTER","SHIFT",
-            "C","X","Z","V","1","2","3","4","5","6","7","8","9","0",
-            "UPARROW","DOWNARROW","LEFTARROW","RIGHTARROW",
+            // Printable chars
+            'w','a','s','d',' ','e','q','r','f','g','t','y','u','i','o','p',
+            'h','j','k','l','c','x','z','v','b','n','m',
+            '1','2','3','4','5','6','7','8','9','0',
+            '-','=','[',']','\\',';','\'',',','.','/',
+            '`',
+            // Special keys
+            9, 13, 27, 127,                         // TAB, ENTER, ESC, BACKSPACE
+            128,                                     // COMMAND
+            132, 133, 134, 135,                      // Arrows
+            136, 137, 138,                           // ALT, CTRL, SHIFT
+            139, 140, 141, 142, 143, 144,            // INS, DEL, PGDN, PGUP, HOME, END
+            145,146,147,148,149,150,151,152,153,154,155,156, // F1-F12
+            160,161,162,163,164,165,166,167,168,     // KP_HOME..KP_PGDN
+            169, 170, 171, 172, 173, 174, 176,       // KP_ENTER..KP_STAR
+            178, 179, 180, 181, 182,                 // MOUSE1-5
+            183, 184,                                // MWHEELDOWN, MWHEELUP
         ];
 
         for (int i = 0; i < keyNums.Length; i++)
         {
             string binding = Syscalls.GetBindingBuf(keyNums[i]);
             if (binding.Equals(command, StringComparison.OrdinalIgnoreCase))
-                return keyNames[i];
+                return Syscalls.KeyNumToString(keyNums[i]);
         }
         return "---";
     }
@@ -340,7 +379,7 @@ public class VideoSettingsScreen : MenuScreen
     private const float PANEL_X = 100f;
     private const float PANEL_Y = 50f;
     private const float PANEL_W = 440f;
-    private const float PANEL_H = 380f;
+    private const float PANEL_H = 460f;
     private const float FIELD_X = PANEL_X + 30f;
     private const float START_Y = PANEL_Y + 60f;
 
@@ -355,6 +394,9 @@ public class VideoSettingsScreen : MenuScreen
     private static readonly string[] TextureQuality = ["Low", "Medium", "High"];
     private static readonly string[] TextureFilter = ["Bilinear", "Trilinear"];
     private static readonly string[] GeometryDetail = ["Low", "Medium", "High"];
+    private static readonly string[] AntiAliasing = ["Off", "2x", "4x", "8x", "16x"];
+    private static readonly string[] AnisotropicOpts = ["Off", "2x", "4x", "8x", "16x"];
+    private static readonly string[] ColorDepth = ["Default", "16-bit", "32-bit"];
 
     private bool _needsRestart;
 
@@ -422,6 +464,38 @@ public class VideoSettingsScreen : MenuScreen
         {
             string val = idx switch { 0 => "20", 1 => "12", _ => "4" };
             Syscalls.CvarSet("r_subdivisions", val);
+            _needsRestart = true;
+        }));
+        y += 26;
+
+        // Anti-aliasing (multisample)
+        int msaa = (int)Syscalls.CvarGetValue("r_ext_multisample");
+        int aaIdx = msaa switch { 2 => 1, 4 => 2, 8 => 3, 16 => 4, _ => 0 };
+        Widgets.Add(new SpinWidget("Anti-Aliasing", FIELD_X, y, AntiAliasing, aaIdx, idx =>
+        {
+            string val = idx switch { 1 => "2", 2 => "4", 3 => "8", 4 => "16", _ => "0" };
+            Syscalls.CvarSet("r_ext_multisample", val);
+            _needsRestart = true;
+        }));
+        y += 26;
+
+        // Anisotropic filtering
+        int aniso = (int)Syscalls.CvarGetValue("r_ext_texture_filter_anisotropic");
+        int anisoIdx = aniso switch { 2 => 1, 4 => 2, 8 => 3, 16 => 4, _ => 0 };
+        Widgets.Add(new SpinWidget("Anisotropic", FIELD_X, y, AnisotropicOpts, anisoIdx, idx =>
+        {
+            string val = idx switch { 1 => "2", 2 => "4", 3 => "8", 4 => "16", _ => "0" };
+            Syscalls.CvarSet("r_ext_texture_filter_anisotropic", val);
+        }));
+        y += 26;
+
+        // Color depth
+        int colorbits = (int)Syscalls.CvarGetValue("r_colorbits");
+        int colorIdx = colorbits switch { 16 => 1, 32 => 2, _ => 0 };
+        Widgets.Add(new SpinWidget("Color Depth", FIELD_X, y, ColorDepth, colorIdx, idx =>
+        {
+            string val = idx switch { 1 => "16", 2 => "32", _ => "0" };
+            Syscalls.CvarSet("r_colorbits", val);
             _needsRestart = true;
         }));
         y += 40;

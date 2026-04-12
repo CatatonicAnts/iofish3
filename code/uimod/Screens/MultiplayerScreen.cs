@@ -38,7 +38,7 @@ public class MultiplayerScreen : MenuScreen
         y += 40;
 
         // Separator
-        Widgets.Add(new LabelWidget("--- QUICK START ---", FIELD_X, y));
+        Widgets.Add(new LabelWidget("--- PRACTICE (offline with bots) ---", FIELD_X, y));
         y += 20;
 
         // Quick play buttons for common maps
@@ -49,7 +49,7 @@ public class MultiplayerScreen : MenuScreen
             Widgets.Add(new ButtonWidget(map.ToUpperInvariant(), FIELD_X, y, () =>
             {
                 System.PlaySound(MenuSystem.SFX_SELECT);
-                Syscalls.ExecuteCommand($"devmap {m}\n");
+                Syscalls.ExecuteCommand($"map {m}\n");
             }) { CharW = 10f, CharH = 12f });
             y += 24;
         }

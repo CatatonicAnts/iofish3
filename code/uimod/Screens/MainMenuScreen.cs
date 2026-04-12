@@ -16,8 +16,8 @@ public class MainMenuScreen : MenuScreen
     public MainMenuScreen(MenuSystem system) : base(system)
     {
         float y = ITEM_START_Y;
-        Widgets.Add(ButtonWidget.CreateCentered("MULTIPLAYER", y, ITEM_CHAR_W, ITEM_CHAR_H,
-            () => { System.PlaySound(MenuSystem.SFX_SELECT); System.Push(new MultiplayerScreen(System)); }));
+        Widgets.Add(ButtonWidget.CreateCentered("SERVER BROWSER", y, ITEM_CHAR_W, ITEM_CHAR_H,
+            () => { System.PlaySound(MenuSystem.SFX_SELECT); System.Push(new ServerBrowserScreen(System)); }));
         y += ITEM_SPACING;
         Widgets.Add(ButtonWidget.CreateCentered("START SERVER", y, ITEM_CHAR_W, ITEM_CHAR_H,
             () => { System.PlaySound(MenuSystem.SFX_SELECT); System.Push(new StartServerScreen(System)); }));
@@ -26,7 +26,10 @@ public class MainMenuScreen : MenuScreen
             () => { System.PlaySound(MenuSystem.SFX_SELECT); System.Push(new SetupScreen(System)); }));
         y += ITEM_SPACING;
         Widgets.Add(ButtonWidget.CreateCentered("DEMOS", y, ITEM_CHAR_W, ITEM_CHAR_H,
-            () => { System.PlaySound(MenuSystem.SFX_SELECT); Syscalls.ExecuteCommand("demo\n"); }));
+            () => { System.PlaySound(MenuSystem.SFX_SELECT); System.Push(new DemosScreen(System)); }));
+        y += ITEM_SPACING;
+        Widgets.Add(ButtonWidget.CreateCentered("MODS", y, ITEM_CHAR_W, ITEM_CHAR_H,
+            () => { System.PlaySound(MenuSystem.SFX_SELECT); System.Push(new ModsScreen(System)); }));
         y += ITEM_SPACING;
         Widgets.Add(ButtonWidget.CreateCentered("CONSOLE", y, ITEM_CHAR_W, ITEM_CHAR_H,
             () => { System.PlaySound(MenuSystem.SFX_SELECT); Syscalls.ExecuteCommand("toggleconsole\n"); }));

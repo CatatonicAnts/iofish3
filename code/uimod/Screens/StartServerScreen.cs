@@ -12,15 +12,6 @@ public class StartServerScreen : MenuScreen
     private const float FIELD_X = PANEL_X + 30f;
     private const float START_Y = PANEL_Y + 60f;
 
-    private static readonly string[] Maps =
-    [
-        "q3dm0", "q3dm1", "q3dm2", "q3dm3", "q3dm4", "q3dm5", "q3dm6",
-        "q3dm7", "q3dm8", "q3dm9", "q3dm10", "q3dm11", "q3dm12", "q3dm13",
-        "q3dm14", "q3dm15", "q3dm16", "q3dm17", "q3dm18", "q3dm19",
-        "q3tourney1", "q3tourney2", "q3tourney3", "q3tourney4", "q3tourney5", "q3tourney6",
-        "q3ctf1", "q3ctf2", "q3ctf3", "q3ctf4"
-    ];
-
     private static readonly string[] GameTypes = ["Free For All", "Tournament", "Team Deathmatch", "CTF"];
     private static readonly string[] GameTypeCmds = ["0", "1", "3", "4"];
 
@@ -36,13 +27,18 @@ public class StartServerScreen : MenuScreen
     private SpinWidget _fragLimitSpin = null!;
     private SpinWidget _timeLimitSpin = null!;
 
+    private string[] _maps = [];
+
     public StartServerScreen(MenuSystem system) : base(system)
     {
         Title = "START SERVER";
 
+        // Discover maps dynamically
+        _maps = DiscoverMaps();
+
         float y = START_Y;
 
-        _mapSpin = new SpinWidget("Map", FIELD_X, y, Maps, FindIndex(Maps, "q3dm17"));
+        _mapSpin = new SpinWidget("Map", FIELD_X, y, _maps, FindIndex(_maps, "q3dm17"));
         Widgets.Add(_mapSpin);
         y += 26;
 
@@ -73,11 +69,30 @@ public class StartServerScreen : MenuScreen
             { CharW = 12f, CharH = 12f });
     }
 
+    private static string[] DiscoverMaps()
+    {
+        var files = Syscalls.FS_GetFileList("maps", ".bsp");
+        if (files.Length == 0)
+            return ["q3dm1", "q3dm6", "q3dm7", "q3dm17"];
+
+        var maps = new List<string>(files.Length);
+        foreach (var f in files)
+        {
+            string name = f;
+            if (name.EndsWith(".bsp", StringComparison.OrdinalIgnoreCase))
+                name = name[..^4];
+            if (name.Length > 0)
+                maps.Add(name);
+        }
+        maps.Sort(StringComparer.OrdinalIgnoreCase);
+        return maps.Count > 0 ? maps.ToArray() : ["q3dm1"];
+    }
+
     private void StartGame()
     {
         System.PlaySound(MenuSystem.SFX_SELECT);
 
-        string map = Maps[_mapSpin.SelectedIndex];
+        string map = _maps[_mapSpin.SelectedIndex];
         string gt = GameTypeCmds[_gameTypeSpin.SelectedIndex];
         string frag = FragLimits[_fragLimitSpin.SelectedIndex].Split(' ')[0];
         string time = TimeLimits[_timeLimitSpin.SelectedIndex].Split(' ')[0];
@@ -88,7 +103,7 @@ public class StartServerScreen : MenuScreen
         Syscalls.ExecuteCommand($"fraglimit {frag}\n");
         Syscalls.ExecuteCommand($"timelimit {time}\n");
         Syscalls.ExecuteCommand($"bot_minplayers 0\n");
-        Syscalls.ExecuteCommand($"devmap {map}\n");
+        Syscalls.ExecuteCommand($"map {map}\n");
 
         // Add bots after map loads
         string[] bots = ["sarge", "grunt", "major", "visor", "slash", "razor",

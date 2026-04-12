@@ -89,6 +89,23 @@ public static unsafe class Syscalls
     private const int UI_CVAR_REGISTER = 50;
     private const int UI_R_REGISTERFONT = 55;
 
+    // LAN syscalls
+    private const int UI_LAN_GETSERVERCOUNT = 65;
+    private const int UI_LAN_GETSERVERADDRESSSTRING = 66;
+    private const int UI_LAN_GETSERVERINFO = 67;
+    private const int UI_LAN_MARKSERVERVISIBLE = 68;
+    private const int UI_LAN_UPDATEVISIBLEPINGS = 69;
+    private const int UI_LAN_RESETPINGS = 70;
+    private const int UI_LAN_LOADCACHEDSERVERS = 71;
+    private const int UI_LAN_SAVECACHEDSERVERS = 72;
+    private const int UI_LAN_ADDSERVER = 73;
+    private const int UI_LAN_REMOVESERVER = 74;
+    private const int UI_LAN_SERVERSTATUS = 82;
+    private const int UI_LAN_GETSERVERPING = 83;
+    private const int UI_LAN_SERVERISVISIBLE = 84;
+
+    private const int UI_GETCLIPBOARDDATA = 42;
+
     // Exec types
     public const int EXEC_NOW = 0;
     public const int EXEC_INSERT = 1;
@@ -232,7 +249,7 @@ public static unsafe class Syscalls
 
     private static int KeyNameToNum(string name)
     {
-        // Map common key names to Q3 key numbers
+        // Map common key names to Q3 key numbers (from keycodes.h)
         if (name.Length == 1 && name[0] >= 'a' && name[0] <= 'z') return name[0];
         if (name.Length == 1 && name[0] >= '0' && name[0] <= '9') return name[0];
         return name.ToUpperInvariant() switch
@@ -246,17 +263,32 @@ public static unsafe class Syscalls
             "DOWNARROW" => 133,
             "LEFTARROW" => 134,
             "RIGHTARROW" => 135,
-            "MOUSE1" => 178,
-            "MOUSE2" => 179,
-            "MOUSE3" => 180,
-            "MWHEELUP" => 182,
-            "MWHEELDOWN" => 183,
+            "ALT" => 136,
             "CTRL" => 137,
-            "SHIFT" => 136,
-            "ALT" => 138,
+            "SHIFT" => 138,
+            "INS" => 139,
+            "DEL" => 140,
+            "PGDN" => 141,
+            "PGUP" => 142,
+            "HOME" => 143,
+            "END" => 144,
             "F1" => 145, "F2" => 146, "F3" => 147, "F4" => 148,
             "F5" => 149, "F6" => 150, "F7" => 151, "F8" => 152,
             "F9" => 153, "F10" => 154, "F11" => 155, "F12" => 156,
+            "KP_HOME" => 160, "KP_UPARROW" => 161, "KP_PGUP" => 162,
+            "KP_LEFTARROW" => 163, "KP_5" => 164, "KP_RIGHTARROW" => 165,
+            "KP_END" => 166, "KP_DOWNARROW" => 167, "KP_PGDN" => 168,
+            "KP_ENTER" => 169, "KP_INS" => 170, "KP_DEL" => 171,
+            "KP_SLASH" => 172, "KP_MINUS" => 173, "KP_PLUS" => 174,
+            "KP_STAR" => 176,
+            "MOUSE1" => 178,
+            "MOUSE2" => 179,
+            "MOUSE3" => 180,
+            "MOUSE4" => 181,
+            "MOUSE5" => 182,
+            "MWHEELDOWN" => 183,
+            "MWHEELUP" => 184,
+            _ when name.Length == 1 && name[0] >= 32 && name[0] < 127 => name[0],
             _ => 0
         };
     }
@@ -311,5 +343,72 @@ public static unsafe class Syscalls
             }
             return results;
         }
+    }
+
+    // --- LAN Server Browser ---
+    public static void LAN_LoadCachedServers() => Call(UI_LAN_LOADCACHEDSERVERS);
+    public static void LAN_SaveCachedServers() => Call(UI_LAN_SAVECACHEDSERVERS);
+
+    public static int LAN_GetServerCount(int source) => (int)Call(UI_LAN_GETSERVERCOUNT, source);
+
+    public static string LAN_GetServerAddressString(int source, int index)
+    {
+        byte* buf = stackalloc byte[256];
+        Call(UI_LAN_GETSERVERADDRESSSTRING, source, index, (nint)buf, 256);
+        return Marshal.PtrToStringUTF8((nint)buf) ?? "";
+    }
+
+    public static string LAN_GetServerInfo(int source, int index)
+    {
+        byte[] buf = new byte[1024];
+        fixed (byte* pBuf = buf)
+        {
+            Call(UI_LAN_GETSERVERINFO, source, index, (nint)pBuf, 1024);
+            return Marshal.PtrToStringUTF8((nint)pBuf) ?? "";
+        }
+    }
+
+    public static int LAN_GetServerPing(int source, int index) =>
+        (int)Call(UI_LAN_GETSERVERPING, source, index);
+
+    public static void LAN_MarkServerVisible(int source, int index, int visible) =>
+        Call(UI_LAN_MARKSERVERVISIBLE, source, index, visible);
+
+    public static int LAN_UpdateVisiblePings(int source) =>
+        (int)Call(UI_LAN_UPDATEVISIBLEPINGS, source);
+
+    public static void LAN_ResetPings(int source) =>
+        Call(UI_LAN_RESETPINGS, source);
+
+    public static int LAN_AddServer(int source, string name, string address)
+    {
+        fixed (byte* pName = System.Text.Encoding.UTF8.GetBytes(name + '\0'))
+        fixed (byte* pAddr = System.Text.Encoding.UTF8.GetBytes(address + '\0'))
+            return (int)Call(UI_LAN_ADDSERVER, source, (nint)pName, (nint)pAddr);
+    }
+
+    public static void LAN_RemoveServer(int source, string address)
+    {
+        fixed (byte* pAddr = System.Text.Encoding.UTF8.GetBytes(address + '\0'))
+            Call(UI_LAN_REMOVESERVER, source, (nint)pAddr);
+    }
+
+    public static int LAN_ServerIsVisible(int source, int index) =>
+        (int)Call(UI_LAN_SERVERISVISIBLE, source, index);
+
+    // --- Clipboard ---
+    public static string GetClipboardData()
+    {
+        byte* buf = stackalloc byte[256];
+        Call(UI_GETCLIPBOARDDATA, (nint)buf, 256);
+        return Marshal.PtrToStringUTF8((nint)buf) ?? "";
+    }
+
+    // --- Key name ---
+    public static string KeyNumToString(int keyNum)
+    {
+        byte* buf = stackalloc byte[64];
+        Call(UI_KEY_KEYNUMTOSTRINGBUF, keyNum, (nint)buf, 64);
+        return Marshal.PtrToStringUTF8((nint)buf) ?? "";
     }
 }

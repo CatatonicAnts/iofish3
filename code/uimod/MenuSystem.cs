@@ -99,9 +99,11 @@ public abstract class MenuScreen
     {
         if (Widgets.Count == 0) return;
         int start = CursorIndex;
+        int iterations = 0;
         do
         {
             CursorIndex = (CursorIndex + dir + Widgets.Count) % Widgets.Count;
+            if (++iterations > Widgets.Count) break;
         } while (!Widgets[CursorIndex].Selectable && CursorIndex != start);
         System.PlaySound(MenuSystem.SFX_MOVE);
     }
@@ -213,18 +215,58 @@ public static class Keys
     public const int K_ESCAPE = 27;
     public const int K_SPACE = 32;
     public const int K_BACKSPACE = 127;
+
+    public const int K_COMMAND = 128;
+    public const int K_CAPSLOCK = 129;
+    public const int K_PAUSE = 131;
     public const int K_UPARROW = 132;
     public const int K_DOWNARROW = 133;
     public const int K_LEFTARROW = 134;
     public const int K_RIGHTARROW = 135;
+
+    public const int K_ALT = 136;
+    public const int K_CTRL = 137;
+    public const int K_SHIFT = 138;
+    public const int K_INS = 139;
+    public const int K_DEL = 140;
+    public const int K_PGDN = 141;
+    public const int K_PGUP = 142;
+    public const int K_HOME = 143;
+    public const int K_END = 144;
+
+    public const int K_F1 = 145;
+    public const int K_F2 = 146;
+    public const int K_F3 = 147;
+    public const int K_F4 = 148;
+    public const int K_F5 = 149;
+    public const int K_F6 = 150;
+    public const int K_F7 = 151;
+    public const int K_F8 = 152;
+    public const int K_F9 = 153;
+    public const int K_F10 = 154;
+    public const int K_F11 = 155;
+    public const int K_F12 = 156;
+
+    public const int K_KP_HOME = 160;
     public const int K_KP_UPARROW = 161;
-    public const int K_KP_DOWNARROW = 167;
+    public const int K_KP_PGUP = 162;
     public const int K_KP_LEFTARROW = 163;
+    public const int K_KP_5 = 164;
     public const int K_KP_RIGHTARROW = 165;
+    public const int K_KP_END = 166;
+    public const int K_KP_DOWNARROW = 167;
+    public const int K_KP_PGDN = 168;
     public const int K_KP_ENTER = 169;
+    public const int K_KP_INS = 170;
+    public const int K_KP_DEL = 171;
+
     public const int K_MOUSE1 = 178;
     public const int K_MOUSE2 = 179;
-    public const int K_DEL = 127;
+    public const int K_MOUSE3 = 180;
+    public const int K_MOUSE4 = 181;
+    public const int K_MOUSE5 = 182;
+    public const int K_MWHEELDOWN = 183;
+    public const int K_MWHEELUP = 184;
 }
 
 #region Widgets
@@ -465,6 +507,9 @@ public class TextInputWidget : Widget
     {
         DrawLabel(realtime, X, Y, CHAR_W, CHAR_H);
 
+        // Safety: clamp cursor in case text was changed externally
+        if (_cursorPos > Text.Length) _cursorPos = Text.Length;
+
         float fx = X + FIELD_X_OFFSET;
 
         // Field background
@@ -553,6 +598,180 @@ public class LabelWidget : Widget
     {
         Drawing.SetColor(R, G, B, A);
         Drawing.DrawString(X, Y, Label, CharW, CharH);
+    }
+}
+
+/// <summary>
+/// Scrollable list widget for server browsers, demos, mods, etc.
+/// Displays rows of items with selection highlight and page scrolling.
+/// </summary>
+public class ListWidget : Widget
+{
+    public string[] Columns;
+    public float[] ColumnWidths;
+    public List<string[]> Items = new();
+    public int SelectedIndex = -1;
+    public int ScrollOffset;
+    public Action<int>? OnSelected;
+
+    private const float ROW_H = 14f;
+    private const float CHAR_W = 7f;
+    private const float CHAR_H = 10f;
+    private const float HEADER_H = 16f;
+    private int _visibleRows;
+
+    public ListWidget(string[] columns, float[] columnWidths, float x, float y, float w, float h,
+        Action<int>? onSelected = null)
+    {
+        Columns = columns;
+        ColumnWidths = columnWidths;
+        X = x; Y = y; W = w; H = h;
+        OnSelected = onSelected;
+        _visibleRows = Math.Max(1, (int)((h - HEADER_H) / ROW_H));
+    }
+
+    public override void Draw(int realtime)
+    {
+        // Background
+        Drawing.SetColor(0.06f, 0.06f, 0.1f, Focused ? 0.9f : 0.7f);
+        Drawing.FillRect(X, Y, W, H);
+
+        // Header
+        Drawing.SetColor(0.12f, 0.12f, 0.18f, 0.95f);
+        Drawing.FillRect(X, Y, W, HEADER_H);
+
+        float cx = X + 4;
+        Drawing.SetColor(0.8f, 0.4f, 0.0f, 1f);
+        for (int c = 0; c < Columns.Length; c++)
+        {
+            Drawing.DrawString(cx, Y + 2, Columns[c], CHAR_W, CHAR_H + 2);
+            cx += ColumnWidths[c];
+        }
+
+        // Rows
+        float rowY = Y + HEADER_H;
+        for (int i = 0; i < _visibleRows && ScrollOffset + i < Items.Count; i++)
+        {
+            int idx = ScrollOffset + i;
+            bool selected = (idx == SelectedIndex);
+
+            if (selected)
+            {
+                Drawing.SetColor(0.6f, 0.18f, 0.0f, 0.35f);
+                Drawing.FillRect(X, rowY, W, ROW_H);
+            }
+            else if ((i & 1) == 0)
+            {
+                Drawing.SetColor(0.08f, 0.08f, 0.12f, 0.3f);
+                Drawing.FillRect(X, rowY, W, ROW_H);
+            }
+
+            cx = X + 4;
+            var row = Items[idx];
+            for (int c = 0; c < row.Length && c < Columns.Length; c++)
+            {
+                if (selected)
+                    Drawing.SetColor(1f, 1f, 1f, 1f);
+                else
+                    Drawing.SetColor(0.7f, 0.7f, 0.7f, 0.85f);
+
+                string text = row[c];
+                int maxChars = (int)(ColumnWidths[c] / CHAR_W) - 1;
+                if (text.Length > maxChars && maxChars > 3)
+                    text = text[..(maxChars - 2)] + "..";
+                Drawing.DrawString(cx, rowY + 2, text, CHAR_W, CHAR_H);
+                cx += ColumnWidths[c];
+            }
+            rowY += ROW_H;
+        }
+
+        // Border
+        float br = Focused ? 0.8f : 0.4f;
+        Drawing.SetColor(br * 0.625f, br * 0.1875f, 0f, 0.5f);
+        Drawing.FillRect(X, Y, W, 1);
+        Drawing.FillRect(X, Y + H - 1, W, 1);
+        Drawing.FillRect(X, Y, 1, H);
+        Drawing.FillRect(X + W - 1, Y, 1, H);
+
+        // Scrollbar
+        if (Items.Count > _visibleRows)
+        {
+            float sbH = H - HEADER_H;
+            float thumbH = Math.Max(10, sbH * _visibleRows / Items.Count);
+            float thumbY = Y + HEADER_H + (sbH - thumbH) * ScrollOffset / Math.Max(1, Items.Count - _visibleRows);
+            Drawing.SetColor(0.3f, 0.1f, 0.0f, 0.5f);
+            Drawing.FillRect(X + W - 6, Y + HEADER_H, 5, sbH);
+            Drawing.SetColor(0.7f, 0.25f, 0.0f, 0.7f);
+            Drawing.FillRect(X + W - 6, thumbY, 5, thumbH);
+        }
+    }
+
+    public override bool HandleKey(int key)
+    {
+        if (Items.Count == 0) return false;
+
+        switch (key)
+        {
+            case Keys.K_UPARROW or Keys.K_KP_UPARROW:
+                if (SelectedIndex > 0) SelectedIndex--;
+                EnsureVisible();
+                return true;
+
+            case Keys.K_DOWNARROW or Keys.K_KP_DOWNARROW:
+                if (SelectedIndex < Items.Count - 1) SelectedIndex++;
+                EnsureVisible();
+                return true;
+
+            case Keys.K_PGUP or Keys.K_KP_PGUP:
+                SelectedIndex = Math.Max(0, SelectedIndex - _visibleRows);
+                EnsureVisible();
+                return true;
+
+            case Keys.K_PGDN or Keys.K_KP_PGDN:
+                SelectedIndex = Math.Min(Items.Count - 1, SelectedIndex + _visibleRows);
+                EnsureVisible();
+                return true;
+
+            case Keys.K_HOME or Keys.K_KP_HOME:
+                SelectedIndex = 0;
+                EnsureVisible();
+                return true;
+
+            case Keys.K_END or Keys.K_KP_END:
+                SelectedIndex = Items.Count - 1;
+                EnsureVisible();
+                return true;
+
+            case Keys.K_MWHEELUP:
+                ScrollOffset = Math.Max(0, ScrollOffset - 3);
+                return true;
+
+            case Keys.K_MWHEELDOWN:
+                ScrollOffset = Math.Min(Math.Max(0, Items.Count - _visibleRows), ScrollOffset + 3);
+                return true;
+        }
+        return false;
+    }
+
+    public override void Activate()
+    {
+        if (SelectedIndex >= 0 && SelectedIndex < Items.Count)
+            OnSelected?.Invoke(SelectedIndex);
+    }
+
+    private void EnsureVisible()
+    {
+        if (SelectedIndex < ScrollOffset)
+            ScrollOffset = SelectedIndex;
+        else if (SelectedIndex >= ScrollOffset + _visibleRows)
+            ScrollOffset = SelectedIndex - _visibleRows + 1;
+    }
+
+    public void SetItems(List<string[]> items)
+    {
+        Items = items;
+        SelectedIndex = items.Count > 0 ? 0 : -1;
+        ScrollOffset = 0;
     }
 }
 
