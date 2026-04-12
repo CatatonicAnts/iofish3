@@ -39,6 +39,14 @@ public static unsafe class Syscalls
         _syscall(cmd, a0, a1, a2, a3, 0, 0, 0, 0, 0, 0, 0, 0);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static nint Call(nint cmd, nint a0, nint a1, nint a2, nint a3, nint a4) =>
+        _syscall(cmd, a0, a1, a2, a3, a4, 0, 0, 0, 0, 0, 0, 0);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static nint Call(nint cmd, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5) =>
+        _syscall(cmd, a0, a1, a2, a3, a4, a5, 0, 0, 0, 0, 0, 0);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static nint Call(nint cmd, nint a0, nint a1, nint a2, nint a3, nint a4, nint a5, nint a6, nint a7, nint a8) =>
         _syscall(cmd, a0, a1, a2, a3, a4, a5, a6, a7, a8, 0, 0, 0);
 
@@ -56,10 +64,13 @@ public static unsafe class Syscalls
     private const int UI_ARGC = 10;
     private const int UI_ARGV = 11;
     private const int UI_CMD_EXECUTETEXT = 12;
+    private const int UI_FS_GETFILELIST = 17;
     private const int UI_R_REGISTERMODEL = 18;
+    private const int UI_R_REGISTERSKIN = 19;
     private const int UI_R_REGISTERSHADERNOMIP = 20;
     private const int UI_R_CLEARSCENE = 21;
     private const int UI_R_ADDREFENTITYTOSCENE = 22;
+    private const int UI_R_ADDLIGHTTOSCENE = 24;
     private const int UI_R_RENDERSCENE = 25;
     private const int UI_R_SETCOLOR = 26;
     private const int UI_R_DRAWSTRETCHPIC = 27;
@@ -72,6 +83,7 @@ public static unsafe class Syscalls
     private const int UI_KEY_GETCATCHER = 40;
     private const int UI_KEY_SETCATCHER = 41;
     private const int UI_GETGLCONFIG = 43;
+    private const int UI_CM_LERPTAG = 29;
     private const int UI_GETCLIENTSTATE = 44;
     private const int UI_GETCONFIGSTRING = 45;
     private const int UI_CVAR_REGISTER = 50;
@@ -135,6 +147,35 @@ public static unsafe class Syscalls
     {
         fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(name + '\0'))
             return (int)Call(UI_R_REGISTERSHADERNOMIP, (nint)p);
+    }
+
+    public static int R_RegisterModel(string name)
+    {
+        fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(name + '\0'))
+            return (int)Call(UI_R_REGISTERMODEL, (nint)p);
+    }
+
+    public static int R_RegisterSkin(string name)
+    {
+        fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(name + '\0'))
+            return (int)Call(UI_R_REGISTERSKIN, (nint)p);
+    }
+
+    public static void R_ClearScene() => Call(UI_R_CLEARSCENE);
+
+    public static void R_AddRefEntityToScene(RefEntity* ent) =>
+        Call(UI_R_ADDREFENTITYTOSCENE, (nint)ent);
+
+    public static void R_AddLightToScene(float* org, float intensity, float r, float g, float b) =>
+        Call(UI_R_ADDLIGHTTOSCENE, (nint)org, PassFloat(intensity), PassFloat(r), PassFloat(g), PassFloat(b));
+
+    public static void R_RenderScene(RefDef* rd) =>
+        Call(UI_R_RENDERSCENE, (nint)rd);
+
+    public static int CM_LerpTag(TagOrientation* tag, int model, int startFrame, int endFrame, float frac, string tagName)
+    {
+        fixed (byte* p = System.Text.Encoding.UTF8.GetBytes(tagName + '\0'))
+            return (int)Call(UI_CM_LERPTAG, (nint)tag, model, startFrame, endFrame, PassFloat(frac), (nint)p);
     }
 
     public static void R_SetColor(float r, float g, float b, float a)
@@ -245,6 +286,30 @@ public static unsafe class Syscalls
             int w = *(int*)(p + VID_WIDTH_OFFSET);
             int h = *(int*)(p + VID_HEIGHT_OFFSET);
             return (w, h);
+        }
+    }
+
+    // --- Filesystem ---
+    public static string[] FS_GetFileList(string path, string extension)
+    {
+        byte[] buf = new byte[8192];
+        fixed (byte* pPath = System.Text.Encoding.UTF8.GetBytes(path + '\0'))
+        fixed (byte* pExt = System.Text.Encoding.UTF8.GetBytes(extension + '\0'))
+        fixed (byte* pBuf = buf)
+        {
+            int count = (int)Call(UI_FS_GETFILELIST, (nint)pPath, (nint)pExt, (nint)pBuf, 8192);
+            if (count <= 0) return [];
+
+            var results = new string[count];
+            int offset = 0;
+            for (int i = 0; i < count && offset < 8192; i++)
+            {
+                int start = offset;
+                while (offset < 8192 && pBuf[offset] != 0) offset++;
+                results[i] = System.Text.Encoding.UTF8.GetString(pBuf + start, offset - start);
+                offset++;
+            }
+            return results;
         }
     }
 }

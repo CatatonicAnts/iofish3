@@ -1,30 +1,43 @@
 namespace UiMod;
 
 /// <summary>
-/// Player settings: name, handicap, model selection.
+/// Player settings with 3D model preview, model/skin chooser, name and handicap.
 /// </summary>
 public class PlayerSettingsScreen : MenuScreen
 {
-    private const float PANEL_X = 100f;
-    private const float PANEL_Y = 50f;
-    private const float PANEL_W = 440f;
-    private const float PANEL_H = 380f;
-    private const float FIELD_X = PANEL_X + 30f;
+    private const float PANEL_X = 40f;
+    private const float PANEL_Y = 40f;
+    private const float PANEL_W = 560f;
+    private const float PANEL_H = 400f;
+    private const float FIELD_X = PANEL_X + 20f;
     private const float START_Y = PANEL_Y + 60f;
+
+    // 3D preview viewport (right side of panel)
+    private const float PREVIEW_X = 360f;
+    private const float PREVIEW_Y = PANEL_Y + 50f;
+    private const float PREVIEW_W = 220f;
+    private const float PREVIEW_H = 300f;
 
     private static readonly string[] Handicaps =
         ["None", "95", "90", "85", "80", "75", "70", "65", "60", "55",
          "50", "45", "40", "35", "30", "25", "20", "15", "10", "5"];
 
-    private static readonly string[] Models =
-        ["sarge", "grunt", "major", "visor", "slash", "razor",
-         "keel", "lucy", "tankjr", "bitterman", "xaero", "uriel",
-         "hunter", "klesk", "anarki", "orbb", "bones", "crash",
-         "doom", "mynx", "patriot", "ranger", "sorlag", "stripe"];
+    private string[] _models = [];
+    private string[] _skins = [];
+    private SpinWidget? _modelSpin;
+    private SpinWidget? _skinSpin;
+    private readonly PlayerModel _playerModel = new();
 
     public PlayerSettingsScreen(MenuSystem system) : base(system)
     {
         Title = "PLAYER SETTINGS";
+        _models = PlayerModel.DiscoverModels();
+
+        string currentModelFull = Syscalls.CvarGetString("model");
+        string currentModelName = currentModelFull.Split('/')[0].ToLowerInvariant();
+        string currentSkinName = currentModelFull.Contains('/') ? currentModelFull.Split('/')[1] : "default";
+
+        _skins = PlayerModel.DiscoverSkins(currentModelName);
 
         float y = START_Y;
 
@@ -43,15 +56,19 @@ public class PlayerSettingsScreen : MenuScreen
         }));
         y += 30;
 
-        int modelIdx = GetModelIndex();
-        Widgets.Add(new SpinWidget("Model", FIELD_X, y, Models, modelIdx, idx =>
-        {
-            Syscalls.CvarSet("model", Models[idx]);
-            Syscalls.CvarSet("headmodel", Models[idx]);
-        }));
+        int modelIdx = IndexOf(_models, currentModelName);
+        if (modelIdx < 0) modelIdx = 0;
+        _modelSpin = new SpinWidget("Model", FIELD_X, y, _models, modelIdx, OnModelChanged);
+        Widgets.Add(_modelSpin);
         y += 30;
 
-        string[] teamModels = ["default", "sarge/red", "sarge/blue", "grunt/red", "grunt/blue"];
+        int skinIdx = IndexOf(_skins, currentSkinName);
+        if (skinIdx < 0) skinIdx = 0;
+        _skinSpin = new SpinWidget("Skin", FIELD_X, y, _skins, skinIdx, OnSkinChanged);
+        Widgets.Add(_skinSpin);
+        y += 30;
+
+        string[] teamModels = ["default", .. _models];
         Widgets.Add(new SpinWidget("Team Model", FIELD_X, y, teamModels, 0, idx =>
         {
             if (idx > 0)
@@ -64,6 +81,34 @@ public class PlayerSettingsScreen : MenuScreen
 
         Widgets.Add(new ButtonWidget("BACK", FIELD_X, y, () => System.Pop())
             { CharW = 12f, CharH = 12f });
+
+        // Load initial model
+        _playerModel.Load(currentModelName, currentSkinName);
+    }
+
+    private void OnModelChanged(int idx)
+    {
+        string name = _models[idx];
+        _skins = PlayerModel.DiscoverSkins(name);
+        _skinSpin?.UpdateOptions(_skins, 0);
+        _playerModel.Load(name, _skins.Length > 0 ? _skins[0] : "default");
+        ApplyModelCvar();
+    }
+
+    private void OnSkinChanged(int idx)
+    {
+        string skin = idx < _skins.Length ? _skins[idx] : "default";
+        _playerModel.SetSkin(skin);
+        ApplyModelCvar();
+    }
+
+    private void ApplyModelCvar()
+    {
+        string model = _models[_modelSpin!.SelectedIndex];
+        string skin = _skinSpin!.SelectedIndex < _skins.Length ? _skins[_skinSpin.SelectedIndex] : "default";
+        string val = skin == "default" ? model : $"{model}/{skin}";
+        Syscalls.CvarSet("model", val);
+        Syscalls.CvarSet("headmodel", val);
     }
 
     public override void Draw(int realtime)
@@ -71,6 +116,17 @@ public class PlayerSettingsScreen : MenuScreen
         DrawBackground();
         DrawPanel(PANEL_X, PANEL_Y, PANEL_W, PANEL_H);
         DrawTitle(Title);
+
+        // Draw 3D model preview
+        _playerModel.Draw(PREVIEW_X, PREVIEW_Y, PREVIEW_W, PREVIEW_H, realtime);
+
+        // Draw preview border
+        Drawing.SetColor(0.3f, 0.6f, 0.8f, 0.5f);
+        Drawing.FillRect(PREVIEW_X, PREVIEW_Y - 1, PREVIEW_W, 1);
+        Drawing.FillRect(PREVIEW_X, PREVIEW_Y + PREVIEW_H, PREVIEW_W, 1);
+        Drawing.FillRect(PREVIEW_X - 1, PREVIEW_Y, 1, PREVIEW_H);
+        Drawing.FillRect(PREVIEW_X + PREVIEW_W, PREVIEW_Y, 1, PREVIEW_H);
+        Drawing.ClearColor();
 
         base.Draw(realtime);
         DrawFooterHint("ENTER to edit name  |  LEFT/RIGHT to change  |  ESC to go back");
@@ -85,12 +141,11 @@ public class PlayerSettingsScreen : MenuScreen
         return 0;
     }
 
-    private static int GetModelIndex()
+    private static int IndexOf(string[] arr, string value)
     {
-        string model = Syscalls.CvarGetString("model").Split('/')[0].ToLowerInvariant();
-        for (int i = 0; i < Models.Length; i++)
-            if (Models[i] == model) return i;
-        return 0;
+        for (int i = 0; i < arr.Length; i++)
+            if (arr[i] == value) return i;
+        return -1;
     }
 }
 

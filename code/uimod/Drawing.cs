@@ -21,6 +21,11 @@ public static unsafe class Drawing
     private static float _xScale = 1f;
     private static float _yScale = 1f;
 
+    /// <summary>Scale factor: actual pixels per virtual X unit.</summary>
+    public static float XScale => _xScale;
+    /// <summary>Scale factor: actual pixels per virtual Y unit.</summary>
+    public static float YScale => _yScale;
+
     public static void Init()
     {
         _charsetShader = Syscalls.R_RegisterShaderNoMip("gfx/2d/bigchars");

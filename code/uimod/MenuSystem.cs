@@ -347,6 +347,13 @@ public class SpinWidget : Widget
         return false;
     }
 
+    /// <summary>Replace options and reset selection index.</summary>
+    public void UpdateOptions(string[] options, int selected = 0)
+    {
+        Options = options;
+        SelectedIndex = Math.Clamp(selected, 0, Math.Max(0, options.Length - 1));
+    }
+
     public override void Activate()
     {
         if (Options.Length == 0) return;
